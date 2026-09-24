@@ -13,7 +13,8 @@ import {
   isTytExam, 
   isAytExam, 
   formatClassSec,
-  getStudentInfoFit 
+  getStudentInfoFit,
+  generateExamOmrMap 
 } from '../lib/omrEngine';
 import { 
   KeyRound, 
@@ -539,20 +540,18 @@ export function KeysAndPrintView() {
     (window as any).__keysPrintSetTab = (tab: 'template' | 'keys' | 'print') => setActiveTab(tab);
   }, []);
 
-  // Filtrelenmiş Kurum İçi Sınavlar
+  // Sadece Kurum İçi Deneme Sınavları (Yayıncı denemelerinde kurum içi optik basılmaz)
   const internalExams = useMemo(() => {
-    const list = state.exams.filter(e => e.examType === 'internal' || (!e.examType && e.keys && Object.keys(e.keys).length > 0));
-    return list.length > 0 ? list : state.exams;
+    return state.exams.filter(e => e.examType === 'internal' || (!e.examType && !e.publisher && e.keys && Object.keys(e.keys).length > 0));
   }, [state.exams]);
 
   const [selectedExamId, setSelectedExamId] = useState<string>(() => {
     const saved = typeof window !== 'undefined' ? sessionStorage.getItem('akademi_selected_keys_exam_id') : null;
-    if (saved && state.exams.some(e => String(e.id) === String(saved))) {
+    if (saved && internalExams.some(e => String(e.id) === String(saved))) {
       return saved;
     }
     if (internalExams.length > 0) return String(internalExams[0].id);
-    if (state.exams.length > 0) return String(state.exams[0].id);
-    return "1";
+    return "";
   });
 
   // Global navigation handler for setting exam ID
@@ -573,30 +572,19 @@ export function KeysAndPrintView() {
   // Keep selectedExamId in sync if exams array changes
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? sessionStorage.getItem('akademi_selected_keys_exam_id') : null;
-    if (saved && state.exams.some(e => String(e.id) === String(saved))) {
+    if (saved && internalExams.some(e => String(e.id) === String(saved))) {
       setSelectedExamId(saved);
       return;
     }
-    if (!selectedExamId && state.exams.length > 0) {
-      setSelectedExamId(String(internalExams[0]?.id || state.exams[0].id));
+    if ((!selectedExamId || !internalExams.some(e => String(e.id) === String(selectedExamId))) && internalExams.length > 0) {
+      setSelectedExamId(String(internalExams[0].id));
     }
-  }, [state.exams, internalExams, selectedExamId]);
+  }, [internalExams, selectedExamId]);
 
-  const selectedExam: Exam = internalExams.find(e => String(e.id) === String(selectedExamId)) 
-    || state.exams.find(e => String(e.id) === String(selectedExamId)) 
-    || state.exams[0] 
-    || {
-      id: "1",
-      name: "Kurum İçi Deneme Sınavı",
-      date: new Date().toLocaleDateString('tr-TR'),
-      subjects: PRESET_TEMPLATES[0].subjects,
-      optionsCount: 4,
-      penalty: 3,
-      layoutType: 'split',
-      format: 'lgs',
-      examType: 'internal',
-      keys: { A: Array(90).fill(""), B: Array(90).fill(""), C: [], D: [] }
-    };
+  const selectedExam: Exam | null = useMemo(() => {
+    if (internalExams.length === 0) return null;
+    return internalExams.find(e => String(e.id) === String(selectedExamId)) || internalExams[0];
+  }, [internalExams, selectedExamId]);
 
   // ==========================================
   // TAB 1: ŞABLON VE DERS YAPILANDIRMASI STATE
@@ -695,14 +683,22 @@ export function KeysAndPrintView() {
         newKeys[bk] = arr;
       });
 
-      await updateExamOmr(String(selectedExam.id), {
-        examType: 'internal',
+      const updatedExamPayload = {
+        ...selectedExam,
+        examType: 'internal' as const,
         subjects: subjectsState,
         optionsCount: optionsCountState,
         penalty: penaltyState,
         layoutType: layoutTypeState,
         format: formatState,
         keys: newKeys
+      };
+
+      const omrMap = generateExamOmrMap(updatedExamPayload);
+
+      await updateExamOmr(String(selectedExam.id), {
+        ...updatedExamPayload,
+        omrMap
       });
 
       setSaveSuccessMessage("Sınav şablonu ve ders dağılımı başarıyla kaydedildi!");
@@ -1336,23 +1332,69 @@ export function KeysAndPrintView() {
         {/* Sağ Alan: Sınav Seçici */}
         <div className="flex items-center gap-2.5 shrink-0">
           {/* Kurum İçi Sınav Seçici Dropdown */}
-          <div className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100/80 transition-all p-1.5 pl-3 rounded-xl border border-slate-200/90 shadow-2xs">
+          <div className="flex items-center gap-2 bg-purple-50/70 hover:bg-purple-50 transition-all p-1.5 pl-3 rounded-xl border border-purple-200/90 shadow-2xs">
             <BookOpen className="w-4 h-4 text-purple-600 shrink-0" />
-            <span className="text-xs font-bold text-slate-500 hidden sm:inline">Aktif Sınav:</span>
+            <span className="text-xs font-bold text-purple-950 hidden sm:inline">Kurum İçi Sınav:</span>
             <select
               value={selectedExamId}
-              onChange={(e) => setSelectedExamId(e.target.value)}
-              className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 cursor-pointer max-w-[260px] truncate shadow-2xs transition-all"
+              onChange={(e) => {
+                setSelectedExamId(e.target.value);
+                sessionStorage.setItem('akademi_selected_keys_exam_id', e.target.value);
+              }}
+              disabled={internalExams.length === 0}
+              className="bg-white border border-purple-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 cursor-pointer max-w-[280px] truncate shadow-2xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {internalExams.map(e => (
-                <option key={e.id} value={e.id}>
-                  {e.name} {e.examType === 'internal' ? '🎯' : ''}
-                </option>
-              ))}
+              {internalExams.length === 0 ? (
+                <option value="">-- Kayıtlı Kurum İçi Sınav Yok --</option>
+              ) : (
+                internalExams.map(e => {
+                  const qCount = e.subjects?.reduce((sum, s) => sum + (Number(s.count) || 0), 0)
+                    || (e.omrMap?.totalQuestions)
+                    || (e.keys?.A?.length)
+                    || 0;
+                  return (
+                    <option key={e.id} value={e.id}>
+                      {e.name} {qCount > 0 ? `(${qCount} Soru)` : ''} {e.omrMap ? '⚡ [OMR-Map]' : ''}
+                    </option>
+                  );
+                })
+              )}
             </select>
           </div>
+
+          {selectedExam?.omrMap && (
+            <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shadow-2xs" title="Bu sınavın milimetrik OMR koordinat haritası hafızada ve canlı taramada tam uyumlu.">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              OMR-Map Aktif
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Kurum İçi Sınav Bulunamadı Uyarı ve Yönlendirme Kartı */}
+      {internalExams.length === 0 && (
+        <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-purple-950">Sistemde Henüz Kurum İçi Deneme Sınavı Bulunmuyor</h4>
+              <p className="text-xs text-purple-800/80 mt-0.5 max-w-xl leading-relaxed">
+                Bu modül kurum içi deneme sınavlarının optik şablonlarını, 4 kitapçık cevap anahtarlarını ve karekodlu A4 optik formlarını üretir. Sınavlar sekmesinden "Kurum İçi Deneme Sınavı" oluşturabilirsiniz.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => (window as any).__navigateToTab?.('exams')}
+            className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-xs shrink-0 cursor-pointer flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Yeni Kurum İçi Sınav Oluştur</span>
+          </button>
+        </div>
+      )}
 
       {/* =========================================================================
           3'LÜ ANA MODÜL SEKMELERİ (Modern Step-Based Tab Switcher)

@@ -1211,17 +1211,17 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
       }
     }
 
-    // Milimetrik OMR_SPECS kullanımı
-    const omrToUse = OMR_SPECS;
+    // Milimetrik ve Hafızadaki OMR_MAP kullanımı
+    const omrToUse = (targetExam?.omrMap?.specs) ? { ...OMR_SPECS, ...targetExam.omrMap.specs } : OMR_SPECS;
     let mebiCodedBk: string | null = null;
     const scalePxPerMm = finalRotW / (omrToUse.paperW || 210);
-    const bubbleRadiusPx = (omrToUse.questions.bubbleRadius || 1.8) * scalePxPerMm;
+    const bubbleRadiusPx = (omrToUse.questions?.bubbleRadius || 1.75) * scalePxPerMm;
     const bookletRadiusPx = 2.4 * scalePxPerMm;
 
-    // 1. Kitapçık Türü Tespiti (A - B - C - D)
-    const bookletPositions = getBookletBubblePositions(omrToUse);
+    // 1. Kitapçık Türü Tespiti (A - B - C - D) - Sınavın omr_map haritasından veya standart şablondan
+    const bookletPositions = targetExam?.omrMap?.bookletPositions || getBookletBubblePositions(omrToUse);
     const bkEval = evaluateQuestionAnswer(
-      bookletPositions.map(bp => ({ option: bp.booklet, x: bp.x, y: bp.y })),
+      bookletPositions.map((bp: any) => ({ option: bp.booklet || bp.option, x: bp.x, y: bp.y })),
       H,
       imgBytes,
       finalRotW,
@@ -1232,7 +1232,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
       mebiCodedBk = bkEval.answer;
     }
 
-    // 2. Dinamik Sınav Şablonu ve Soru Baloncuklarını Okuma
+    // 2. Dinamik Sınav Şablonu ve Soru Baloncuklarını Okuma (omr_map öncelikli)
     const { items: layoutItems } = getQuestionsLayout(targetExam, omrToUse);
     const questionsCount = layoutItems.filter(i => i.type === 'question').length;
     const readAns = Array(questionsCount).fill("");

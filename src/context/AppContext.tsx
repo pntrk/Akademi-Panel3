@@ -775,7 +775,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     const s = stateRef.current;
     const updatedExams = s.exams.map(e => {
       if (String(e.id) === String(examId)) {
-        return { ...e, keys };
+        const updatedExam = { ...e, keys };
+        const omrMap = generateExamOmrMap(updatedExam);
+        return { ...updatedExam, omrMap };
       }
       return e;
     });
@@ -789,7 +791,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     const s = stateRef.current;
     const updatedExams = s.exams.map(e => {
       if (String(e.id) === String(examId)) {
-        return { ...e, ...omrData };
+        const updatedExam = { ...e, ...omrData };
+        const omrMap = omrData.omrMap || generateExamOmrMap(updatedExam);
+        return { ...updatedExam, omrMap };
       }
       return e;
     });
