@@ -35,7 +35,11 @@ import {
   ZoomIn,
   Palette,
   Filter,
-  FileSpreadsheet
+  FileSpreadsheet,
+  CheckSquare,
+  Square,
+  Search,
+  UserCheck
 } from 'lucide-react';
 
 /* =========================================================================
@@ -714,10 +718,13 @@ export function KeysAndPrintView() {
   // ==========================================
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>("ALL");
   const [onlyRegisteredFilter, setOnlyRegisteredFilter] = useState<boolean>(false);
+  const [studentSearchQuery, setStudentSearchQuery] = useState<string>("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [isColorMode, setIsColorMode] = useState<boolean>(true);
   const [previewScale, setPreviewScale] = useState<number>(1.0);
   const [previewStudentIndex, setPreviewStudentIndex] = useState<number>(0);
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
+  const [isStudentPickerOpen, setIsStudentPickerOpen] = useState<boolean>(false);
 
   // Öğrenci Kütüğünden Normalleştirilmiş Liste
   const normalizedStudents = useMemo<Student[]>(() => {
@@ -766,7 +773,7 @@ export function KeysAndPrintView() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
   }, [normalizedStudents]);
 
-  // Filtrelenmiş Öğrenci Listesi
+  // Filtrelenmiş Öğrenci Listesi (Arama, Sınıf ve Kayıtlı filtresine göre)
   const filteredStudents = useMemo(() => {
     let result = normalizedStudents;
 
@@ -786,33 +793,88 @@ export function KeysAndPrintView() {
       });
     }
 
+    if (studentSearchQuery.trim()) {
+      const query = studentSearchQuery.trim().toLowerCase();
+      result = result.filter(s => 
+        (s.name && s.name.toLowerCase().includes(query)) ||
+        (String(s.no || '').includes(query)) ||
+        (s.className && s.className.toLowerCase().includes(query))
+      );
+    }
+
     return result.sort((a, b) => {
       const clsDiff = (a.className || '').localeCompare(b.className || '', 'tr', { numeric: true });
       if (clsDiff !== 0) return clsDiff;
       return (Number(a.no) || 0) - (Number(b.no) || 0);
     });
-  }, [normalizedStudents, selectedClassFilter, onlyRegisteredFilter, selectedExamId, selectedExam]);
+  }, [normalizedStudents, selectedClassFilter, onlyRegisteredFilter, studentSearchQuery, selectedExamId, selectedExam]);
+
+  // Gerçek Baskıya Gönderilecek Öğrenciler: Eğer özel öğrenci seçildiyse onlar, seçilmediyse filtrelenen tüm liste
+  const studentsToPrint = useMemo(() => {
+    if (selectedStudentIds.length > 0) {
+      const idSet = new Set(selectedStudentIds);
+      return normalizedStudents.filter(s => idSet.has(String(s.id || s.no))).sort((a, b) => {
+        const clsDiff = (a.className || '').localeCompare(b.className || '', 'tr', { numeric: true });
+        if (clsDiff !== 0) return clsDiff;
+        return (Number(a.no) || 0) - (Number(b.no) || 0);
+      });
+    }
+    return filteredStudents;
+  }, [selectedStudentIds, normalizedStudents, filteredStudents]);
+
+  // Çoklu Seçim Fonksiyonları
+  const toggleStudentSelection = (id: string) => {
+    setSelectedStudentIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const selectSingleStudent = (student: Student) => {
+    const sId = String(student.id || student.no);
+    setSelectedStudentIds([sId]);
+    // Önizlemeyi de bu öğrenciye ayarla
+    const idx = filteredStudents.findIndex(s => String(s.id || s.no) === sId);
+    if (idx !== -1) setPreviewStudentIndex(idx);
+  };
+
+  const selectAllFiltered = () => {
+    const allFilteredIds = filteredStudents.map(s => String(s.id || s.no));
+    setSelectedStudentIds(Array.from(new Set([...selectedStudentIds, ...allFilteredIds])));
+  };
+
+  const deselectAllFiltered = () => {
+    const allFilteredIdSet = new Set(filteredStudents.map(s => String(s.id || s.no)));
+    setSelectedStudentIds(prev => prev.filter(id => !allFilteredIdSet.has(id)));
+  };
+
+  const clearAllSelectedStudents = () => {
+    setSelectedStudentIds([]);
+  };
 
   // Önizlenen Öğrenci
   const currentPreviewStudent = useMemo(() => {
-    if (filteredStudents.length === 0) return null;
-    const clampedIndex = Math.min(Math.max(0, previewStudentIndex), filteredStudents.length - 1);
-    return filteredStudents[clampedIndex];
-  }, [filteredStudents, previewStudentIndex]);
+    const currentList = studentsToPrint.length > 0 ? studentsToPrint : filteredStudents;
+    if (currentList.length === 0) return null;
+    const clampedIndex = Math.min(Math.max(0, previewStudentIndex), currentList.length - 1);
+    return currentList[clampedIndex];
+  }, [studentsToPrint, filteredStudents, previewStudentIndex]);
 
   // Sayfa indeksi değiştiğinde sınırla
   useEffect(() => {
-    if (previewStudentIndex >= filteredStudents.length && filteredStudents.length > 0) {
-      setPreviewStudentIndex(filteredStudents.length - 1);
+    const currentList = studentsToPrint.length > 0 ? studentsToPrint : filteredStudents;
+    if (previewStudentIndex >= currentList.length && currentList.length > 0) {
+      setPreviewStudentIndex(currentList.length - 1);
     }
-  }, [filteredStudents.length, previewStudentIndex]);
+  }, [studentsToPrint.length, filteredStudents.length, previewStudentIndex]);
 
   // ==========================================
-  // TOPLU BASKI MOTORU (BATCH PRINT ENGINE)
+  // TOPLU VE ÖZEL BASKI MOTORU (BATCH PRINT ENGINE)
   // ==========================================
-  const handleBatchPrint = async () => {
-    if (filteredStudents.length === 0) {
-      alert("Yazdırılacak öğrenci bulunamadı. Lütfen filtrelerinizi kontrol ediniz.");
+  const handleBatchPrint = async (targetStudentsOverride?: Student[]) => {
+    const targetStudents = targetStudentsOverride || (studentsToPrint.length > 0 ? studentsToPrint : filteredStudents);
+
+    if (targetStudents.length === 0) {
+      alert("Yazdırılacak öğrenci bulunamadı. Lütfen öğrenci seçiminizi veya filtrelerinizi kontrol ediniz.");
       return;
     }
 
@@ -853,7 +915,7 @@ export function KeysAndPrintView() {
       </head>
       <body>
         <div class="spinner"></div>
-        <h2 style="margin-top:18px; font-weight:900;">${filteredStudents.length} Öğrenci İçin Karekodlu A4 Optik Formlar Hazırlanıyor...</h2>
+        <h2 style="margin-top:18px; font-weight:900;">${targetStudents.length} Öğrenci İçin Karekodlu A4 Optik Formlar Hazırlanıyor...</h2>
         <p style="color:#64748b; font-size:14px;">Lütfen yazdırma penceresi açılana kadar bekleyiniz.</p>
       </body>
       </html>
@@ -873,9 +935,9 @@ export function KeysAndPrintView() {
       const themeColor = isColorMode ? '#dc2626' : '#0f172a';
       const themeBg = isColorMode ? '#fef2f2' : '#f8fafc';
 
-      // Pre-generate QR data URLs for all students in parallel
+      // Pre-generate QR data URLs for target students in parallel
       const qrDataUrls = await Promise.all(
-        filteredStudents.map(student => {
+        targetStudents.map(student => {
           const qrData = `E:${selectedExam.id}|N:${student.no}`;
           return generateQrDataUrl(qrData, 160);
         })
@@ -883,7 +945,7 @@ export function KeysAndPrintView() {
 
       let pagesHTML = '';
 
-      filteredStudents.forEach((student, sIdx) => {
+      targetStudents.forEach((student, sIdx) => {
         const studentName = student.name || 'ÖĞRENCİ';
         const studentNo = student.no ? String(student.no) : '0';
         const studentClass = student.className || `${student.classStr || ''}/${student.sectionStr || ''}`;
@@ -1803,8 +1865,8 @@ export function KeysAndPrintView() {
           {/* BASKI VE FİLTRELEME ARAÇ ÇUBUĞU */}
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs flex flex-col gap-4">
             
-            {/* Üst Satır: Başlık, Durum ve Toplu Yazdır Ana Butonu */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            {/* Üst Satır: Başlık, Durum ve Toplu / Özel Yazdır Ana Butonları */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-700 shadow-2xs shrink-0">
                   <Printer className="w-5 h-5" />
@@ -1814,34 +1876,70 @@ export function KeysAndPrintView() {
                     <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
                       Karekodlu A4 Optik Form Baskı Merkezi
                     </h3>
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
-                      {filteredStudents.length} Öğrenci Seçili
-                    </span>
+                    {selectedStudentIds.length > 0 ? (
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-amber-500 text-white shadow-2xs flex items-center gap-1.5 animate-pulse">
+                        <UserCheck className="w-3.5 h-3.5" />
+                        {selectedStudentIds.length} Özel Öğrenci Seçildi
+                      </span>
+                    ) : (
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                        {filteredStudents.length} Öğrenci Filtrelendi
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Her öğrenci için benzersiz QR kod basılır; canlı kamera taramasında öğrenci ve cevap anahtarı anında tanınır.
+                    İster tek bir öğrenci, ister seçtiğiniz özel öğrenciler, isterseniz tüm sınıf/okul için karekodlu A4 optik form basabilirsiniz.
                   </p>
                 </div>
               </div>
 
-              {/* Toplu Yazdır Butonu */}
-              <button
-                type="button"
-                onClick={handleBatchPrint}
-                disabled={isPrinting || filteredStudents.length === 0}
-                className="flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-              >
-                <Printer className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>
-                  {isPrinting 
-                    ? 'Baskı Hazırlanıyor...' 
-                    : `🖨️ Toplu Form Yazdır / PDF İndir (${filteredStudents.length} Öğrenci)`}
-                </span>
-              </button>
+              {/* Baskı Aksiyon Butonları */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedStudentIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearAllSelectedStudents}
+                    className="px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold transition-all cursor-pointer"
+                    title="Özel seçimleri temizle ve filtreye dön"
+                  >
+                    Seçimi Sıfırla ({selectedStudentIds.length})
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsStudentPickerOpen(prev => !prev)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                    isStudentPickerOpen || selectedStudentIds.length > 0
+                      ? 'bg-purple-50 border-purple-300 text-purple-800 ring-2 ring-purple-500/20'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Users className="w-4 h-4 text-purple-600" />
+                  <span>Öğrenci Listesi & Tekil/Çoklu Seç ({filteredStudents.length})</span>
+                </button>
+
+                {/* Ana Yazdır Butonu */}
+                <button
+                  type="button"
+                  onClick={() => handleBatchPrint()}
+                  disabled={isPrinting || (studentsToPrint.length === 0 && filteredStudents.length === 0)}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>
+                    {isPrinting 
+                      ? 'Baskı Hazırlanıyor...' 
+                      : selectedStudentIds.length > 0
+                        ? `Seçili ${selectedStudentIds.length} Öğrenciyi Yazdır`
+                        : `🖨️ Toplu Form Yazdır (${filteredStudents.length} Öğrenci)`}
+                  </span>
+                </button>
+              </div>
             </div>
 
             {/* Alt Satır: Filtreler ve Renk Modu */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               
               {/* Sınıf / Şube Filtresi */}
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-center">
@@ -1864,6 +1962,24 @@ export function KeysAndPrintView() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* İsim veya Numara Arama Filtresi */}
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-center">
+                <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1.5 mb-1">
+                  <Search className="w-3.5 h-3.5 text-purple-600" />
+                  Öğrenci Adı / No Ara
+                </label>
+                <input
+                  type="text"
+                  value={studentSearchQuery}
+                  onChange={(e) => {
+                    setStudentSearchQuery(e.target.value);
+                    setPreviewStudentIndex(0);
+                  }}
+                  placeholder="İsim veya No ile ara..."
+                  className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500"
+                />
               </div>
 
               {/* Sadece Kayıtlılar Filtresi Butonu */}
@@ -1926,6 +2042,96 @@ export function KeysAndPrintView() {
               </div>
 
             </div>
+
+            {/* AÇILIR KAPANIR ÖĞRENCİ SEÇİM TABLOSU (TEKİL VEYA ÇOKLU BASKI LİSTESİ) */}
+            {isStudentPickerOpen && (
+              <div className="mt-2 pt-3 border-t border-slate-200 flex flex-col gap-2.5 animate-fadeIn">
+                <div className="flex items-center justify-between flex-wrap gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllFiltered}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 transition-all cursor-pointer"
+                    >
+                      ✓ Görüntülenen Tümünü Seç ({filteredStudents.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={deselectAllFiltered}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 transition-all cursor-pointer"
+                    >
+                      Seçimi Kaldır
+                    </button>
+                  </div>
+                  <div className="text-xs text-slate-500 font-medium">
+                    Toplam <strong>{selectedStudentIds.length}</strong> öğrenci işaretlendi. Tek bir öğrenciye tıklayarak hızlıca tek form basabilirsiniz.
+                  </div>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-white shadow-2xs">
+                  {filteredStudents.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400 font-medium">
+                      Arama kriterlerine uygun öğrenci bulunamadı.
+                    </div>
+                  ) : (
+                    filteredStudents.map((st) => {
+                      const stId = String(st.id || st.no);
+                      const isSelected = selectedStudentIds.includes(stId);
+                      return (
+                        <div 
+                          key={stId} 
+                          className={`flex items-center justify-between p-2.5 hover:bg-purple-50/50 transition-colors text-xs ${
+                            isSelected ? 'bg-purple-50/80' : ''
+                          }`}
+                        >
+                          <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 pr-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleStudentSelection(stId)}
+                              className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                            />
+                            <div className="min-w-0 flex items-center gap-2">
+                              <span className="font-mono font-bold text-purple-900 bg-purple-100/70 px-1.5 py-0.5 rounded text-[11px]">
+                                {st.no}
+                              </span>
+                              <span className="font-bold text-slate-800 truncate">
+                                {st.name}
+                              </span>
+                              <span className="text-slate-400 text-[11px] shrink-0">
+                                ({st.className || 'Şubesiz'})
+                              </span>
+                            </div>
+                          </label>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                selectSingleStudent(st);
+                              }}
+                              className="px-2 py-1 rounded-md bg-slate-100 hover:bg-purple-100 hover:text-purple-700 text-slate-700 font-bold text-[11px] transition-all cursor-pointer"
+                              title="Bu öğrenciyi canlı önizle"
+                            >
+                              Önizle
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBatchPrint([st])}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-[11px] shadow-2xs transition-all cursor-pointer"
+                              title="Yalnızca bu öğrencinin A4 optik formunu bas"
+                            >
+                              <Printer className="w-3 h-3" />
+                              <span>Tek Yazdır</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ÖĞRENCİ GEZİNME VE CANLI A4 ÖNİZLEME ALANI */}
