@@ -3,8 +3,8 @@
   "name": "AkademiPanel • Sınav & Ölçme Değerlendirme",
   "short_name": "AkademiPanel",
   "description": "Okul Sınav, Salon, Öğrenci ve Ölçme Değerlendirme Yönetim Paneli",
-  "theme_color": "#151618",
-  "background_color": "#0f172a",
+  "theme_color": "#241318",
+  "background_color": "#1a0d11",
   "display": "standalone",
   "orientation": "any",
   "start_url": "/",
@@ -30,7 +30,7 @@
     },
     {
       "src": "/icon.svg",
-      "sizes": "any",
+      "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any"
     }

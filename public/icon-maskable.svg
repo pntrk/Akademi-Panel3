@@ -1,153 +1,357 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <!-- Background Gradient -->
-    <linearGradient id="appBg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#080c16" />
-      <stop offset="45%" stop-color="#0f172a" />
-      <stop offset="100%" stop-color="#050811" />
-    </linearGradient>
-
-    <!-- Glowing Accent Orbs -->
-    <radialGradient id="glowEmerald" cx="25%" cy="20%" r="65%">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.32" />
-      <stop offset="100%" stop-color="#10b981" stop-opacity="0" />
-    </radialGradient>
-    <radialGradient id="glowSky" cx="80%" cy="80%" r="60%">
-      <stop offset="0%" stop-color="#0284c7" stop-opacity="0.35" />
-      <stop offset="100%" stop-color="#0284c7" stop-opacity="0" />
-    </radialGradient>
-    <radialGradient id="glowCenter" cx="50%" cy="50%" r="40%">
-      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.18" />
-      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0" />
+    <!-- Dark Wine / Aubergine Ambient Background -->
+    <radialGradient id="spaceBg" cx="50%" cy="46%" r="68%">
+      <stop offset="0%" stop-color="#341b22" />
+      <stop offset="42%" stop-color="#241318" />
+      <stop offset="78%" stop-color="#190d11" />
+      <stop offset="100%" stop-color="#12080b" />
     </radialGradient>
 
-    <!-- Gold Accent Gradient -->
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fef08a" />
-      <stop offset="35%" stop-color="#fbbf24" />
-      <stop offset="75%" stop-color="#f59e0b" />
-      <stop offset="100%" stop-color="#b45309" />
+    <!-- Warm Ambient Core Glow Behind Plaque -->
+    <radialGradient id="ambientCoreGlow" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#ff3b56" stop-opacity="0.28" />
+      <stop offset="50%" stop-color="#ea1e45" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#ea1e45" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Glass Plaque Surface Fill Gradient -->
+    <linearGradient id="glassPlaqueGrad" x1="18%" y1="12%" x2="82%" y2="88%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18" />
+      <stop offset="35%" stop-color="#ffccd5" stop-opacity="0.08" />
+      <stop offset="70%" stop-color="#2a141b" stop-opacity="0.32" />
+      <stop offset="100%" stop-color="#ffb3c1" stop-opacity="0.12" />
     </linearGradient>
 
-    <!-- Emerald-Sky Gradient -->
-    <linearGradient id="capGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#34d399" />
-      <stop offset="40%" stop-color="#10b981" />
-      <stop offset="85%" stop-color="#0284c7" />
-      <stop offset="100%" stop-color="#0369a1" />
+    <!-- Glass Outer Rim / Stroke Gradient -->
+    <linearGradient id="glassRimGrad" x1="10%" y1="10%" x2="90%" y2="90%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.75" />
+      <stop offset="25%" stop-color="#ffa8b6" stop-opacity="0.45" />
+      <stop offset="60%" stop-color="#ff4d6d" stop-opacity="0.25" />
+      <stop offset="85%" stop-color="#ffffff" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#ffa3b2" stop-opacity="0.65" />
     </linearGradient>
 
-    <!-- Shield Inner Gradient -->
-    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#1e293b" />
-      <stop offset="50%" stop-color="#111827" />
-      <stop offset="100%" stop-color="#0b0f19" />
+    <!-- Inner Subtle Glass Edge -->
+    <linearGradient id="glassInnerEdge" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45" />
+      <stop offset="40%" stop-color="#ffffff" stop-opacity="0.06" />
+      <stop offset="100%" stop-color="#ff758f" stop-opacity="0.25" />
     </linearGradient>
 
-    <!-- Outer Border Gradient -->
-    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#34d399" stop-opacity="0.75" />
-      <stop offset="50%" stop-color="#38bdf8" stop-opacity="0.45" />
-      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.65" />
+    <!-- Horizontal Light Flare Gradient -->
+    <linearGradient id="flareLineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff3b56" stop-opacity="0" />
+      <stop offset="20%" stop-color="#ff5975" stop-opacity="0.35" />
+      <stop offset="45%" stop-color="#ffa4b2" stop-opacity="0.85" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="1" />
+      <stop offset="55%" stop-color="#ffa4b2" stop-opacity="0.85" />
+      <stop offset="80%" stop-color="#ff5975" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#ff3b56" stop-opacity="0" />
     </linearGradient>
 
-    <!-- Drop Shadow -->
-    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000000" flood-opacity="0.75" />
+    <!-- Neon Shield Outer Glow Gradient -->
+    <linearGradient id="neonBorderGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff8fa3" />
+      <stop offset="25%" stop-color="#ff4d6d" />
+      <stop offset="70%" stop-color="#ff2a51" />
+      <stop offset="100%" stop-color="#ff758f" />
+    </linearGradient>
+
+    <!-- 3D Shield Left Facet (Light) -->
+    <linearGradient id="shieldLeftFacet" x1="30%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d63a4a" />
+      <stop offset="45%" stop-color="#b82736" />
+      <stop offset="100%" stop-color="#881622" />
+    </linearGradient>
+
+    <!-- 3D Shield Right Facet (Shadowed) -->
+    <linearGradient id="shieldRightFacet" x1="0%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#a41e2b" />
+      <stop offset="45%" stop-color="#7a121c" />
+      <stop offset="100%" stop-color="#540810" />
+    </linearGradient>
+
+    <!-- Mortarboard Top Face (Diamond) -->
+    <linearGradient id="capTopGrad" x1="20%" y1="10%" x2="80%" y2="90%">
+      <stop offset="0%" stop-color="#df3d4d" />
+      <stop offset="35%" stop-color="#b52634" />
+      <stop offset="75%" stop-color="#8e1723" />
+      <stop offset="100%" stop-color="#690e17" />
+    </linearGradient>
+
+    <!-- Mortarboard Bevel Edges -->
+    <linearGradient id="capBevelGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#620b13" />
+      <stop offset="50%" stop-color="#46070d" />
+      <stop offset="100%" stop-color="#730e18" />
+    </linearGradient>
+
+    <!-- Mortarboard Skull Base Ring -->
+    <linearGradient id="capBaseGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#8a1924" />
+      <stop offset="45%" stop-color="#5e0f17" />
+      <stop offset="100%" stop-color="#3b080d" />
+    </linearGradient>
+
+    <!-- Rich Metallic Gold Gradient -->
+    <linearGradient id="goldGrad" x1="15%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#fff8cc" />
+      <stop offset="25%" stop-color="#fbd34d" />
+      <stop offset="55%" stop-color="#f59e0b" />
+      <stop offset="85%" stop-color="#d97706" />
+      <stop offset="100%" stop-color="#92400e" />
+    </linearGradient>
+
+    <!-- Star Light Facet -->
+    <linearGradient id="starLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fffbeb" />
+      <stop offset="40%" stop-color="#fde68a" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+
+    <!-- Star Shadow Facet -->
+    <linearGradient id="starDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d97706" />
+      <stop offset="60%" stop-color="#b45309" />
+      <stop offset="100%" stop-color="#78350f" />
+    </linearGradient>
+
+    <!-- Soft Drop Shadow Filter -->
+    <filter id="plaqueGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <!-- Neon Glow Filter -->
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="7" result="glow1" />
+      <feGaussianBlur stdDeviation="18" result="glow2" />
+      <feMerge>
+        <feMergeNode in="glow2" />
+        <feMergeNode in="glow1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Medallion Raised 3D Shadow -->
+    <filter id="medallionShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.65" />
+    </filter>
+
+    <!-- Cap Drop Shadow -->
+    <filter id="capShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000000" flood-opacity="0.55" />
     </filter>
   </defs>
 
-  <!-- Base Full-Bleed Canvas Background -->
-  <rect width="512" height="512"  fill="url(#appBg)" />
-  <rect width="512" height="512"  fill="url(#glowEmerald)" />
-  <rect width="512" height="512"  fill="url(#glowSky)" />
-  <rect width="512" height="512"  fill="url(#glowCenter)" />
+  <!-- 1. Deep Canvas Background (Full Bleed) -->
+  <rect width="512" height="512" fill="url(#spaceBg)" />
+  <circle cx="256" cy="260" r="230" fill="url(#ambientCoreGlow)" />
 
-  
+  <!-- 2. Scaled Icon Emblem Wrapper -->
+  <g transform="translate(61.44, 61.44) scale(0.76)">
 
-  <!-- Emblem Center Group (scaled to safe zone if maskable) -->
-  <g transform="translate(56.31999999999999, 56.31999999999999) scale(0.78)" filter="url(#dropShadow)">
-    
-    <!-- Shield / Crest Background -->
-    <path d="M 256 70 
-             C 345 70, 396 95, 396 95 
-             V 245 
-             C 396 348, 320 416, 256 442 
-             C 192 416, 116 348, 116 245 
-             V 95 
-             C 116 95, 167 70, 256 70 Z" 
-          fill="url(#shieldGrad)" 
-          stroke="url(#capGrad)" 
-          stroke-width="7" />
+    <!-- 2A. Glassmorphic Frosted Squircle Plaque -->
+    <g id="glassPlaque">
+      <!-- Deep Plaque Ambient Shadow -->
+      <rect x="74" y="58" width="364" height="396" rx="92" fill="#0c0407" opacity="0.5" filter="url(#plaqueGlow)" />
+      
+      <!-- Plaque Glass Body -->
+      <rect x="74" y="54" width="364" height="404" rx="92" fill="url(#glassPlaqueGrad)" />
 
-    <!-- Inner Shield Accent Line -->
-    <path d="M 256 86 
-             C 332 86, 376 108, 376 108 
-             V 238 
-             C 376 328, 310 388, 256 414 
-             C 202 388, 136 328, 136 238 
-             V 108 
-             C 136 108, 180 86, 256 86 Z" 
-          fill="none" 
-          stroke="url(#goldGrad)" 
-          stroke-width="2.5" 
-          stroke-opacity="0.5" />
-
-    <!-- Graduation Cap Diamond Top -->
-    <polygon points="256,128 388,186 256,244 124,186" 
-             fill="url(#capGrad)" 
-             stroke="url(#goldGrad)" 
-             stroke-width="3" />
-
-    <!-- Cap Skull Base Arch -->
-    <path d="M 180 214 
-             V 264 
-             C 180 292, 214 314, 256 314 
-             C 298 314, 332 292, 332 264 
-             V 214" 
-          fill="none" 
-          stroke="url(#capGrad)" 
-          stroke-width="12" 
-          stroke-linecap="round" />
-
-    <!-- Cap Button / Center Jewel -->
-    <circle cx="256" cy="186" r="10" fill="url(#goldGrad)" />
-
-    <!-- Golden Tassel String & Pendant -->
-    <path d="M 256 186 Q 320 188 388 236 V 286" 
-          fill="none" 
-          stroke="url(#goldGrad)" 
-          stroke-width="6" 
-          stroke-linecap="round" />
-    <circle cx="388" cy="298" r="12" fill="url(#goldGrad)" />
-
-    <!-- Center Academic Star / Achievement Medallion -->
-    <g transform="translate(256, 350)">
-      <!-- Outer Glow Ring -->
-      <circle cx="0" cy="0" r="32" fill="#0f172a" stroke="url(#capGrad)" stroke-width="4" />
-      <!-- Star -->
-      <path d="M 0 -22 
-               L 6.8 -8 
-               L 22 -6 
-               L 11 5 
-               L 13.6 20 
-               L 0 13 
-               L -13.6 20 
-               L -11 5 
-               L -22 -6 
-               L -6.8 -8 Z" 
-            fill="url(#goldGrad)" />
+      <!-- Plaque Specular / Glowing Rim -->
+      <rect x="74" y="54" width="364" height="404" rx="92" fill="none" stroke="url(#glassRimGrad)" stroke-width="7" />
+      
+      <!-- Inner Thin Frosted Border -->
+      <rect x="80" y="60" width="352" height="392" rx="86" fill="none" stroke="url(#glassInnerEdge)" stroke-width="1.8" />
     </g>
 
-    <!-- Bottom Brand Title Banner Arc / Text -->
-    <text x="256" y="482" 
-          text-anchor="middle" 
-          font-family="system-ui, -apple-system, sans-serif" 
-          font-size="28" 
-          font-weight="900" 
-          letter-spacing="4" 
-          fill="#38bdf8">
-      AKADEMİ
-    </text>
+    <!-- 2B. Horizontal Laser Beam / Flare -->
+    <g id="horizontalFlare" opacity="0.95">
+      <!-- Soft ambient flare haze -->
+      <ellipse cx="256" cy="276" rx="190" ry="12" fill="url(#flareLineGrad)" opacity="0.45" />
+      <!-- Sharp core laser line -->
+      <line x1="68" y1="276" x2="444" y2="276" stroke="url(#flareLineGrad)" stroke-width="2.2" stroke-linecap="round" />
+      <!-- High-intensity central glare -->
+      <ellipse cx="256" cy="276" rx="34" ry="4" fill="#ffffff" opacity="0.75" />
+
+      <!-- Floating Micro Digital Nodes / Ambient Sparkles -->
+      <rect x="142" y="222" width="3.5" height="3.5" fill="#ffa8b6" opacity="0.6" rx="0.5" />
+      <rect x="368" y="208" width="4" height="4" fill="#ff758f" opacity="0.65" rx="0.5" />
+      <rect x="154" y="348" width="3" height="3" fill="#ffa4b2" opacity="0.55" rx="0.5" />
+      <rect x="382" y="332" width="4" height="4" fill="#ffffff" opacity="0.5" rx="0.5" />
+      <rect x="210" y="210" width="2.5" height="2.5" fill="#fcd34d" opacity="0.6" rx="0.5" />
+      <rect x="306" y="214" width="3" height="3" fill="#ffb3c1" opacity="0.5" rx="0.5" />
+    </g>
+
+    <!-- 2C. Glowing 3D Heraldic Shield -->
+    <g id="shieldCrest">
+      <!-- Shield Outer Neon Bloom Contour -->
+      <path d="M 256 198 
+               C 318 214, 356 230, 356 250 
+               V 318 
+               C 356 368, 304 410, 256 424 
+               C 208 410, 156 368, 156 318 
+               V 250 
+               C 156 230, 194 214, 256 198 Z"
+            fill="none" 
+            stroke="url(#neonBorderGrad)" 
+            stroke-width="11" 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            filter="url(#neonGlow)" 
+            opacity="0.85" />
+
+      <!-- Shield Base Body Shading (Left & Right Facets for 3D Volume) -->
+      <!-- Left Facet (Light receiving) -->
+      <path d="M 256 208 
+               C 212 222, 172 234, 172 254 
+               V 316 
+               C 172 358, 212 396, 256 410 
+               Z" 
+            fill="url(#shieldLeftFacet)" />
+
+      <!-- Right Facet (In subtle shadow) -->
+      <path d="M 256 208 
+               C 300 222, 340 234, 340 254 
+               V 316 
+               C 340 358, 300 396, 256 410 
+               Z" 
+            fill="url(#shieldRightFacet)" />
+
+      <!-- Shield Center 3D Crease Line -->
+      <line x1="256" y1="208" x2="256" y2="410" stroke="#ffffff" stroke-opacity="0.25" stroke-width="1.5" />
+
+      <!-- Inner Neon Accent Contour -->
+      <path d="M 256 218 
+               C 292 230, 326 242, 326 258 
+               V 314 
+               C 326 348, 292 382, 256 396 
+               C 220 382, 186 348, 186 314 
+               V 258 
+               C 186 242, 220 230, 256 218 Z"
+            fill="none" 
+            stroke="url(#neonBorderGrad)" 
+            stroke-width="3" 
+            stroke-opacity="0.9" />
+
+      <!-- Shield Gloss Specular Arc -->
+      <path d="M 188 260 
+               C 188 245, 218 234, 254 224 
+               C 230 240, 204 270, 198 310" 
+            fill="none" 
+            stroke="#ffffff" 
+            stroke-width="3" 
+            stroke-opacity="0.4" 
+            stroke-linecap="round" />
+    </g>
+
+    <!-- 2D. 3D Embossed Golden Star Medallion -->
+    <g id="centerMedallion" transform="translate(256, 314)" filter="url(#medallionShadow)">
+      <!-- Outer Dark Gold Ring Rim -->
+      <circle cx="0" cy="0" r="30" fill="url(#goldGrad)" stroke="#78350f" stroke-width="1.5" />
+      <!-- Beveled Middle Ring -->
+      <circle cx="0" cy="0" r="26.5" fill="#b45309" />
+      <circle cx="0" cy="0" r="25" fill="url(#goldGrad)" />
+      <!-- Inner Coin Bed -->
+      <circle cx="0" cy="0" r="21.5" fill="#78350f" opacity="0.65" />
+      <circle cx="0" cy="0" r="20" fill="url(#shieldLeftFacet)" opacity="0.9" />
+
+      <!-- 3D Faceted Five-Pointed Star -->
+      <!-- Center radius ~16px -->
+      <g id="facetedStar">
+        <!-- Point 1 (Top: 0, -15) -->
+        <polygon points="0,0 0,-15 4.4,-4.6" fill="url(#starLight)" />
+        <polygon points="0,0 0,-15 -4.4,-4.6" fill="url(#starDark)" />
+
+        <!-- Point 2 (Top Right: 14.3, -4.6) -->
+        <polygon points="0,0 14.3,-4.6 5.5,1.8" fill="url(#starLight)" />
+        <polygon points="0,0 14.3,-4.6 4.4,-4.6" fill="url(#starDark)" />
+
+        <!-- Point 3 (Bottom Right: 8.8, 12.2) -->
+        <polygon points="0,0 8.8,12.2 0,5.8" fill="url(#starLight)" />
+        <polygon points="0,0 8.8,12.2 5.5,1.8" fill="url(#starDark)" />
+
+        <!-- Point 4 (Bottom Left: -8.8, 12.2) -->
+        <polygon points="0,0 -8.8,12.2 -5.5,1.8" fill="url(#starLight)" />
+        <polygon points="0,0 -8.8,12.2 0,5.8" fill="url(#starDark)" />
+
+        <!-- Point 5 (Top Left: -14.3, -4.6) -->
+        <polygon points="0,0 -14.3,-4.6 -4.4,-4.6" fill="url(#starLight)" />
+        <polygon points="0,0 -14.3,-4.6 -5.5,1.8" fill="url(#starDark)" />
+      </g>
+    </g>
+
+    <!-- 2E. 3D Graduation Cap (Doctoral Mortarboard) -->
+    <g id="mortarboardCap" filter="url(#capShadow)">
+      <!-- Skull Base Ring / Cap Base -->
+      <path d="M 206 168 
+               C 206 194, 230 206, 256 206 
+               C 282 206, 306 194, 306 168 
+               Z" 
+            fill="url(#capBaseGrad)" 
+            stroke="#b92b34" 
+            stroke-width="2" />
+
+      <!-- Skull Base Highlight Band -->
+      <path d="M 212 172 
+               C 224 190, 246 198, 256 198 
+               C 266 198, 288 190, 300 172" 
+            fill="none" 
+            stroke="#ff8fa3" 
+            stroke-width="1.8" 
+            stroke-opacity="0.65" />
+
+      <!-- Diamond Board Side Thickness / 3D Under-Bevel -->
+      <polygon points="172,135 256,177 340,135 340,142 256,184 172,142" 
+               fill="url(#capBevelGrad)" />
+
+      <!-- Diamond Board Top Face in Perspective -->
+      <!-- Points: Left (172, 135), Front (256, 177), Right (340, 135), Back (256, 95) -->
+      <polygon points="256,95 340,135 256,177 172,135" 
+               fill="url(#capTopGrad)" 
+               stroke="#f43f5e" 
+               stroke-width="2" />
+
+      <!-- Top Board Specular Reflection Edges -->
+      <line x1="256" y1="95" x2="172" y2="135" stroke="#ffffff" stroke-opacity="0.5" stroke-width="2" />
+      <line x1="172" y1="135" x2="256" y2="177" stroke="#ffffff" stroke-opacity="0.75" stroke-width="2.5" />
+      <line x1="256" y1="177" x2="340" y2="135" stroke="#ff758f" stroke-opacity="0.4" stroke-width="1.8" />
+
+      <!-- Central Gold Button / Pin on Top of Cap -->
+      <ellipse cx="256" cy="136" rx="7.5" ry="5.5" fill="url(#goldGrad)" stroke="#78350f" stroke-width="1" />
+
+      <!-- Golden Tassel Cord Loop -->
+      <path d="M 256 137 
+               C 288 139, 326 142, 335 156 
+               C 340 164, 337 182, 337 194" 
+            fill="none" 
+            stroke="url(#goldGrad)" 
+            stroke-width="3" 
+            stroke-linecap="round" />
+
+      <!-- Golden Tassel Bell & Fringe (Dangling on the right side) -->
+      <g id="tasselPendant" transform="translate(337, 194)">
+        <!-- Tassel Top Metallic Ring/Bead -->
+        <circle cx="0" cy="0" r="4.5" fill="url(#goldGrad)" stroke="#92400e" stroke-width="1" />
+        <ellipse cx="0" cy="5" rx="5" ry="4" fill="url(#goldGrad)" />
+        
+        <!-- Tassel Skirt / Silk Threads -->
+        <path d="M -4 7 
+                 L -6 28 
+                 C -6 31, 6 31, 6 28 
+                 L 4 7 Z" 
+              fill="url(#goldGrad)" 
+              stroke="#78350f" 
+              stroke-width="0.8" />
+
+        <!-- Tassel Thread Details -->
+        <line x1="-2" y1="8" x2="-3.5" y2="28" stroke="#fef08a" stroke-width="0.8" />
+        <line x1="0" y1="8" x2="0" y2="29" stroke="#ffffff" stroke-width="0.9" />
+        <line x1="2" y1="8" x2="3.5" y2="28" stroke="#92400e" stroke-width="0.8" />
+      </g>
+    </g>
+
   </g>
 </svg>

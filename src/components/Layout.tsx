@@ -467,9 +467,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       )}>
         <div className="flex flex-col flex-grow">
           <div className="brand mb-6 flex items-center justify-between pb-4 border-b border-white/10">
-            <div>
-              <h1 className="font-serif text-[1.75rem] italic font-semibold tracking-tight text-white mb-0.5">AkademiPanel</h1>
-              <p className="text-[10px] uppercase tracking-[0.16em] text-white/50 font-medium">Ölçme ve Değerlendirme</p>
+            <div className="flex items-center gap-3">
+              <img 
+                src="/apple-touch-icon.png" 
+                alt="AkademiPanel" 
+                className="w-10 h-10 rounded-xl shadow-md border border-white/15 shrink-0 object-cover" 
+              />
+              <div>
+                <h1 className="font-serif text-[1.45rem] italic font-semibold tracking-tight text-white mb-0.5 leading-tight">AkademiPanel</h1>
+                <p className="text-[9.5px] uppercase tracking-[0.16em] text-white/50 font-medium">Ölçme ve Değerlendirme</p>
+              </div>
             </div>
             <button
               onClick={() => openNotificationModal()}
@@ -682,9 +689,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
         {/* 📱 Mobile Header - Modern Elevated Glassmorphism */}
         <header className="md:hidden flex items-center justify-between px-3.5 py-2.5 bg-[#131418]/95 backdrop-blur-xl text-white border-b border-white/10 shrink-0 sticky top-0 z-30 shadow-md">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-accent to-[#e2c18d] flex items-center justify-center shadow-xs">
-              <span className="font-serif italic font-black text-white text-base">A</span>
-            </div>
+            <img 
+              src="/apple-touch-icon.png" 
+              alt="AkademiPanel" 
+              className="w-8 h-8 rounded-xl shadow-xs border border-white/15 shrink-0 object-cover" 
+            />
             <div>
               <h1 className="font-serif text-sm italic font-bold tracking-tight text-white leading-none">AkademiPanel</h1>
               {(() => {

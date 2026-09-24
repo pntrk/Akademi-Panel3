@@ -241,7 +241,15 @@ export default function App() {
           {/* Top Decorative Amber Bar */}
           <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-[#B08D57] to-amber-500"></div>
 
-          <div className="mb-6">
+          <div className="mb-6 flex flex-col items-center">
+            <div className="relative mb-3 group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-rose-500/20 via-amber-500/20 to-red-500/20 rounded-3xl blur-md opacity-70 group-hover:opacity-100 transition-opacity"></div>
+              <img 
+                src="/apple-touch-icon.png" 
+                alt="AkademiPanel Logo" 
+                className="relative w-20 h-20 rounded-2xl shadow-lg border border-[#e6e2d3] object-cover transition-transform group-hover:scale-105" 
+              />
+            </div>
             <h1 className="text-3xl font-serif font-bold text-[#5a5a40] tracking-tight italic">AkademiPanel</h1>
             <p className="text-[#8e8d82] text-xs font-semibold mt-1">Ölçme ve Değerlendirme Yönetim Sistemi</p>
             <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[11px] font-semibold text-emerald-800">
