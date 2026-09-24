@@ -562,7 +562,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
         "hidden md:flex fixed inset-y-0 left-0 z-50 w-[280px] bg-brand-sidebar-bg text-white flex-col p-6 justify-between border-r border-white/5 overflow-y-auto relative translate-x-0 shrink-0"
       )}>
         <div className="flex flex-col flex-grow">
-          <div className="brand mb-5 flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-white/[0.04] border border-white/10 hover:border-white/15 transition-all shadow-xs">
+          <div className="brand mb-5 flex items-center justify-between gap-2 p-2 rounded-2xl bg-white/[0.03] transition-all">
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <div className="relative shrink-0">
                 <img 
