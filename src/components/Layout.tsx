@@ -562,27 +562,34 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
         "hidden md:flex fixed inset-y-0 left-0 z-50 w-[280px] bg-brand-sidebar-bg text-white flex-col p-6 justify-between border-r border-white/5 overflow-y-auto relative translate-x-0 shrink-0"
       )}>
         <div className="flex flex-col flex-grow">
-          <div className="brand mb-6 flex items-center justify-between pb-4 border-b border-white/10">
-            <div className="flex items-center gap-3">
-              <img 
-                src="/apple-touch-icon.png" 
-                alt="AkademiPanel" 
-                className="w-10 h-10 rounded-xl shadow-md border border-white/15 shrink-0 object-cover" 
-              />
-              <div>
-                <h1 className="font-serif text-[1.45rem] italic font-semibold tracking-tight text-white mb-0.5 leading-tight">AkademiPanel</h1>
-                <p className="text-[9.5px] uppercase tracking-[0.16em] text-white/50 font-medium">Ölçme ve Değerlendirme</p>
+          <div className="brand mb-5 flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-white/[0.04] border border-white/10 hover:border-white/15 transition-all shadow-xs">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="relative shrink-0">
+                <img 
+                  src="/apple-touch-icon.png" 
+                  alt="AkademiPanel" 
+                  className="w-9 h-9 rounded-xl shadow-md border border-white/20 shrink-0 object-cover" 
+                />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#1a1b23]" title="Sistem Çevrimiçi" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h1 className="font-serif text-[1.2rem] italic font-bold tracking-tight text-white leading-tight">
+                  AkademiPanel
+                </h1>
+                <p className="text-[7.5px] uppercase tracking-tight text-amber-300/95 font-black whitespace-nowrap block">
+                  ÖLÇME & DEĞERLENDİRME
+                </p>
               </div>
             </div>
             <button
               onClick={() => openNotificationModal()}
               aria-label="Bildirimler"
               title="Anlık Bildirim & Duyuru Merkezi"
-              className="relative p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white transition-all cursor-pointer active:scale-95 group"
+              className="relative w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white transition-all cursor-pointer active:scale-95 group shrink-0 ml-0.5"
             >
-              <Bell className="w-4 h-4 text-amber-400 transition-transform group-hover:scale-110" />
+              <Bell className="w-3.5 h-3.5 text-amber-400 transition-transform group-hover:scale-110" />
               {unreadNotificationsCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center shadow-md animate-pulse">
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-0.5 rounded-full bg-rose-500 text-[8.5px] font-black text-white flex items-center justify-center shadow-md animate-pulse">
                   {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
                 </span>
               )}
