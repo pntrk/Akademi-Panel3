@@ -701,8 +701,8 @@ export function KeysAndPrintView() {
         omrMap
       });
 
-      setSaveSuccessMessage("Sınav şablonu ve ders dağılımı başarıyla kaydedildi!");
-      setTimeout(() => setSaveSuccessMessage(null), 3500);
+      setSaveSuccessMessage("✓ Sınav şablonu, optik form haritası ve cevap anahtarları kaydedildi & Firebase buluta eşitlendi!");
+      setTimeout(() => setSaveSuccessMessage(null), 4000);
     } catch (err: any) {
       console.error("Şablon kaydedilirken hata:", err);
       alert("Şablon kaydedilirken bir hata oluştu: " + err.message);
