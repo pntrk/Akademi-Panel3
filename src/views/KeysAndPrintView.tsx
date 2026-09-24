@@ -39,7 +39,11 @@ import {
   CheckSquare,
   Square,
   Search,
-  UserCheck
+  UserCheck,
+  Sliders,
+  ShieldCheck,
+  LayoutGrid,
+  Award
 } from 'lucide-react';
 
 /* =========================================================================
@@ -1593,28 +1597,28 @@ export function KeysAndPrintView() {
           {/* =========================================================================
               KULLANICI DOSTU GELİŞMİŞ HAZIR ŞABLON SEÇİM MENÜSÜ (Interactive Preset Cards)
               ========================================================================= */}
-          <div className="bg-gradient-to-br from-slate-50 via-purple-50/40 to-indigo-50/40 p-4 sm:p-5 rounded-2xl border border-purple-100/90 shadow-2xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5 pb-2.5 border-b border-purple-100/80">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-purple-100 text-purple-700">
+          <div className="bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/30 p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4 pb-3 border-b border-purple-100/70">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
                   <Sparkles className="w-4 h-4" />
-                </span>
+                </div>
                 <div>
-                  <h4 className="text-xs sm:text-sm font-black text-slate-800 tracking-tight">
+                  <h4 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-2">
                     Hazır Deneme Sınav Şablonları
                   </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Müfredata tam uyumlu ders dağılımı ve soru sayılarını tek tıkla şablon olarak yükleyin.
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Müfredata tam uyumlu ders dağılımı ve soru sayılarını tek tıkla yükleyin.
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-100/80 px-2.5 py-1 rounded-full w-fit">
+              <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-100/80 border border-purple-200/80 px-2.5 py-1 rounded-lg w-fit shadow-2xs">
                 ⚡ Hızlı Kurulum
               </span>
             </div>
 
             {/* Şablon Kartları Menü Izgarası */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {PRESET_TEMPLATES.map((preset, idx) => {
                 const isCurrentMatch = totalQuestions === preset.subjects.reduce((a, b) => a + b.count, 0) &&
                                        formatState === preset.format &&
@@ -1625,33 +1629,35 @@ export function KeysAndPrintView() {
                     key={idx}
                     type="button"
                     onClick={() => handleApplyPreset(idx)}
-                    className={`relative text-left p-3 rounded-xl border transition-all cursor-pointer group flex flex-col justify-between gap-2 select-none ${
+                    className={`relative text-left p-3.5 rounded-xl border transition-all cursor-pointer group flex flex-col justify-between gap-3 select-none ${
                       isCurrentMatch
-                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm shadow-purple-500/25 ring-2 ring-purple-500/20'
-                        : 'bg-white hover:bg-purple-50/60 text-slate-800 border-slate-200/90 hover:border-purple-300 shadow-2xs hover:shadow-xs'
+                        ? 'bg-gradient-to-br from-purple-700 to-indigo-700 text-white border-purple-600 shadow-md shadow-purple-600/20 ring-2 ring-purple-500/30 scale-[1.02]'
+                        : 'bg-white hover:bg-purple-50/50 text-slate-800 border-slate-200/90 hover:border-purple-300 shadow-2xs hover:shadow-xs active:scale-95'
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                          isCurrentMatch ? 'bg-white/25 text-white' : 'bg-purple-100/80 text-purple-800'
+                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                        <span className={`text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                          isCurrentMatch ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800 font-bold'
                         }`}>
                           {preset.format.toUpperCase()}
                         </span>
-                        <span className={`text-[10px] font-bold ${isCurrentMatch ? 'text-purple-100' : 'text-slate-400'}`}>
-                          {preset.optionsCount} Şık
+                        <span className={`text-[10.5px] font-bold ${isCurrentMatch ? 'text-purple-100' : 'text-slate-400'}`}>
+                          {preset.optionsCount} Şıklı
                         </span>
                       </div>
-                      <div className="text-xs font-black leading-tight line-clamp-2">
+                      <div className="text-xs font-black leading-snug line-clamp-2">
                         {preset.name}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-100/80 border-dashed">
+                    <div className={`flex items-center justify-between text-xs pt-2 border-t border-dashed ${
+                      isCurrentMatch ? 'border-white/20' : 'border-slate-100'
+                    }`}>
                       <span className={`font-mono font-bold ${isCurrentMatch ? 'text-purple-100' : 'text-purple-700'}`}>
                         {preset.subjects.reduce((sum, s) => sum + s.count, 0)} Soru
                       </span>
-                      <span className={`text-[10px] font-semibold ${isCurrentMatch ? 'text-white' : 'text-slate-500 group-hover:text-purple-700'}`}>
+                      <span className={`text-[10.5px] font-bold ${isCurrentMatch ? 'text-white' : 'text-slate-500 group-hover:text-purple-700'}`}>
                         {isCurrentMatch ? '✓ Aktif Şablon' : 'Uygula →'}
                       </span>
                     </div>
@@ -1662,75 +1668,104 @@ export function KeysAndPrintView() {
           </div>
 
           {/* Genel Sınav Ayarları Grid */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-purple-600"></span>
-                Genel Sınav & Optik Form Ayarları
-              </h4>
+          <div className="bg-slate-50/60 rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs">
+            <div className="flex items-center justify-between mb-3.5 pb-2.5 border-b border-slate-200/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shadow-xs">
+                  <Sliders className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
+                    Genel Sınav & Optik Form Ayarları
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Şık sayısı, net ceza katsayısı, sütun formatı ve puanlama algoritmasını yapılandırın.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
               
-              {/* Seçenek Sayısı */}
-              <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/90 flex flex-col justify-between gap-2 shadow-2xs">
-                <div>
-                  <label className="text-xs font-black text-slate-800 block">Seçenek Sayısı</label>
-                  <p className="text-[11px] text-slate-500">Sorulardaki şık adedi</p>
+              {/* 1. Seçenek Sayısı */}
+              <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 hover:border-purple-200 flex flex-col justify-between gap-3 shadow-2xs transition-all">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 flex items-center justify-center shrink-0">
+                    <CheckSquare className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-black text-slate-900 block">Seçenek Sayısı</label>
+                    <p className="text-[10.5px] text-slate-500">Sorulardaki şık adedi</p>
+                  </div>
                 </div>
                 <select
                   value={optionsCountState}
                   onChange={(e) => setOptionsCountState(Number(e.target.value))}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-2xs"
+                  className="w-full bg-slate-50/80 hover:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white cursor-pointer shadow-2xs transition-all"
                 >
-                  <option value={4}>4 Şık (A, B, C, D) - LGS / Ortaokul</option>
-                  <option value={5}>5 Şık (A, B, C, D, E) - YKS / Lise</option>
+                  <option value={4}>4 Şık (A, B, C, D) - LGS</option>
+                  <option value={5}>5 Şık (A, B, C, D, E) - YKS</option>
                 </select>
               </div>
 
-              {/* Yanlış Götürme Oranı */}
-              <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/90 flex flex-col justify-between gap-2 shadow-2xs">
-                <div>
-                  <label className="text-xs font-black text-slate-800 block">Yanlış Götürme Oranı</label>
-                  <p className="text-[11px] text-slate-500">Net hesaplama cezası</p>
+              {/* 2. Yanlış Götürme Oranı */}
+              <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 hover:border-purple-200 flex flex-col justify-between gap-3 shadow-2xs transition-all">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-black text-slate-900 block">Yanlış Götürme Oranı</label>
+                    <p className="text-[10.5px] text-slate-500">Net hesaplama cezası</p>
+                  </div>
                 </div>
                 <select
                   value={penaltyState}
                   onChange={(e) => setPenaltyState(Number(e.target.value))}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-2xs"
+                  className="w-full bg-slate-50/80 hover:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white cursor-pointer shadow-2xs transition-all"
                 >
                   <option value={3}>3 Yanlış 1 Doğruyu Götürür (LGS)</option>
                   <option value={4}>4 Yanlış 1 Doğruyu Götürür (YKS)</option>
-                  <option value={0}>Yanlışlar Doğruyu Götürmez (Ceza Yok)</option>
+                  <option value={0}>Yanlışlar Doğruyu Götürmez</option>
                 </select>
               </div>
 
-              {/* Form Sütun Düzeni */}
-              <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/90 flex flex-col justify-between gap-2 shadow-2xs">
-                <div>
-                  <label className="text-xs font-black text-slate-800 block">Optik Form Düzeni</label>
-                  <p className="text-[11px] text-slate-500">A4 kağıt sütun yapısı</p>
+              {/* 3. Form Sütun Düzeni */}
+              <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 hover:border-purple-200 flex flex-col justify-between gap-3 shadow-2xs transition-all">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center shrink-0">
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-black text-slate-900 block">Optik Form Düzeni</label>
+                    <p className="text-[10.5px] text-slate-500">A4 kağıt sütun yapısı</p>
+                  </div>
                 </div>
                 <select
                   value={layoutTypeState}
                   onChange={(e) => setLayoutTypeState(e.target.value as any)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-2xs"
+                  className="w-full bg-slate-50/80 hover:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white cursor-pointer shadow-2xs transition-all"
                 >
-                  <option value="split">Çift Sütun (Sözel 1. Bölüm / Sayısal 2. Bölüm)</option>
+                  <option value="split">Çift Sütun (Sözel 1 / Sayısal 2)</option>
                   <option value="standard">Standart Tek Blok / Düz 4 Sütun</option>
                 </select>
               </div>
 
-              {/* Format / Puanlama Türü */}
-              <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/90 flex flex-col justify-between gap-2 shadow-2xs">
-                <div>
-                  <label className="text-xs font-black text-slate-800 block">Format & Puanlama</label>
-                  <p className="text-[11px] text-slate-500">Puan katsayı formülü</p>
+              {/* 4. Format / Puanlama Türü */}
+              <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 hover:border-purple-200 flex flex-col justify-between gap-3 shadow-2xs transition-all">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Award className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-black text-slate-900 block">Format & Puanlama</label>
+                    <p className="text-[10.5px] text-slate-500">Puan katsayı formülü</p>
+                  </div>
                 </div>
                 <select
                   value={formatState}
                   onChange={(e) => setFormatState(e.target.value as any)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-2xs"
+                  className="w-full bg-slate-50/80 hover:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white cursor-pointer shadow-2xs transition-all"
                 >
                   <option value="lgs">LGS Standart (500 Üzerinden)</option>
                   <option value="mebi">MEBİ / Kazanım Değerlendirme</option>

@@ -77,7 +77,7 @@ interface StudentReportModalProps {
 }
 
 export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: StudentReportModalProps) {
-  const { state } = useAppContext();
+  const { state, userRole } = useAppContext();
   const [currentStudent, setCurrentStudent] = useState<ExamResult & { scores: EvaluatedScore }>(student);
   const [lastEditedQuestion, setLastEditedQuestion] = useState<number | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -430,16 +430,22 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
             </div>
             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Kitapçık</div>
-              <select
-                value={currentStudent.booklet || 'A'}
-                onChange={(e) => handleBookletChange(e.target.value)}
-                className="font-bold text-indigo-700 text-xs sm:text-sm bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-indigo-100 transition-colors w-full"
-              >
-                <option value="A">A Kitapçığı</option>
-                <option value="B">B Kitapçığı</option>
-                <option value="C">C Kitapçığı</option>
-                <option value="D">D Kitapçığı</option>
-              </select>
+              {userRole === 'admin' ? (
+                <select
+                  value={currentStudent.booklet || 'A'}
+                  onChange={(e) => handleBookletChange(e.target.value)}
+                  className="font-bold text-indigo-700 text-xs sm:text-sm bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-indigo-100 transition-colors w-full"
+                >
+                  <option value="A">A Kitapçığı</option>
+                  <option value="B">B Kitapçığı</option>
+                  <option value="C">C Kitapçığı</option>
+                  <option value="D">D Kitapçığı</option>
+                </select>
+              ) : (
+                <div className="font-bold font-mono text-indigo-700 text-sm py-0.5 px-2 bg-indigo-50 rounded-lg border border-indigo-200">
+                  {currentStudent.booklet || 'A'} Kitapçığı
+                </div>
+              )}
             </div>
           </div>
 
@@ -665,24 +671,26 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
           ) : (
             /* Kurum İçi Optik Deneme: Subject Breakdown Cards & Manual Edit */
             <div className="space-y-2.5">
-              <div className="bg-blue-50/80 border border-blue-200/90 rounded-xl px-3.5 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-blue-950 shadow-2xs">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-md bg-blue-600 text-white flex items-center justify-center shrink-0 text-xs">
-                    <Edit3 className="w-3 h-3" />
-                  </span>
-                  <div>
-                    <span className="font-black text-blue-900">Manuel Müdahale: </span>
-                    <span className="text-blue-800 text-[11px]">
-                      Öğrenci cevaplarını aşağıdaki <strong>Öğr.</strong> kutucuklarından doğrudan değiştirebilirsiniz. Puanlar ve netler anında güncellenir.
+              {userRole === 'admin' && (
+                <div className="bg-blue-50/80 border border-blue-200/90 rounded-xl px-3.5 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-blue-950 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-blue-600 text-white flex items-center justify-center shrink-0 text-xs">
+                      <Edit3 className="w-3 h-3" />
                     </span>
+                    <div>
+                      <span className="font-black text-blue-900">Manuel Müdahale: </span>
+                      <span className="text-blue-800 text-[11px]">
+                        Öğrenci cevaplarını aşağıdaki <strong>Öğr.</strong> kutucuklarından doğrudan değiştirebilirsiniz. Puanlar ve netler anında güncellenir.
+                      </span>
+                    </div>
                   </div>
+                  {lastEditedQuestion !== null && (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0 animate-pulse">
+                      ✓ Soru {lastEditedQuestion + 1} Güncellendi
+                    </span>
+                  )}
                 </div>
-                {lastEditedQuestion !== null && (
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0 animate-pulse">
-                    ✓ Soru {lastEditedQuestion + 1} Güncellendi
-                  </span>
-                )}
-              </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {(() => {
@@ -714,22 +722,34 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
                           <td className="py-1 px-1.5 text-center text-slate-400 font-mono text-xs">{i + 1}</td>
                           <td className="py-1 px-1.5 text-center font-bold text-slate-700 font-mono">{k || "-"}</td>
                           <td className="py-1 px-1 text-center">
-                            <select
-                              value={ans || ""}
-                              onChange={(e) => handleAnswerChange(currGlobalIdx, e.target.value)}
-                              className={`w-11 h-7 text-xs font-black rounded-lg border text-center transition-all cursor-pointer outline-none shadow-2xs ${
+                            {userRole === 'admin' ? (
+                              <select
+                                value={ans || ""}
+                                onChange={(e) => handleAnswerChange(currGlobalIdx, e.target.value)}
+                                className={`w-11 h-7 text-xs font-black rounded-lg border text-center transition-all cursor-pointer outline-none shadow-2xs ${
+                                  isEmpty
+                                    ? 'bg-slate-50 border-slate-200 text-slate-400'
+                                    : isCorrect
+                                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                      : 'bg-rose-50 border-rose-300 text-rose-700'
+                                }`}
+                              >
+                                <option value="">-</option>
+                                {options.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className={`inline-block w-8 h-6 leading-6 text-xs font-black rounded-md border text-center font-mono ${
                                 isEmpty
                                   ? 'bg-slate-50 border-slate-200 text-slate-400'
                                   : isCorrect
                                     ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
                                     : 'bg-rose-50 border-rose-300 text-rose-700'
-                              }`}
-                            >
-                              <option value="">-</option>
-                              {options.map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
+                              }`}>
+                                {ans || "-"}
+                              </span>
+                            )}
                           </td>
                           <td className={`py-1 px-1.5 text-center text-[10px] ${statusClass}`}>{statusText}</td>
                         </tr>
@@ -2411,100 +2431,103 @@ export function ResultsView() {
                 </div>
               </div>
 
-              {/* Action Buttons Toolbar */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {exam.examType === 'internal' && userRole === 'admin' && (
-                  <>
+                {/* Action Buttons Toolbar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {exam.examType === 'internal' && userRole === 'admin' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => (window as any).__navigateToTab?.('scan')}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>Canlı Optik Tara</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => (window as any).__navigateToTab?.('omr-setup')}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Form Bas (PDF)</span>
+                      </button>
+                    </>
+                  )}
+
+                  {exam.examType !== 'internal' && userRole === 'admin' && (
+                    <>
+                      <input
+                        ref={publisherFileInputRef}
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        className="hidden"
+                        onChange={handlePublisherExcelUpload}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => publisherFileInputRef.current?.click()}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                        <span>Excel Yükle</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadPublisherTemplate}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
+                        title="Örnek Excel Şablonu İndir"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Örnek Şablon</span>
+                      </button>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleExportResultsExcel}
+                    disabled={evaluatedResults.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer disabled:opacity-50"
+                    title="Sonuçları Excel dosyası olarak indir"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Excel İndir</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsBatchPdfModalOpen(true)}
+                    disabled={evaluatedResults.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                    title="Öğrenci karnelerini renkli ve aranabilir Türkçe destekli toplu PDF olarak indir"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Toplu Karne (PDF)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePrintResults}
+                    disabled={evaluatedResults.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>A4 Yazdır</span>
+                  </button>
+
+                  {userRole === 'admin' && (
                     <button
                       type="button"
-                      onClick={() => (window as any).__navigateToTab?.('scan')}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
+                      onClick={handleDeleteAllResults}
+                      disabled={currentExamResults.length === 0}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-all cursor-pointer disabled:opacity-50"
+                      title="Sınav sonuçlarını sıfırla / temizle"
                     >
-                      <Camera className="w-3.5 h-3.5" />
-                      <span>Canlı Optik Tara</span>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Temizle</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => (window as any).__navigateToTab?.('omr-setup')}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Form Bas (PDF)</span>
-                    </button>
-                  </>
-                )}
-
-                {exam.examType !== 'internal' && (
-                  <>
-                    <input
-                      ref={publisherFileInputRef}
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      className="hidden"
-                      onChange={handlePublisherExcelUpload}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => publisherFileInputRef.current?.click()}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
-                    >
-                      <FileSpreadsheet className="w-3.5 h-3.5" />
-                      <span>Excel Yükle</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDownloadPublisherTemplate}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
-                      title="Örnek Excel Şablonu İndir"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Örnek Şablon</span>
-                    </button>
-                  </>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleExportResultsExcel}
-                  disabled={evaluatedResults.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer disabled:opacity-50"
-                  title="Sonuçları Excel dosyası olarak indir"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Excel İndir</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsBatchPdfModalOpen(true)}
-                  disabled={evaluatedResults.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                  title="Öğrenci karnelerini renkli ve aranabilir Türkçe destekli toplu PDF olarak indir"
-                >
-                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Toplu Karne (PDF)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handlePrintResults}
-                  disabled={evaluatedResults.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>A4 Yazdır</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleDeleteAllResults}
-                  disabled={currentExamResults.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Temizle</span>
-                </button>
-              </div>
+                  )}
+                </div>
             </div>
 
             {/* KPI Metric Strip */}
@@ -2842,22 +2865,26 @@ export function ResultsView() {
                               >
                                 <BookOpen className="w-4 h-4" />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingStudent(student)}
-                                className="p-1.5 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                                title="Öğrenci Bilgisini Düzenle"
-                              >
-                                <Edit3 className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteResult(student)}
-                                className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 active:bg-rose-100 rounded-lg transition-colors cursor-pointer"
-                                title="Sınav Sonucunu Sil"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              {userRole === 'admin' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingStudent(student)}
+                                    className="p-1.5 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                    title="Öğrenci Bilgisini Düzenle"
+                                  >
+                                    <Edit3 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteResult(student)}
+                                    className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 active:bg-rose-100 rounded-lg transition-colors cursor-pointer"
+                                    title="Sınav Sonucunu Sil"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
