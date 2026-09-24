@@ -362,9 +362,22 @@ html.dark body {
   padding-top: max(0.5rem, env(safe-area-inset-top));
 }
 
-/* Touch and scroll improvements for mobile */
+/* Touch and scroll improvements for mobile devices */
 * {
   -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+html, body {
+  touch-action: manipulation;
+  overscroll-behavior-y: none;
+}
+
+/* Mobile input zoom prevention & ergonomics */
+@media (max-width: 768px) {
+  input, select, textarea {
+    font-size: 14px !important;
+  }
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -374,6 +387,14 @@ html.dark body {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Touch-friendly active states */
+@media (hover: none) and (pointer: coarse) {
+  button:active, a:active {
+    opacity: 0.85;
+    transform: scale(0.98);
+  }
 }
 
 @keyframes slideUp {
