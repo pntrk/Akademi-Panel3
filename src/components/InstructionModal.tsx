@@ -430,66 +430,23 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
           </div>
         )}
 
-        {/* 2. Filters and Search Bar */}
-        <div className="bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-3.5 py-2.5 sm:px-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
-          
-          {/* Category Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                selectedCategory === 'all'
-                  ? 'bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-950 shadow-xs'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              🌟 Tümü (9)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('exam')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                selectedCategory === 'exam'
-                  ? 'bg-purple-700 text-white shadow-xs'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              🎯 Sınav Operasyonu (1-5)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('analysis')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                selectedCategory === 'analysis'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              📊 Analiz & Arena (6-7)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('admin')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                selectedCategory === 'admin'
-                  ? 'bg-blue-700 text-white shadow-xs'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              ⚙️ Bütçe & Bulut (8-9)
-            </button>
+        {/* 2. Search Bar & Direct Quick Step Selector */}
+        <div className="bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-3.5 py-2 sm:px-6 flex items-center justify-between gap-2.5 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black text-slate-700 dark:text-slate-200">
+              📌 9 Adımda Eksiksiz Kurum İçi Sınav Akışı
+            </span>
           </div>
 
           {/* Search Box */}
-          <div className="relative min-w-[180px] sm:max-w-[240px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative min-w-[140px] sm:max-w-[220px]">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Konu veya özellik ara..."
-              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+              placeholder="Rehberde ara..."
+              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 pr-7 py-1 text-xs text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-purple-500 font-medium"
             />
             {searchQuery && (
               <button 
@@ -578,28 +535,27 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
              ======================================================== */
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
             
-            {/* Sol Panel: Adım Listesi (Desktop Sidebar / Mobile Horizontal Selector) */}
-            <div className="md:w-[240px] lg:w-[260px] bg-slate-50 dark:bg-slate-900/60 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-2 sm:p-3 overflow-x-auto md:overflow-y-auto flex md:flex-col gap-1.5 shrink-0 no-scrollbar">
+            {/* Sol Panel: Adım Listesi (Desktop Sidebar / Mobile Compact Horizontal Selector) */}
+            <div className="md:w-[240px] lg:w-[260px] bg-slate-50 dark:bg-slate-900/80 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-2 sm:p-3 overflow-x-auto md:overflow-y-auto flex md:flex-col gap-1.5 shrink-0 no-scrollbar">
               {filteredSteps.map((s) => {
-                const SIcon = s.icon;
                 const isActive = s.id === activeStep;
                 return (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => setActiveStep(s.id)}
-                    className={`flex items-center gap-2 p-2 sm:p-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer text-left shrink-0 md:w-full group ${
+                    className={`flex items-center gap-2 p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl text-xs font-bold transition-all cursor-pointer text-left shrink-0 md:w-full group ${
                       isActive
                         ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
                         : 'bg-white dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80'
                     }`}
                   >
-                    <div className={`w-6 h-6 rounded-xl text-[11px] flex items-center justify-center font-black shrink-0 transition-transform group-hover:scale-105 ${
+                    <div className={`w-6 h-6 rounded-lg sm:rounded-xl text-[11px] flex items-center justify-center font-black shrink-0 transition-transform group-hover:scale-105 ${
                       isActive ? 'bg-white text-purple-700 font-black' : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
                     }`}>
                       {s.id}
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 pr-1">
                       <div className="truncate text-xs font-black leading-tight flex items-center justify-between">
                         <span>{s.stageName}</span>
                         <ChevronRight className={`w-3.5 h-3.5 hidden md:block transition-transform ${isActive ? 'text-white' : 'text-slate-400 group-hover:translate-x-0.5'}`} />
@@ -614,7 +570,7 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
             </div>
 
             {/* Sağ Panel: Aktif Adım Detay Alanı */}
-            <div className="flex-1 p-3.5 sm:p-6 md:p-7 overflow-y-auto flex flex-col gap-4 bg-white dark:bg-slate-900">
+            <div className="flex-1 p-3 sm:p-5 md:p-6 overflow-y-auto flex flex-col gap-3 sm:gap-4 bg-white dark:bg-slate-900 custom-scrollbar">
               
               {/* Aşama Başlığı & Rozet & Ekrana Git Butonu */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-100 dark:border-slate-800">

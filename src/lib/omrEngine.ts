@@ -65,11 +65,11 @@ export const OMR_SPECS = {
     colCount: 4,
     colW: 45.25,
     rowH: 4.65,
-    bubbleRadius: 1.75,
-    bubbleGap: 4.5,
-    startXOffset: 13.5,
-    qNumOffset: 1.0,
-    qNumWidth: 6.5,
+    bubbleRadius: 1.6,
+    bubbleGap: 6.45,
+    startXOffset: 10.2,
+    qNumOffset: 0.5,
+    qNumWidth: 5.6,
     rowHeightMod: 1.0
   },
 
@@ -757,15 +757,19 @@ export function evaluateBubbleFill(
   const r2 = sampleRadius * sampleRadius;
 
   // Küçük mikroskobik homografi kaymalarını (±2px) kompanse etmek için 
-  // en yüksek iç doluluğu veren hafif yerel ofset araması
+  // en yüksek iç doluluğu veren hafif yerel ofset araması (merkez odaklı)
   let bestScore = -1;
   let bestMean = 0;
   let bestRatio = 0;
   let bestX = cx;
   let bestY = cy;
 
-  for (let oy = -2; oy <= 2; oy += 1) {
-    for (let ox = -2; ox <= 2; ox += 1) {
+  // Çevre şıklara taşmaları tamamen izole etmek için örnekleme yarıçapı baloncuğun iç çekirdeğine odaklanır (%85 yarıçap)
+  const effectiveSampleRadius = Math.max(2, Math.round(sampleRadius * 0.85));
+  const effectiveR2 = effectiveSampleRadius * effectiveSampleRadius;
+
+  for (let oy = -1; oy <= 1; oy += 1) {
+    for (let ox = -1; ox <= 1; ox += 1) {
       const curX = cx + ox;
       const curY = cy + oy;
 
@@ -773,9 +777,10 @@ export function evaluateBubbleFill(
       let darkCount = 0;
       let totalSamples = 0;
 
-      for (let dy = -sampleRadius; dy <= sampleRadius; dy++) {
-        for (let dx = -sampleRadius; dx <= sampleRadius; dx++) {
-          if (dx * dx + dy * dy <= r2) {
+      for (let dy = -effectiveSampleRadius; dy <= effectiveSampleRadius; dy++) {
+        for (let dx = -effectiveSampleRadius; dx <= effectiveSampleRadius; dx++) {
+          const distSq = dx * dx + dy * dy;
+          if (distSq <= effectiveR2) {
             const px = Math.floor(curX + dx);
             const py = Math.floor(curY + dy);
             if (px >= 0 && px < w && py >= 0 && py < h) {
@@ -784,7 +789,9 @@ export function evaluateBubbleFill(
               const darkness = 255 - whiteness;
               const relDark = Math.max(0, darkness - bgDarkness);
 
-              totalDark += relDark;
+              // Merkez çekirdeğe daha yüksek ağırlık vererek dışa taşmaları filtrele
+              const centerWeight = 1.0 - (Math.sqrt(distSq) / (effectiveSampleRadius + 0.5)) * 0.40;
+              totalDark += relDark * centerWeight;
               totalSamples++;
 
               // Kağıt beyazlığının en az 35 üzerinde koyuluk varsa işaretli piksel say

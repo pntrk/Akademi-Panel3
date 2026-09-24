@@ -179,9 +179,16 @@ const loadInitialState = (): AppState => {
     const saved = localStorage.getItem('okulYonetimState');
     if (saved) {
       const parsed = JSON.parse(saved);
+      const rawExams = parsed.exams || [];
+      const safeExams = rawExams.map((e: Exam) => {
+        if (!e.omrMap || !e.omrMap.specs) {
+          return { ...e, omrMap: generateExamOmrMap(e) };
+        }
+        return e;
+      });
       return {
         students: parsed.students || [],
-        exams: parsed.exams || [],
+        exams: safeExams,
         results: parsed.results || [],
         budget: parsed.budget || { incomes: [], expenses: [], debts: [] },
         examHalls: parsed.examHalls || [],
@@ -348,9 +355,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           (data.teachers || []).map(t => (t || '').trim().toLowerCase())
         ));
 
+        const safeExams = (data.exams || []).map(e => {
+          if (!e.omrMap || !e.omrMap.specs) {
+            return { ...e, omrMap: generateExamOmrMap(e) };
+          }
+          return e;
+        });
+
         const safeData: AppState = {
           students: data.students || [],
-          exams: data.exams || [],
+          exams: safeExams,
           results: data.results || [],
           budget: data.budget || { incomes: [], expenses: [], debts: [] },
           examHalls: data.examHalls || [],
@@ -407,9 +421,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           (data.teachers || []).map(t => (t || '').trim().toLowerCase())
         ));
 
+        const safeExams = (data.exams || []).map(e => {
+          if (!e.omrMap || !e.omrMap.specs) {
+            return { ...e, omrMap: generateExamOmrMap(e) };
+          }
+          return e;
+        });
+
         const safeData: AppState = {
           students: data.students || [],
-          exams: data.exams || [],
+          exams: safeExams,
           results: data.results || [],
           budget: data.budget || { incomes: [], expenses: [], debts: [] },
           examHalls: data.examHalls || [],
@@ -607,8 +628,18 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   const setExams = (exams: Exam[]) => { if (userRole !== 'admin') return; _setExams(exams); };
   const _setExams = (exams: Exam[]) => {
     const s = stateRef.current;
+    
+    // Her sınav için omrMap haritasının eksiksiz olduğundan emin ol
+    const ensuredExams = exams.map(e => {
+      if (!e.omrMap || !e.omrMap.specs) {
+        const omrMap = generateExamOmrMap(e);
+        return { ...e, omrMap };
+      }
+      return e;
+    });
+
     const updatedHalls = s.examHalls.map(hall => {
-      const matchingExams = exams.filter(e => e.assignedHalls?.includes(hall.id));
+      const matchingExams = ensuredExams.filter(e => e.assignedHalls?.includes(hall.id));
       const newExamIds = matchingExams.map(e => e.id);
       const currentIds = hall.examIds || [];
       const isSame = currentIds.length === newExamIds.length && currentIds.every(id => newExamIds.includes(id));
@@ -632,18 +663,18 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       return hall;
     });
     
-    const newBudget = syncFinancials(s.students, exams, s.budget);
+    const newBudget = syncFinancials(s.students, ensuredExams, s.budget);
     
     // Clean up student registrations for exams that no longer exist
-    const newExamIds = exams.map(e => e.id);
+    const newExamIds = ensuredExams.map(e => e.id);
     const studentsWithCleanRegs = s.students.map(st => {
       const regs = st.examRegistrations || [];
       const filtered = regs.filter(r => newExamIds.includes(r.examId));
       if (filtered.length !== regs.length) { return { ...st, examRegistrations: filtered }; }
       return st;
     });
-    const updatedStudents = recalculateLeagueForStudents(studentsWithCleanRegs, s.results, exams, s.approvedTransfers || []);
-    updateFirebase({ ...s, exams, examHalls: updatedHalls, budget: newBudget, students: updatedStudents });
+    const updatedStudents = recalculateLeagueForStudents(studentsWithCleanRegs, s.results, ensuredExams, s.approvedTransfers || []);
+    updateFirebase({ ...s, exams: ensuredExams, examHalls: updatedHalls, budget: newBudget, students: updatedStudents });
   };
 
   const setResults = (results: ExamResult[]) => { if (userRole !== 'admin') return; _setResults(results); };

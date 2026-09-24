@@ -59,14 +59,14 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
           z-index: 50;
         }
         .bubble {
-          width: 4.8mm;
-          height: 3.4mm;
-          border: 1.2px solid var(--print-color, #000);
+          width: 3.3mm;
+          height: 3.3mm;
+          border: 1.1px solid var(--print-color, #000);
           border-radius: 9999px;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 7px;
+          font-size: 6.5px;
           font-weight: 700;
           background-color: #fff;
           line-height: 1;

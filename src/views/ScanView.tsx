@@ -102,21 +102,22 @@ export const findAnchorsCore = (context: CanvasRenderingContext2D, w: number, h:
     let bestAnchor: { x: number; y: number; score: number } | null = null;
     let minScore = Infinity;
 
-    const srX = w * 0.35;
-    const srY = h * 0.35;
+    // Geniş arama yarıçapı: Taranan form eğik, kaymış veya kenar boşluklu olsa bile yakalar (%38)
+    const srX = w * 0.38;
+    const srY = h * 0.38;
 
-    const startX = Math.max(w * 0.035, targetX - srX);
-    const endX = Math.min(w * 0.965, targetX + srX);
-    const startY = Math.max(h * 0.025, targetY - srY);
-    const endY = Math.min(h * 0.975, targetY + srY);
+    const startX = Math.max(w * 0.02, targetX - srX);
+    const endX = Math.min(w * 0.98, targetX + srX);
+    const startY = Math.max(h * 0.02, targetY - srY);
+    const endY = Math.min(h * 0.98, targetY + srY);
 
-    for (let y = startY; y < endY; y += 3) {
-      for (let x = startX; x < endX; x += 3) {
+    for (let y = startY; y < endY; y += 2) {
+      for (let x = startX; x < endX; x += 2) {
         const coreAvg = getBoxAvg(x - 2, y - 2, x + 2, y + 2);
-        if (coreAvg > 160) continue;
+        if (coreAvg > 165) continue;
 
         let left = x, right = x, top = y, bottom = y;
-        const threshold = Math.min(200, coreAvg + 40);
+        const threshold = Math.min(210, coreAvg + 45);
 
         while (left > 0 && getBoxAvg(left - 1, y, left - 1, y) < threshold) left--;
         while (right < w - 1 && getBoxAvg(right + 1, y, right + 1, y) < threshold) right++;
@@ -126,9 +127,9 @@ export const findAnchorsCore = (context: CanvasRenderingContext2D, w: number, h:
         const bw = right - left;
         const bh = bottom - top;
 
-        if (bw >= 10 && bw <= 180 && bh >= 10 && bh <= 180) {
+        if (bw >= 8 && bw <= 200 && bh >= 8 && bh <= 200) {
           const ratio = bw / bh;
-          if (ratio > 0.4 && ratio < 2.5) {
+          if (ratio > 0.45 && ratio < 2.2) {
             let sumX = 0, sumY = 0, weightSum = 0;
             for (let py = top; py <= bottom; py += 1) {
               for (let px = left; px <= right; px += 1) {
@@ -147,8 +148,8 @@ export const findAnchorsCore = (context: CanvasRenderingContext2D, w: number, h:
             const cy = weightSum > 0 ? sumY / weightSum : top + (bh / 2);
 
             const dist = Math.hypot(cx - targetX, cy - targetY);
-            const shapePenalty = Math.abs(bw - bh) * 1.5;
-            const score = dist + shapePenalty + (coreAvg * 0.5);
+            const shapePenalty = Math.abs(bw - bh) * 1.2;
+            const score = dist + shapePenalty + (coreAvg * 0.4);
 
             if (score < minScore) {
               minScore = score;
@@ -182,8 +183,8 @@ export const findAnchorsCore = (context: CanvasRenderingContext2D, w: number, h:
   const finalBR = br || defBR;
 
   if (!lockFailed) {
-    if (finalTR.x - finalTL.x < w * 0.6 || finalBR.x - finalBL.x < w * 0.6) lockFailed = true;
-    if (finalBL.y - finalTL.y < h * 0.6 || finalBR.y - finalTR.y < h * 0.6) lockFailed = true;
+    if (finalTR.x - finalTL.x < w * 0.55 || finalBR.x - finalBL.x < w * 0.55) lockFailed = true;
+    if (finalBL.y - finalTL.y < h * 0.55 || finalBR.y - finalTR.y < h * 0.55) lockFailed = true;
   }
 
   return { pts: { tl: finalTL, tr: finalTR, bl: finalBL, br: finalBR }, lockFailed };
@@ -197,16 +198,12 @@ interface ScanViewProps {
 }
 
 export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNavigate }: ScanViewProps) {
-  const { state, saveOmrExamResults } = useAppContext();
+  const { state, userRole, saveOmrExamResults } = useAppContext();
+  const isAdmin = userRole === 'admin';
 
-  // Tüm deneme sınavları (öncelik internal, yoksa tümü)
-  const allExams = useMemo(() => {
-    return state.exams && state.exams.length > 0 ? state.exams : [];
-  }, [state.exams]);
-
+  // Kurum İçi Deneme Sınavları (Optik form baskısı ve OMR haritası olan sınavlar)
   const internalExams = useMemo(() => {
-    const list = state.exams.filter(e => e.examType === 'internal' || (!e.examType && e.keys && Object.keys(e.keys).length > 0));
-    return list.length > 0 ? list : state.exams;
+    return state.exams.filter(e => e.examType === 'internal' || (!e.examType && !e.publisher && e.keys && Object.keys(e.keys).length > 0));
   }, [state.exams]);
 
   // Aktif sınav seçimi (prop olarak gelirse, sessionStorage'dan veya listeden seçilirse)
@@ -215,21 +212,21 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
     if (propExamId) return String(propExamId);
     try {
       const savedId = sessionStorage.getItem('active_exam_id');
-      if (savedId && state.exams.some(e => String(e.id) === String(savedId))) {
+      if (savedId && internalExams.some(e => String(e.id) === String(savedId))) {
         return String(savedId);
       }
     } catch (e) {}
     if (internalExams.length > 0) return String(internalExams[0].id);
-    return state.exams.length > 0 ? String(state.exams[0].id) : "";
+    return "";
   });
 
-  const exam: Exam = state.exams.find(e => String(e.id) === String(selectedExamId))
-    || internalExams.find(e => String(e.id) === String(selectedExamId))
+  const exam: Exam = internalExams.find(e => String(e.id) === String(selectedExamId))
+    || state.exams.find(e => String(e.id) === String(selectedExamId))
     || internalExams[0]
     || state.exams[0]
     || {
     id: "1",
-    name: "Örnek Deneme Sınavı",
+    name: "Örnek Kurum İçi Deneme Sınavı",
     examType: 'internal',
     date: new Date().toLocaleDateString('tr-TR'),
     subjects: [
@@ -1987,6 +1984,9 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         }
         detectedExamRef.current = targetExam;
 
+        // Hedef sınavın güncel OMR koordinat haritasını (omrMap) baz al
+        const targetOmrToUse = targetExam?.omrMap?.specs ? { ...OMR_SPECS, ...targetExam.omrMap.specs } : (specificOMR || OMR_SPECS);
+
         let finalNo = qrStudentNo ? String(qrStudentNo) : "";
 
         // Seri Okuma Koruması (2.5 saniyelik okuma kilidi / debounce / cooldown)
@@ -2017,39 +2017,15 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           return dSum / (dCnt || 1);
         };
 
-        const getDeepestDarkness = (cx: number, cy: number, searchRadiusX: number, searchRadiusY: number, coreRadius: number) => {
-          let maxScore = -Infinity;
-          let bestX = cx, bestY = cy;
-          let actualVal = 0;
-
-          for (let sy = -searchRadiusY; sy <= searchRadiusY; sy += 1) {
-            for (let sx = -searchRadiusX; sx <= searchRadiusX; sx += 1) {
-              const avgDark = getFastAvg(cx + sx, cy + sy, coreRadius);
-              const dist = Math.hypot(sx, sy);
-
-              const penalty = (dist * dist) * 0.35;
-              const score = avgDark - penalty;
-
-              if (score > maxScore) {
-                maxScore = score;
-                bestX = cx + sx;
-                bestY = cy + sy;
-                actualVal = avgDark;
-              }
-            }
-          }
-          return { val: actualVal, x: bestX, y: bestY };
-        };
-
-        const scalePxPerMm = cvs.width / (omrToUse.paperW || 210);
-        const bubbleRadiusPx = (omrToUse.questions.bubbleRadius || 1.8) * scalePxPerMm;
+        const scalePxPerMm = cvs.width / (targetOmrToUse.paperW || 210);
+        const bubbleRadiusPx = (targetOmrToUse.questions?.bubbleRadius || 1.6) * scalePxPerMm;
         const bookletRadiusPx = 2.4 * scalePxPerMm;
 
         // 2. Kitapçık Türü Tespiti (A - B - C - D)
         let mebiCodedBk: string | null = null;
-        const bookletPositions = getBookletBubblePositions(omrToUse);
+        const bookletPositions = targetExam?.omrMap?.bookletPositions || getBookletBubblePositions(targetOmrToUse);
         const bkEval = evaluateQuestionAnswer(
-          bookletPositions.map(bp => ({ option: bp.booklet, x: bp.x, y: bp.y })),
+          bookletPositions.map((bp: any) => ({ option: bp.booklet || bp.option, x: bp.x, y: bp.y })),
           currentH,
           imgBytes,
           cvs.width,
@@ -2064,7 +2040,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         }
 
         // 3. İşaretlemelerin Okunması (Bubble Sampling) - İlgili Sınavın OmrMap'ı kullanılır
-        const { items: layoutItems } = getQuestionsLayout(targetExam, omrToUse);
+        const { items: layoutItems } = getQuestionsLayout(targetExam, targetOmrToUse);
         const qItems = layoutItems.filter(i => i.type === 'question');
         const readAns = Array(qItems.length).fill("");
 
@@ -2121,7 +2097,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
         // QR kod yoksa veya eşleşmediyse form üzerindeki kodlanmış baloncukları oku
         if (!matchedStudent || !finalNo) {
-          const bubbled = scanInfoFields(ctx, currentH, omrToUse);
+          const bubbled = scanInfoFields(ctx, currentH, targetOmrToUse);
           if (bubbled.bubbledNo && !finalNo) {
             finalNo = bubbled.bubbledNo;
             matchedStudent = targetExam.studentList?.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo))
@@ -2351,38 +2327,44 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                       handleExamChange(val);
                     }
                   }}
-                  className="bg-slate-900 text-emerald-400 font-bold text-xs rounded border border-slate-700 px-2 py-0.5 outline-none cursor-pointer max-w-[200px] sm:max-w-xs truncate"
-                  title="Okutulacak Sınav Şablonu"
+                  className="bg-slate-900 text-emerald-400 font-bold text-xs rounded border border-slate-700 px-2 py-0.5 outline-none cursor-pointer max-w-[220px] sm:max-w-xs truncate"
+                  title="Okutulacak Kurum İçi Sınav Şablonu"
                 >
                   <option value="auto">⚡ Otomatik (QR Kodundan Algıla)</option>
-                  {allExams.map(e => {
-                    const qCount = e.subjects?.reduce((sum, s) => sum + s.count, 0) || (e.keys?.A?.length) || 0;
-                    return (
-                      <option key={e.id} value={e.id}>
-                        {e.name} {qCount > 0 ? `(${qCount} Soru)` : ''}
-                      </option>
-                    );
-                  })}
+                  {internalExams.length === 0 ? (
+                    <option value="" disabled>-- Kayıtlı Kurum İçi Sınav Yok --</option>
+                  ) : (
+                    internalExams.map(e => {
+                      const qCount = e.subjects?.reduce((sum, s) => sum + s.count, 0) || (e.omrMap?.totalQuestions) || (e.keys?.A?.length) || 0;
+                      return (
+                        <option key={e.id} value={e.id}>
+                          {e.name} {qCount > 0 ? `(${qCount} Soru)` : ''}
+                        </option>
+                      );
+                    })
+                  )}
                 </select>
-                <button
-                  type="button"
-                  onClick={() => setLockToSelectedExam(prev => !prev)}
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer ${
-                    lockToSelectedExam 
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
-                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  }`}
-                  title={lockToSelectedExam ? "Bu sınav şablonuna kilitlendi (QR sınavını aramaz)." : "Akıllı Mod Aktif: QR kodundan sınav ID'si otomatik algılanır."}
-                >
-                  {lockToSelectedExam ? <Lock className="w-2.5 h-2.5 text-amber-400" /> : <Unlock className="w-2.5 h-2.5 text-emerald-400" />}
-                  <span className="hidden sm:inline">{lockToSelectedExam ? 'Kilitli' : 'QR Otomatik'}</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setLockToSelectedExam(prev => !prev)}
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer ${
+                      lockToSelectedExam 
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    }`}
+                    title={lockToSelectedExam ? "Bu sınav şablonuna kilitlendi (QR sınavını aramaz)." : "Akıllı Mod Aktif: QR kodundan sınav ID'si otomatik algılanır."}
+                  >
+                    {lockToSelectedExam ? <Lock className="w-2.5 h-2.5 text-amber-400" /> : <Unlock className="w-2.5 h-2.5 text-emerald-400" />}
+                    <span className="hidden sm:inline">{lockToSelectedExam ? 'Kilitli' : 'QR Otomatik'}</span>
+                  </button>
+                )}
               </div>
             </div>
             <p className="text-slate-400 text-[11px] sm:text-xs hidden sm:flex items-center gap-2 truncate mt-0.5">
               <span className="text-slate-200 font-bold">{exam.name}</span>
               <span>•</span>
-              <span>{totalQ} Soru OMR Haritası</span>
+              <span>{totalQ} Soru</span>
               <span>•</span>
               <span>{state.students.length} Kayıtlı Öğrenci</span>
               {!lockToSelectedExam && (
@@ -2395,30 +2377,32 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              if (onNavigate) {
-                onNavigate('keys_print');
-              } else if (typeof window !== 'undefined' && (window as any).__navigateToTab) {
-                (window as any).__navigateToTab('keys_print');
-              }
-              if (typeof window !== 'undefined' && (window as any).__keysPrintSetTab) {
-                (window as any).__keysPrintSetTab('print');
-              }
-            }}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-purple-600/50 cursor-pointer shadow-xs"
-            title="Karekodlu Optik Form Baskı ve Canlı Önizleme Merkezine Git"
-          >
-            <span>🖨️ Form Yazdır / Önizle</span>
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                if (onNavigate) {
+                  onNavigate('keys_print');
+                } else if (typeof window !== 'undefined' && (window as any).__navigateToTab) {
+                  (window as any).__navigateToTab('keys_print');
+                }
+                if (typeof window !== 'undefined' && (window as any).__keysPrintSetTab) {
+                  (window as any).__keysPrintSetTab('print');
+                }
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-purple-600/50 cursor-pointer shadow-xs"
+              title="Karekodlu Optik Form Baskı ve Canlı Önizleme Merkezine Git"
+            >
+              <span>🖨️ Form Yazdır / Önizle</span>
+            </button>
+          )}
 
           <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs font-semibold text-slate-300">
             <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
             <span><strong className="text-emerald-400 font-mono">{(exam.results || []).length}</strong> Okundu</span>
           </div>
 
-          {imageLoaded && !isCameraActive && (
+          {isAdmin && imageLoaded && !isCameraActive && (
             <button
               onClick={() => {
                 setImageLoaded(false);
@@ -2434,7 +2418,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             </button>
           )}
 
-          {onClose && (
+          {isAdmin && onClose && (
             <button
               onClick={onClose}
               className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
@@ -2504,34 +2488,41 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Hedef Sınav OMR Şablonu:</span>
               </label>
-              <button
-                type="button"
-                onClick={() => setLockToSelectedExam(prev => !prev)}
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer ${
-                  lockToSelectedExam 
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
-                }`}
-                title={lockToSelectedExam ? "Şablon kilitli. Yalnızca bu sınavın OMR haritası ve cevap anahtarı kullanılır." : "QR kodundaki sınav bilgisine göre otomatik geçilir."}
-              >
-                {lockToSelectedExam ? <Lock className="w-3 h-3 text-amber-400" /> : <Unlock className="w-3 h-3 text-slate-400" />}
-                <span>{lockToSelectedExam ? 'Şablon Kilitli' : 'Otomatik QR'}</span>
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setLockToSelectedExam(prev => !prev)}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer ${
+                    lockToSelectedExam 
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+                  }`}
+                  title={lockToSelectedExam ? "Şablon kilitli. Yalnızca bu sınavın OMR haritası ve cevap anahtarı kullanılır." : "QR kodundaki sınav bilgisine göre otomatik geçilir."}
+                >
+                  {lockToSelectedExam ? <Lock className="w-3 h-3 text-amber-400" /> : <Unlock className="w-3 h-3 text-slate-400" />}
+                  <span>{lockToSelectedExam ? 'Şablon Kilitli' : 'Otomatik QR'}</span>
+                </button>
+              )}
             </div>
 
             <select
               value={selectedExamId}
               onChange={(e) => handleExamChange(e.target.value)}
-              className="w-full bg-slate-800 text-white font-bold text-xs rounded-lg border border-slate-600 px-2.5 py-2 outline-none focus:border-emerald-500 cursor-pointer"
+              disabled={internalExams.length === 0}
+              className="w-full bg-slate-800 text-white font-bold text-xs rounded-lg border border-slate-600 px-2.5 py-2 outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-50"
             >
-              {allExams.map(e => {
-                const qCount = e.subjects?.reduce((sum, s) => sum + s.count, 0) || (e.keys?.A?.length) || 0;
-                return (
-                  <option key={e.id} value={e.id}>
-                    {e.name} {qCount > 0 ? `(${qCount} Soru)` : ''}
-                  </option>
-                );
-              })}
+              {internalExams.length === 0 ? (
+                <option value="" disabled>-- Kayıtlı Kurum İçi Sınav Yok --</option>
+              ) : (
+                internalExams.map(e => {
+                  const qCount = e.subjects?.reduce((sum, s) => sum + s.count, 0) || (e.omrMap?.totalQuestions) || (e.keys?.A?.length) || 0;
+                  return (
+                    <option key={e.id} value={e.id}>
+                      {e.name} {qCount > 0 ? `(${qCount} Soru)` : ''}
+                    </option>
+                  );
+                })
+              )}
             </select>
 
             <div className="flex items-center justify-between text-[10px] text-slate-300 pt-1.5 border-t border-slate-800/80">

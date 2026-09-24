@@ -260,14 +260,14 @@ export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) 
           z-index: 50;
         }
         .bubble {
-          width: 3.6mm;
-          height: 3.6mm;
+          width: 3.3mm;
+          height: 3.3mm;
           border: 1.1px solid var(--print-color, #000);
           border-radius: 9999px;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 6.8px;
+          font-size: 6.5px;
           font-weight: 700;
           background-color: #fff;
           line-height: 1;
@@ -1253,14 +1253,14 @@ export function KeysAndPrintView() {
             }
             .bubble {
               position: absolute;
-              width: 3.6mm;
-              height: 3.6mm;
+              width: 3.3mm;
+              height: 3.3mm;
               border: 1.1px solid ${themeColor};
               border-radius: 9999px;
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 6.8px;
+              font-size: 6.5px;
               font-weight: 700;
               color: #0f172a;
               background-color: #fff;
@@ -1354,20 +1354,13 @@ export function KeysAndPrintView() {
                     || 0;
                   return (
                     <option key={e.id} value={e.id}>
-                      {e.name} {qCount > 0 ? `(${qCount} Soru)` : ''} {e.omrMap ? '⚡ [OMR-Map]' : ''}
+                      {e.name} {qCount > 0 ? `(${qCount} Soru)` : ''}
                     </option>
                   );
                 })
               )}
             </select>
           </div>
-
-          {selectedExam?.omrMap && (
-            <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shadow-2xs" title="Bu sınavın milimetrik OMR koordinat haritası hafızada ve canlı taramada tam uyumlu.">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              OMR-Map Aktif
-            </div>
-          )}
         </div>
       </div>
 
