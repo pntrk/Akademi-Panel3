@@ -1,0 +1,8 @@
+{
+  "name": "AkademiPanel3",
+  "description": "Ölçme ve Değerlendirme Yönetimi",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

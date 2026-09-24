@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Health check and connection validation test document
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // Central school database: students, exams, results, academy arena, halls, budget
+    match /schools/{schoolId} {
+      allow read, write: if isSignedIn();
+
+      // Cloud backups snapshot collection
+      match /backups/{backupId} {
+        allow read, write, delete: if isSignedIn();
+      }
+    }
+
+    // Top-level backups collection (direct access path fallback)
+    match /backups/{backupId} {
+      allow read, write, delete: if isSignedIn();
+    }
+
+    // Access authorization requests
+    match /access_requests/{document=**} {
+      allow read, write, delete: if true;
+    }
+
+    // Real-time notifications and announcements
+    match /notifications/{document=**} {
+      allow read, write, delete: if true;
+    }
+  }
+}

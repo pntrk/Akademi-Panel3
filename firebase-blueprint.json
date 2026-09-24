@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "AppState": {
+      "title": "AppState",
+      "description": "Centralized school management state including students, exams, results, academy arena/league, halls, and budget",
+      "type": "object",
+      "properties": {
+        "students": { "type": "array", "description": "Student roster with classes, exam registrations, and league status" },
+        "exams": { "type": "array", "description": "Mock exams, dates, publisher fees, and assigned halls" },
+        "results": { "type": "array", "description": "Exam results, subject net scores, and overall standings" },
+        "budget": { "type": "object", "description": "Financial records: student dues, incomes, expenses, debts" },
+        "examHalls": { "type": "array", "description": "Exam halls with desk seating plans and configurations" },
+        "leagueMentors": { "type": "object", "description": "Academy arena team mentor assignments" },
+        "leagueTeamPoints": { "type": "object", "description": "Arena bonus/penalty team points" },
+        "approvedTransfers": { "type": "array", "description": "League team transfer records" },
+        "admins": { "type": "array", "description": "Authorized administrator email addresses" },
+        "teachers": { "type": "array", "description": "Authorized teacher email addresses" }
+      }
+    },
+    "AccessRequest": {
+      "title": "AccessRequest",
+      "description": "Pending user authorization request for teacher or admin access",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["email"]
+    },
+    "CloudBackup": {
+      "title": "CloudBackup",
+      "description": "Timestamped system backup snapshot created by administrators in Firebase Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "summary": { "type": "object" },
+        "data": { "type": "object" }
+      },
+      "required": ["id", "createdAt", "createdByEmail", "data"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "Real-time push notification and announcement broadcasted to users, teachers, or students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["exam_result", "exam_created", "announcement", "arena_update", "system"] },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "targetRole": { "type": "string" },
+        "targetGrade": { "type": "string" },
+        "linkTab": { "type": "string" },
+        "readBy": { "type": "array" },
+        "urgent": { "type": "boolean" }
+      },
+      "required": ["id", "type", "title", "message", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/schools/{schoolId}": {
+      "schema": "AppState",
+      "description": "Central school document storing synchronized school database"
+    },
+    "/schools/{schoolId}/backups/{backupId}": {
+      "schema": "CloudBackup",
+      "description": "Timestamped backups saved by authorized administrators"
+    },
+    "/access_requests/{requestId}": {
+      "schema": "AccessRequest",
+      "description": "User access requests awaiting administrator review"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "AppNotification",
+      "description": "Real-time notifications and announcements dispatched across devices"
+    }
+  }
+}
