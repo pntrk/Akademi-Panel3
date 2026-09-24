@@ -30,21 +30,7 @@ export function LocalQRCode({ data, size = 150, className = '' }: LocalQRCodePro
         if (isMounted) setSrc(url);
       })
       .catch(err => {
-        console.warn('QRCode generation failed, trying QRious fallback', err);
-        if (typeof window !== 'undefined' && (window as any).QRious) {
-          try {
-            const qr = new (window as any).QRious({
-              value: data,
-              size: size,
-              background: 'white',
-              foreground: 'black',
-              level: 'M'
-            });
-            if (isMounted) setSrc(qr.toDataURL());
-          } catch (e) {
-            console.error('QRious fallback failed', e);
-          }
-        }
+        console.warn('QRCode generation failed:', err);
       });
 
     return () => {

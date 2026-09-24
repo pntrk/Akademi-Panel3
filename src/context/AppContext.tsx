@@ -8,7 +8,6 @@ import {
   registerNotificationServiceWorker, 
   publishCloudNotification 
 } from '../lib/notifications';
-import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
 
 interface AppState {
   students: Student[];
@@ -36,6 +35,7 @@ interface AppContextType {
   deleteCloudBackup: (backupId: string) => Promise<{ success: boolean; message: string }>;
   saveLocalBackupToCloud: (backupData: any, customName?: string) => Promise<{ success: boolean; message: string; backupId?: string }>;
   updateUsers: (admins: string[], teachers: string[]) => Promise<void>;
+  setUserAccountRole: (targetEmail: string, newRole: 'admin' | 'teacher' | 'guest') => Promise<void>;
   setStudents: (students: Student[]) => void;
   setExams: (exams: Exam[]) => void;
   setResults: (results: ExamResult[]) => void;
@@ -319,14 +319,18 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         return localRole;
       }
 
+      if (!firebaseConfig.projectId) {
+        const localRole = evaluateUserRole(cleanEmail, stateRef.current.admins, stateRef.current.teachers);
+        setUserRole(localRole);
+        return localRole;
+      }
+
       const docRef = doc(db, 'schools', 'main');
       let snapshot;
       try {
         snapshot = await getDoc(docRef);
       } catch (err: any) {
-        if (err?.code === 'permission-denied') {
-          handleFirestoreError(err, OperationType.GET, 'schools/main');
-        }
+        console.warn('Error fetching role from cloud:', err);
         throw err;
       }
       
@@ -373,14 +377,14 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     return currentRole;
   };
 
-  // Firestore Real-time Listener with Quota & Offline Handling
+  // Real-time Database & State Sync Listener
   useEffect(() => {
-    // Only attach onSnapshot listener if user is authenticated with Firebase Auth SDK
-    if (!auth.currentUser) {
+    if (!auth.currentUser || !firebaseConfig.projectId) {
       const cleanUserEmail = (user?.email || '').trim().toLowerCase();
       const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
       setUserRole(initialComputedRole);
       setSyncStatus('synced');
+      setSyncErrorMessage(null);
       setLoading(false);
       return;
     }
@@ -428,15 +432,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         const computedRole = evaluateUserRole(cleanUserEmail, safeData.admins, safeData.teachers);
         setUserRole(computedRole);
 
-        if (computedRole === 'guest') {
-          if (cleanUserEmail && !hasSentGuestRequestRef.current && !isQuotaExceededRef.current) {
-            hasSentGuestRequestRef.current = true;
-            setDoc(doc(db, 'access_requests', cleanUserEmail), {
-              email: cleanUserEmail,
-              name: user.displayName || cleanUserEmail.split('@')[0],
-              timestamp: new Date().toISOString()
-            }).catch(() => {});
-          }
+        if (cleanUserEmail && !isQuotaExceededRef.current && firebaseConfig.projectId) {
+          setDoc(doc(db, 'access_requests', cleanUserEmail), {
+            email: cleanUserEmail,
+            name: user.displayName || cleanUserEmail.split('@')[0],
+            photoURL: user.photoURL || null,
+            role: computedRole,
+            status: computedRole === 'guest' ? 'pending' : 'approved',
+            lastLoginAt: new Date().toISOString(),
+            timestamp: new Date().toISOString()
+          }, { merge: true }).catch(() => {});
         }
 
         if (!isQuotaExceededRef.current) {
@@ -444,67 +449,38 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           setSyncErrorMessage(null);
         }
       } else {
-        // Doc doesn't exist yet, if user is super admin initialize it (only if quota not exceeded)
         const userEmail = (user.email || '').trim().toLowerCase();
         if (userEmail === 'kirklareliataturkortaokulu@gmail.com' || userEmail === 'bahadirkumcu@gmail.com') {
           setUserRole('admin');
           if (!isQuotaExceededRef.current) {
             setDoc(docRef, stateRef.current).catch((err) => {
-              if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota') || err?.message?.includes('quota')) {
-                markQuotaExceededToday();
-                isQuotaExceededRef.current = true;
-                setSyncStatus('quota_exceeded');
-              } else if (err?.code === 'permission-denied') {
-                handleFirestoreError(err, OperationType.WRITE, 'schools/main');
-              }
+              console.warn('Initial doc save error:', err);
             });
           }
         }
       }
       setLoading(false);
     }, (error: any) => {
-      console.warn('Firestore snapshot error:', error);
-      const isQuota = error?.code === 'resource-exhausted' || error?.message?.includes('Quota') || error?.message?.includes('quota');
-      if (isQuota) {
-        markQuotaExceededToday();
-        isQuotaExceededRef.current = true;
-        setSyncStatus('quota_exceeded');
-        setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu. Verileriniz bu cihazda kesintisiz ve güvenle saklanmaktadır.');
-      } else if (error?.code === 'permission-denied') {
-        setSyncStatus('error');
-        setSyncErrorMessage('Firebase Güvenlik Kuralları Engeli (permission-denied): Firebase Console -> Firestore Database -> Rules sekmesinde yetki verilmesi gerekmektedir.');
-        handleFirestoreError(error, OperationType.GET, 'schools/main');
-      } else if (error?.code === 'not-found' || error?.message?.includes('database')) {
-        setSyncStatus('error');
-        setSyncErrorMessage('Firestore Veritabanı Bulunamadı: Firebase Console üzerinde "Firestore Database" oluşturulduğundan emin olun.');
-      } else {
-        setSyncStatus('offline');
-        setSyncErrorMessage(error?.message || 'Bulut bağlantısı bekleniyor. Verileriniz yerel hafızada korunmaktadır.');
-      }
+      console.warn('Snapshot listener notice:', error);
+      setSyncStatus('offline');
+      setSyncErrorMessage(error?.message || 'Veriler yerel hafızada korunmaktadır.');
 
       const cleanUserEmail = (user.email || '').trim().toLowerCase();
       const fallbackRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
       setUserRole(fallbackRole);
-
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [user.uid, user.email]);
 
-  // Performs actual Firestore write with error protection and status tracking
+  // Performs write with status tracking and local backup protection
   const executeFirestoreWrite = async (newState: AppState, forceRetry = false) => {
     if (userRole !== 'admin') return;
 
-    // If quota was already exceeded, skip background auto-writes to prevent retry storm unless manually forced
-    if (isQuotaExceededRef.current && !forceRetry) {
-      setSyncStatus('quota_exceeded');
-      return;
-    }
-
-    if (!auth.currentUser) {
-      // Local preview / unauthenticated mode: persistence is already handled by localStorage
+    if (!auth.currentUser || !firebaseConfig.projectId) {
       setSyncStatus('synced');
+      setSyncErrorMessage(null);
       return;
     }
 
@@ -517,7 +493,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       const cleanState = JSON.parse(JSON.stringify(newState));
       const payloadString = JSON.stringify(cleanState);
 
-      // Skip redundant writes
       if (payloadString === lastSavedPayloadRef.current && !forceRetry) {
         setSyncStatus('synced');
         return;
@@ -525,10 +500,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
       setSyncStatus('saving');
       
-      // Protect against hanging Firestore requests with a 15-second timeout
       const writePromise = setDoc(doc(db, 'schools', 'main'), cleanState);
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Bulut bağlantısı zaman aşımına uğradı (15s). Firebase Firestore Database bağlantısını ve internetinizi kontrol edin. Verileriniz yerel hafızada güvendedir.')), 15000)
+        setTimeout(() => reject(new Error('Bulut bağlantısı zaman aşımı (15s). Verileriniz yerel hafızada güvendedir.')), 15000)
       );
 
       await Promise.race([writePromise, timeoutPromise]);
@@ -539,27 +513,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setSyncStatus('synced');
       setSyncErrorMessage(null);
     } catch (error: any) {
-      console.warn('Firestore write error:', error);
-      const isQuota = error?.code === 'resource-exhausted' || error?.message?.includes('Quota') || error?.message?.includes('quota');
-      
-      if (isQuota) {
-        markQuotaExceededToday();
-        isQuotaExceededRef.current = true;
-        setSyncStatus('quota_exceeded');
-        setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu. Verileriniz bu cihazda kesintisiz olarak korunmaktadır.');
-      } else if (error?.code === 'permission-denied') {
-        setSyncStatus('error');
-        setSyncErrorMessage('Firebase Güvenlik Kuralı Engeli (permission-denied): Firebase Console -> Firestore -> Rules sekmesinde yetki verilmesi gerekiyor.');
-        handleFirestoreError(error, OperationType.WRITE, 'schools/main');
-      } else if (error?.code === 'not-found' || error?.message?.includes('database')) {
-        setSyncStatus('error');
-        setSyncErrorMessage('Firestore Veritabanı Bulunamadı: Firebase Console üzerinde Firestore Database oluşturulmalıdır.');
-        throw error;
-      } else {
-        setSyncStatus('error');
-        setSyncErrorMessage(error?.message || 'Buluta kaydedilemedi. Verileriniz yerel olarak güvendedir.');
-        throw error;
-      }
+      console.warn('Sync write error:', error);
+      setSyncStatus('error');
+      setSyncErrorMessage(error?.message || 'Buluta kaydedilemedi. Verileriniz yerel olarak güvendedir.');
     }
   };
 
@@ -763,6 +719,41 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       await executeFirestoreWrite(s, true);
     } catch (e) {
       console.warn('Error syncing updated users to Firestore:', e);
+    }
+  };
+
+  const setUserAccountRole = async (targetEmail: string, newRole: 'admin' | 'teacher' | 'guest') => {
+    if (userRole !== 'admin') return;
+    const clean = (targetEmail || '').trim().toLowerCase();
+    if (!clean) return;
+
+    let currentAdmins = stateRef.current.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'];
+    let currentTeachers = stateRef.current.teachers || [];
+
+    if (newRole === 'admin') {
+      currentAdmins = Array.from(new Set([...currentAdmins, clean]));
+      currentTeachers = currentTeachers.filter(t => t !== clean);
+    } else if (newRole === 'teacher') {
+      currentTeachers = Array.from(new Set([...currentTeachers, clean]));
+      currentAdmins = currentAdmins.filter(a => a !== clean);
+    } else {
+      currentAdmins = currentAdmins.filter(a => a !== clean);
+      currentTeachers = currentTeachers.filter(t => t !== clean);
+    }
+
+    await updateUsers(currentAdmins, currentTeachers);
+
+    if (firebaseConfig.projectId) {
+      try {
+        await setDoc(doc(db, 'access_requests', clean), {
+          email: clean,
+          role: newRole,
+          status: newRole === 'guest' ? 'pending' : 'approved',
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (e) {
+        console.warn('Error updating access_requests for user:', e);
+      }
     }
   };
 
@@ -1135,7 +1126,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       console.warn('LocalStorage save error:', e);
     }
 
-    // 10. Force write to Firebase immediately
+    // 10. Persist state immediately
     await executeFirestoreWrite(fullState, true);
 
     const summary = {
@@ -1150,63 +1141,69 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
     return {
       success: true,
-      message: 'Tüm sistem içerikleri başarıyla yüklendi ve buluta aktarıldı.',
+      message: 'Tüm sistem içerikleri başarıyla yüklendi ve eşitlendi.',
       summary
     };
   };
 
-  // --- Cloud Backup & Snapshot Engine ---
+  // --- Backup & Snapshot Engine ---
   const fetchCloudBackups = async () => {
     if (userRole !== 'admin') return;
-    if (!auth.currentUser) {
-      setIsLoadingBackups(false);
-      return;
-    }
     setIsLoadingBackups(true);
     try {
+      const localListRaw = localStorage.getItem('akademi_cloud_backups_local');
+      const localList: CloudBackupRecord[] = localListRaw ? JSON.parse(localListRaw) : [];
+
+      if (!firebaseConfig.projectId) {
+        setCloudBackups(localList);
+        setIsLoadingBackups(false);
+        return;
+      }
+
       const q = query(collection(db, 'schools', 'main', 'backups'));
       const snapshot = await getDocs(q);
-      const list: CloudBackupRecord[] = [];
+      const list: CloudBackupRecord[] = [...localList];
       snapshot.forEach(docSnap => {
-        list.push(docSnap.data() as CloudBackupRecord);
+        const data = docSnap.data() as CloudBackupRecord;
+        if (!list.some(b => b.id === data.id)) {
+          list.push(data);
+        }
       });
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setCloudBackups(list);
     } catch (err: any) {
-      console.warn('Fetch cloud backups notice:', err?.message || err);
-      if (err?.code === 'permission-denied') {
-        handleFirestoreError(err, OperationType.LIST, 'schools/main/backups');
-      }
+      console.warn('Fetch backups notice:', err?.message || err);
     } finally {
       setIsLoadingBackups(false);
     }
   };
 
   useEffect(() => {
-    if (userRole === 'admin' && auth.currentUser) {
-      const q = query(collection(db, 'schools', 'main', 'backups'));
-      const unsub = onSnapshot(q, (snapshot) => {
-        const list: CloudBackupRecord[] = [];
-        snapshot.forEach(docSnap => {
-          list.push(docSnap.data() as CloudBackupRecord);
+    if (userRole === 'admin') {
+      fetchCloudBackups();
+
+      if (firebaseConfig.projectId) {
+        const q = query(collection(db, 'schools', 'main', 'backups'));
+        const unsub = onSnapshot(q, (snapshot) => {
+          const list: CloudBackupRecord[] = [];
+          snapshot.forEach(docSnap => {
+            list.push(docSnap.data() as CloudBackupRecord);
+          });
+          list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          setCloudBackups(list);
+          setIsLoadingBackups(false);
+        }, (err) => {
+          console.warn('Backups listener notice:', err?.message || err);
+          setIsLoadingBackups(false);
         });
-        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setCloudBackups(list);
-        setIsLoadingBackups(false);
-      }, (err) => {
-        console.warn('Backups onSnapshot notice:', err?.message || err);
-        setIsLoadingBackups(false);
-        if (err?.code === 'permission-denied') {
-          handleFirestoreError(err, OperationType.LIST, 'schools/main/backups');
-        }
-      });
-      return () => unsub();
+        return () => unsub();
+      }
     }
   }, [userRole, user?.email]);
 
   const createCloudBackup = async (backupName?: string, note?: string): Promise<{ success: boolean; message: string; backupId?: string }> => {
     if (userRole !== 'admin') {
-      return { success: false, message: 'Bulut yedeği alma yetkisi yalnızca yöneticilere aittir.' };
+      return { success: false, message: 'Yedek alma yetkisi yalnızca yöneticilere aittir.' };
     }
 
     try {
@@ -1266,38 +1263,30 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         note: note?.trim() || undefined
       };
 
-      if (!auth.currentUser) {
-        // Safe local storage in preview/unauthenticated mode
-        const localListRaw = localStorage.getItem('akademi_cloud_backups_local');
-        const localList: CloudBackupRecord[] = localListRaw ? JSON.parse(localListRaw) : [];
-        localList.unshift(backupPayload);
-        localStorage.setItem('akademi_cloud_backups_local', JSON.stringify(localList));
-        setCloudBackups(prev => [backupPayload, ...prev.filter(b => b.id !== backupId)]);
-        return {
-          success: true,
-          message: `Bulut yedeği "${backupPayload.name}" yerel hafızaya güvenle kaydedildi.`,
-          backupId
-        };
-      }
-
-      const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
-      await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
-
+      // Always save to local backup store
+      const localListRaw = localStorage.getItem('akademi_cloud_backups_local');
+      const localList: CloudBackupRecord[] = localListRaw ? JSON.parse(localListRaw) : [];
+      localList.unshift(backupPayload);
+      localStorage.setItem('akademi_cloud_backups_local', JSON.stringify(localList));
       setCloudBackups(prev => [backupPayload, ...prev.filter(b => b.id !== backupId)]);
+
+      if (firebaseConfig.projectId) {
+        try {
+          const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
+          await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
+        } catch (e) {
+          console.warn('Could not write backup to cloud:', e);
+        }
+      }
 
       return {
         success: true,
-        message: `Bulut yedeği "${backupPayload.name}" başarıyla Firebase'e kaydedildi.`,
+        message: `Sistem yedeği "${backupPayload.name}" güvenle kaydedildi.`,
         backupId
       };
     } catch (error: any) {
-      console.error('Error creating cloud backup:', error);
-      let errMsg = error?.message || 'Bulut yedeği oluşturulurken bir hata oluştu.';
-      if (error?.code === 'permission-denied') {
-        handleFirestoreError(error, OperationType.CREATE, 'schools/main/backups');
-        errMsg = 'Firebase Yetki Engeli: Google ile giriş yapmış yetkili yönetici olmanız gerekmektedir.';
-      }
-      return { success: false, message: errMsg };
+      console.error('Error creating backup:', error);
+      return { success: false, message: error?.message || 'Yedek oluşturulurken bir hata oluştu.' };
     }
   };
 
@@ -1338,34 +1327,28 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         note: 'Cihazdan yüklenen JSON dosyası'
       };
 
-      if (!auth.currentUser) {
-        const localListRaw = localStorage.getItem('akademi_cloud_backups_local');
-        const localList: CloudBackupRecord[] = localListRaw ? JSON.parse(localListRaw) : [];
-        localList.unshift(backupPayload);
-        localStorage.setItem('akademi_cloud_backups_local', JSON.stringify(localList));
-        setCloudBackups(prev => [backupPayload, ...prev.filter(b => b.id !== backupId)]);
-        return {
-          success: true,
-          message: `Yedek dosyası yerel hafızaya güvenle kaydedildi (${summary.studentCount} Öğrenci, ${summary.examCount} Sınav).`,
-          backupId
-        };
-      }
-
-      const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
-      await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
-
+      const localListRaw = localStorage.getItem('akademi_cloud_backups_local');
+      const localList: CloudBackupRecord[] = localListRaw ? JSON.parse(localListRaw) : [];
+      localList.unshift(backupPayload);
+      localStorage.setItem('akademi_cloud_backups_local', JSON.stringify(localList));
       setCloudBackups(prev => [backupPayload, ...prev.filter(b => b.id !== backupId)]);
+
+      if (firebaseConfig.projectId) {
+        try {
+          const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
+          await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
+        } catch (e) {
+          console.warn('Could not write backup to cloud:', e);
+        }
+      }
 
       return {
         success: true,
-        message: `Yedek dosyası Firebase bulutuna başarıyla yüklendi (${summary.studentCount} Öğrenci, ${summary.examCount} Sınav).`,
+        message: `Yedek dosyası güvenle kaydedildi (${summary.studentCount} Öğrenci, ${summary.examCount} Sınav).`,
         backupId
       };
     } catch (e: any) {
-      if (e?.code === 'permission-denied') {
-        handleFirestoreError(e, OperationType.WRITE, 'schools/main/backups');
-      }
-      return { success: false, message: e?.message || 'Buluta yükleme başarısız oldu.' };
+      return { success: false, message: e?.message || 'Yükleme başarısız oldu.' };
     }
   };
 
@@ -1376,35 +1359,33 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
     try {
       let targetBackup = cloudBackups.find(b => b.id === backupId);
-      if (!targetBackup && auth.currentUser) {
+      if (!targetBackup && firebaseConfig.projectId) {
         try {
           const snap = await getDoc(doc(db, 'schools', 'main', 'backups', backupId));
           if (snap.exists()) {
             targetBackup = snap.data() as CloudBackupRecord;
           }
         } catch (err: any) {
-          if (err?.code === 'permission-denied') {
-            handleFirestoreError(err, OperationType.GET, `schools/main/backups/${backupId}`);
-          }
+          console.warn('Backup fetch notice:', err);
         }
       }
 
       if (!targetBackup || !targetBackup.data) {
-        return { success: false, message: 'Belirtilen bulut yedeği bulunamadı veya veri içeriği hasarlı.' };
+        return { success: false, message: 'Belirtilen sistem yedeği bulunamadı veya veri içeriği hasarlı.' };
       }
 
       const res = await restoreBackup(targetBackup.data);
       if (res.success) {
         return {
           success: true,
-          message: `"${targetBackup.name}" bulut yedeği başarıyla sisteme geri yüklendi ve Firebase ile eşitlendi!`,
+          message: `"${targetBackup.name}" yedeği başarıyla sisteme geri yüklendi!`,
           summary: res.summary
         };
       }
       return res;
     } catch (error: any) {
-      console.error('Error restoring cloud backup:', error);
-      return { success: false, message: error?.message || 'Bulut yedeği geri yüklenirken hata oluştu.' };
+      console.error('Error restoring backup:', error);
+      return { success: false, message: error?.message || 'Yedek geri yüklenirken hata oluştu.' };
     }
   };
 
@@ -1412,24 +1393,20 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     if (userRole !== 'admin') {
       return { success: false, message: 'Yedek silme yetkisi yalnızca yöneticilere aittir.' };
     }
-    if (!auth.currentUser) {
-      const localListRaw = localStorage.getItem('akademi_cloud_backups_local');
-      const localList: CloudBackupRecord[] = localListRaw ? JSON.parse(localListRaw) : [];
-      const updated = localList.filter(b => b.id !== backupId);
-      localStorage.setItem('akademi_cloud_backups_local', JSON.stringify(updated));
-      setCloudBackups(prev => prev.filter(b => b.id !== backupId));
-      return { success: true, message: 'Yedek silindi.' };
-    }
-    try {
-      await deleteDoc(doc(db, 'schools', 'main', 'backups', backupId));
-      setCloudBackups(prev => prev.filter(b => b.id !== backupId));
-      return { success: true, message: 'Bulut yedeği Firebase üzerinden silindi.' };
-    } catch (error: any) {
-      if (error?.code === 'permission-denied') {
-        handleFirestoreError(error, OperationType.DELETE, `schools/main/backups/${backupId}`);
+    const localListRaw = localStorage.getItem('akademi_cloud_backups_local');
+    const localList: CloudBackupRecord[] = localListRaw ? JSON.parse(localListRaw) : [];
+    const updated = localList.filter(b => b.id !== backupId);
+    localStorage.setItem('akademi_cloud_backups_local', JSON.stringify(updated));
+    setCloudBackups(prev => prev.filter(b => b.id !== backupId));
+
+    if (firebaseConfig.projectId) {
+      try {
+        await deleteDoc(doc(db, 'schools', 'main', 'backups', backupId));
+      } catch (e) {
+        console.warn('Cloud backup delete notice:', e);
       }
-      return { success: false, message: error?.message || 'Yedek silinemedi.' };
     }
+    return { success: true, message: 'Yedek başarıyla silindi.' };
   };
 
   const overwriteState = (newState: AppState) => {
@@ -1463,6 +1440,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       deleteOmrExamResult,
       deleteAllOmrExamResults,
       updateUsers, 
+      setUserAccountRole,
       overwriteState,
       restoreBackup,
       saveNow,

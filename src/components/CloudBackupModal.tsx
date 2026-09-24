@@ -225,15 +225,15 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg font-serif font-bold text-[#343a28]">
-                  Firebase Bulut Senkronizasyonu & Yedekleme
+                  Sistem & Bulut Yedekleme Merkezi
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                  Google Admin Yetkili
+                  Yönetici Yetkili
                 </span>
               </div>
               <p className="text-xs text-[#8e8d82] truncate">
-                Tüm verileriniz Firebase bulutunda anlık senkronize edilir ve geçmiş yedekler güvenle saklanır
+                Tüm verileriniz güvenle saklanır, geçmiş sistem yedekleri cihaz ve yerel depolamada korunur
               </p>
             </div>
           </div>
@@ -338,9 +338,9 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                     <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center mb-2 shadow-xs">
                       <CloudUpload className="w-4 h-4" />
                     </div>
-                    <h3 className="font-bold text-sm text-[#343a28]">Firebase'e Bulut Yedeği Al</h3>
+                    <h3 className="font-bold text-sm text-[#343a28]">Tam Sistem Yedeği Al</h3>
                     <p className="text-[11px] text-[#6e705b] mt-1">
-                      Öğrenciler, sınavlar, sonuçlar, salonlar ve bütçeyi Firebase bulutuna anında bir yedek noktası olarak kaydeder.
+                      Öğrenciler, sınavlar, sonuçlar, salonlar ve bütçeyi anında yeni bir sistem yedek noktası olarak kaydeder.
                     </p>
                   </div>
                   <button
@@ -348,7 +348,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                     className="mt-3 w-full py-2 px-3 bg-[#B08D57] hover:bg-[#9c7b48] active:scale-[0.98] text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    {showCreateForm ? 'İptal Et' : 'Yeni Bulut Yedeği Al'}
+                    {showCreateForm ? 'İptal Et' : 'Yeni Sistem Yedeği Al'}
                   </button>
                 </div>
 
@@ -358,9 +358,9 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                     <div className="w-8 h-8 rounded-xl bg-sky-500 text-white flex items-center justify-center mb-2 shadow-xs">
                       <Download className="w-4 h-4 rotate-180" />
                     </div>
-                    <h3 className="font-bold text-sm text-[#343a28]">Cihazdaki Yedeği Buluta Yükle</h3>
+                    <h3 className="font-bold text-sm text-[#343a28]">Cihazdaki Yedeği İçe Aktar</h3>
                     <p className="text-[11px] text-[#6e705b] mt-1">
-                      Bilgisayarınızda veya telefonunuzda bulunan bir `.json` yedek dosyasını doğrudan Firebase bulutuna aktarın.
+                      Bilgisayarınızda veya telefonunuzda bulunan bir `.json` yedek dosyasını doğrudan sisteme aktarın.
                     </p>
                   </div>
                   <label 
@@ -425,7 +425,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-xs text-[#5a5a40] flex items-center gap-1.5">
                       <CloudUpload className="w-4 h-4 text-[#B08D57]" />
-                      Firebase Bulut Yedeği Oluştur
+                      Sistem Yedeği Oluştur
                     </h4>
                     <span className="text-[11px] text-[#8e8d82]">
                       ({state.students?.length || 0} Öğrenci, {state.exams?.length || 0} Sınav)
@@ -489,7 +489,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                         Bulut Yedeğini Geri Yüklemek Üzeresiniz
                       </h4>
                       <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                        <strong>"{confirmRestoreBackup.name}"</strong> ({formatDate(confirmRestoreBackup.createdAt)}) tarihli yedek sisteme geri yüklenecektir. Mevcut verileriniz bu yedekteki verilerle eşitlenecek ve Firebase'e aktarılacaktır.
+                        <strong>"{confirmRestoreBackup.name}"</strong> ({formatDate(confirmRestoreBackup.createdAt)}) tarihli yedek sisteme geri yüklenecektir. Mevcut verileriniz bu yedekteki verilerle eşitlenecektir.
                       </p>
                     </div>
                   </div>
@@ -517,7 +517,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-xs uppercase tracking-wider text-[#8e8d82] flex items-center gap-1.5">
                     <Cloud className="w-3.5 h-3.5 text-[#B08D57]" />
-                    Firebase Firestore'da Saklanan Bulut Yedekleri ({cloudBackups.length})
+                    Kayıtlı Sistem Yedekleri ({cloudBackups.length})
                   </h3>
                   {isLoadingBackups && (
                     <span className="text-[11px] text-[#8e8d82] flex items-center gap-1">
@@ -532,9 +532,9 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                       <Cloud className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-[#5a5a40]">Henüz Bulut Yedeği Alınmamış</h4>
+                      <h4 className="font-bold text-sm text-[#5a5a40]">Henüz Sistem Yedeği Alınmamış</h4>
                       <p className="text-xs text-[#8e8d82] max-w-md mx-auto mt-1">
-                        Yukarıdaki <strong>"Yeni Bulut Yedeği Al"</strong> butonuna basarak ilk tam sistem yedeğinizi Firebase bulutuna kaydedebilirsiniz.
+                        Yukarıdaki <strong>"Yeni Sistem Yedeği Al"</strong> butonuna basarak ilk tam sistem yedeğinizi kaydedebilirsiniz.
                       </p>
                     </div>
                     <button
@@ -678,12 +678,12 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                   </div>
                   <div>
                     <h3 className="font-bold text-sm text-[#343a28]">
-                      {isHealthy ? 'Bulut Senkronizasyonu Aktif ve Sorunsuz' : 'Yerel Koruma Modu'}
+                      {isHealthy ? 'Veritabanı Durumu Sorunsuz' : 'Yerel Koruma Modu'}
                     </h3>
                     <p className="text-xs text-[#6e705b] mt-0.5">
                       {isHealthy 
-                        ? 'Tüm öğrenci, sınav, sonuç ve bütçe verileriniz Firebase Firestore ile anlık senkronizedir.'
-                        : 'Verileriniz tarayıcınızın yerel hafızasında korunmaktadır. Aşağıdaki butondan senkronizasyonu yeniden deneyebilirsiniz.'
+                        ? 'Tüm öğrenci, sınav, sonuç ve bütçe verileriniz yerel hafızada anlık korunmaktadır.'
+                        : 'Verileriniz tarayıcınızın yerel hafızasında korunmaktadır.'
                       }
                     </p>
                   </div>

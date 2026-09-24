@@ -1,85 +1,207 @@
 {
   "entities": {
-    "AppState": {
-      "title": "AppState",
-      "description": "Centralized school management state including students, exams, results, academy arena/league, halls, and budget",
+    "SchoolState": {
+      "title": "SchoolState",
+      "description": "Comprehensive school state including students, exams, evaluation results, hall placements, and budget",
       "type": "object",
       "properties": {
-        "students": { "type": "array", "description": "Student roster with classes, exam registrations, and league status" },
-        "exams": { "type": "array", "description": "Mock exams, dates, publisher fees, and assigned halls" },
-        "results": { "type": "array", "description": "Exam results, subject net scores, and overall standings" },
-        "budget": { "type": "object", "description": "Financial records: student dues, incomes, expenses, debts" },
-        "examHalls": { "type": "array", "description": "Exam halls with desk seating plans and configurations" },
-        "leagueMentors": { "type": "object", "description": "Academy arena team mentor assignments" },
-        "leagueTeamPoints": { "type": "object", "description": "Arena bonus/penalty team points" },
-        "approvedTransfers": { "type": "array", "description": "League team transfer records" },
-        "admins": { "type": "array", "description": "Authorized administrator email addresses" },
-        "teachers": { "type": "array", "description": "Authorized teacher email addresses" }
-      }
+        "students": {
+          "type": "array",
+          "description": "List of enrolled students and their registrations"
+        },
+        "exams": {
+          "type": "array",
+          "description": "List of scheduled or completed exams"
+        },
+        "results": {
+          "type": "array",
+          "description": "Evaluated exam result records"
+        },
+        "budget": {
+          "type": "object",
+          "description": "Financial records of incomes, expenses, and debts"
+        },
+        "examHalls": {
+          "type": "array",
+          "description": "Exam hall configurations and seating plans"
+        },
+        "leagueMentors": {
+          "type": "object",
+          "description": "Mentor teacher assignments for league teams"
+        },
+        "leagueTeamPoints": {
+          "type": "object",
+          "description": "Bonus point balances for league teams"
+        },
+        "approvedTransfers": {
+          "type": "array",
+          "description": "Approved student team transfers"
+        },
+        "admins": {
+          "type": "array",
+          "description": "Authorized administrator email addresses"
+        },
+        "teachers": {
+          "type": "array",
+          "description": "Authorized teacher email addresses"
+        }
+      },
+      "required": ["admins"]
+    },
+    "BackupRecord": {
+      "title": "BackupRecord",
+      "description": "Cloud snapshot backup of school management data",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique backup identifier",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Human readable backup name",
+          "maxLength": 256
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of backup creation"
+        },
+        "createdByEmail": {
+          "type": "string",
+          "description": "Email of user who triggered the backup",
+          "maxLength": 128
+        },
+        "createdByName": {
+          "type": "string",
+          "description": "Display name of user",
+          "maxLength": 128
+        },
+        "summary": {
+          "type": "object",
+          "description": "Statistical summary of backed-up counts"
+        },
+        "data": {
+          "type": "object",
+          "description": "Full school state payload"
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional notes or tags",
+          "maxLength": 500
+        }
+      },
+      "required": ["id", "name", "createdAt", "createdByEmail", "data"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Broadcast notification or announcement for school staff and teachers",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique notification identifier",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the notification",
+          "maxLength": 200
+        },
+        "message": {
+          "type": "string",
+          "description": "Content message of the notification",
+          "maxLength": 2000
+        },
+        "type": {
+          "type": "string",
+          "description": "Notification category (e.g. info, exam, urgent)",
+          "maxLength": 50
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation ISO timestamp"
+        },
+        "createdByEmail": {
+          "type": "string",
+          "description": "Author email",
+          "maxLength": 128
+        },
+        "createdByName": {
+          "type": "string",
+          "description": "Author display name",
+          "maxLength": 128
+        },
+        "readBy": {
+          "type": "array",
+          "description": "List of user emails that acknowledged the notification"
+        },
+        "linkTab": {
+          "type": "string",
+          "description": "Optional target navigation tab",
+          "maxLength": 50
+        }
+      },
+      "required": ["id", "title", "message", "createdAt"]
     },
     "AccessRequest": {
       "title": "AccessRequest",
-      "description": "Pending user authorization request for teacher or admin access",
+      "description": "User account registration and access authorization record",
       "type": "object",
       "properties": {
-        "email": { "type": "string" },
-        "name": { "type": "string" },
-        "timestamp": { "type": "string" }
+        "email": {
+          "type": "string",
+          "description": "Google email address of registered user",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of user",
+          "maxLength": 128
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar image URL",
+          "maxLength": 512
+        },
+        "role": {
+          "type": "string",
+          "description": "Current assigned role (admin, teacher, guest)",
+          "maxLength": 32
+        },
+        "status": {
+          "type": "string",
+          "description": "Membership status (pending, approved, rejected)",
+          "maxLength": 32
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "description": "Timestamp of last sign-in"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Initial registration timestamp"
+        }
       },
-      "required": ["email"]
-    },
-    "CloudBackup": {
-      "title": "CloudBackup",
-      "description": "Timestamped system backup snapshot created by administrators in Firebase Firestore",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "createdByEmail": { "type": "string" },
-        "createdByName": { "type": "string" },
-        "summary": { "type": "object" },
-        "data": { "type": "object" }
-      },
-      "required": ["id", "createdAt", "createdByEmail", "data"]
-    },
-    "AppNotification": {
-      "title": "AppNotification",
-      "description": "Real-time push notification and announcement broadcasted to users, teachers, or students",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "type": { "type": "string", "enum": ["exam_result", "exam_created", "announcement", "arena_update", "system"] },
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "createdByEmail": { "type": "string" },
-        "createdByName": { "type": "string" },
-        "targetRole": { "type": "string" },
-        "targetGrade": { "type": "string" },
-        "linkTab": { "type": "string" },
-        "readBy": { "type": "array" },
-        "urgent": { "type": "boolean" }
-      },
-      "required": ["id", "type", "title", "message", "createdAt"]
+      "required": ["email", "timestamp"]
     }
   },
   "firestore": {
     "/schools/{schoolId}": {
-      "schema": "AppState",
-      "description": "Central school document storing synchronized school database"
+      "schema": "SchoolState",
+      "description": "Core state document for a school instance"
     },
     "/schools/{schoolId}/backups/{backupId}": {
-      "schema": "CloudBackup",
-      "description": "Timestamped backups saved by authorized administrators"
+      "schema": "BackupRecord",
+      "description": "Historical cloud backups and snapshots"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Broadcast notifications and announcements"
     },
     "/access_requests/{requestId}": {
       "schema": "AccessRequest",
-      "description": "User access requests awaiting administrator review"
-    },
-    "/notifications/{notificationId}": {
-      "schema": "AppNotification",
-      "description": "Real-time notifications and announcements dispatched across devices"
+      "description": "User access requests for approval by administrator"
     }
   }
 }

@@ -33,7 +33,8 @@ const navItems = [
   { id: 'halls', label: 'Salonlar & Yerleşim', shortLabel: 'Salonlar', icon: LayoutTemplate, colorClass: 'text-sky-400', hoverColorClass: 'group-hover:text-sky-400', activeClass: 'bg-sky-500/15 border-sky-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
   { id: 'keys_print', label: 'Cevap & Form Baskı', shortLabel: 'Baskı', icon: Printer, colorClass: 'text-purple-400', hoverColorClass: 'group-hover:text-purple-400', activeClass: 'bg-purple-500/15 border-purple-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
   { id: 'scan', label: 'Canlı Optik Tarama', shortLabel: 'Tarama', icon: Camera, colorClass: 'text-teal-400', hoverColorClass: 'group-hover:text-teal-400', activeClass: 'bg-teal-500/15 border-teal-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
-  { id: 'results', label: 'Sonuçlar & Analiz', shortLabel: 'Sonuçlar', icon: BarChart2, colorClass: 'text-emerald-400', hoverColorClass: 'group-hover:text-emerald-400', activeClass: 'bg-emerald-500/15 border-emerald-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
+  { id: 'results', label: 'Sınav Sonuçları', shortLabel: 'Sonuçlar', icon: BarChart2, colorClass: 'text-emerald-400', hoverColorClass: 'group-hover:text-emerald-400', activeClass: 'bg-emerald-500/15 border-emerald-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
+  { id: 'analysis', label: 'Sonuçlar Analiz', shortLabel: 'Analiz', icon: TrendingUp, colorClass: 'text-blue-400', hoverColorClass: 'group-hover:text-blue-400', activeClass: 'bg-blue-500/15 border-blue-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
   { id: 'league', label: 'Akademi Arena', shortLabel: 'Arena', icon: Trophy, colorClass: 'text-yellow-400', hoverColorClass: 'group-hover:text-yellow-400', activeClass: 'bg-yellow-500/15 border-yellow-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
   { id: 'budget', label: 'Bütçe & Finans', shortLabel: 'Bütçe', icon: DollarSign, colorClass: 'text-cyan-400', hoverColorClass: 'group-hover:text-cyan-400', activeClass: 'bg-cyan-500/15 border-cyan-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
 ];
@@ -216,17 +217,15 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   };
 
   const isNavItemVisible = (itemId: string) => {
-    if (itemId === 'budget') {
-      return userRole === 'admin';
-    }
-    if (itemId === 'scan') {
-      return userRole === 'admin' || userRole === 'teacher';
-    }
+    // Admin & Süper Admin tüm menülerde tam yetkili ve kısıtlamasızdır
     if (userRole === 'admin') return true;
+    
+    // Öğretmen yetkisindeki kullanıcılara sadece Sonuçlar, Analiz ve Akademi Arena gösterilir
     if (userRole === 'teacher') {
-      return ['students', 'halls', 'results', 'scan', 'omr-setup', 'keys_print', 'exams', 'league'].includes(itemId);
+      return ['results', 'analysis', 'league'].includes(itemId);
     }
-    return ['students', 'results', 'league'].includes(itemId);
+    
+    return ['results', 'analysis', 'league'].includes(itemId);
   };
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
@@ -310,13 +309,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     <Cloud className="w-4 h-4 text-sky-400 shrink-0" />
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-white truncate">
-                        {syncStatus === 'synced' && "Bulut Senkronize"}
+                        {syncStatus === 'synced' && "Sistem Eşitlendi"}
                         {syncStatus === 'saving' && "Kaydediliyor..."}
                         {syncStatus === 'quota_exceeded' && "Yerel Koruma Aktif"}
-                        {(syncStatus === 'offline' || syncStatus === 'error') && "Çevrimdışı Koruma"}
+                        {(syncStatus === 'offline' || syncStatus === 'error') && "Yerel Koruma"}
                       </p>
                       <p className="text-[10px] text-white/50 truncate">
-                        {saveFeedback || "Veriler Google Firebase'de korunuyor"}
+                        {saveFeedback || "Veriler yerel hafızada korunuyor"}
                       </p>
                     </div>
                   </div>

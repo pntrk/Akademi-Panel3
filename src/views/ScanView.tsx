@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-// @ts-ignore
 import jsQR from 'jsqr';
+import QRCode from 'qrcode';
 import { Exam, Anchors, Point, LaserMark, Student, ExamResult, OmrStudent } from '../types';
 import { DEFAULT_OMR, OMR_SPECS, OPTS_4, OPTS_5, getHomography, applyHomography, getQuestionsLayout, calculateScore, formatClassSec, createUnifiedExamResult, getBookletBubblePositions, getQrCodeBox, warpPerspectiveToCanvas, evaluateQuestionAnswer, evaluateBubbleFill, sampleLocalBackground } from '../lib/omrEngine';
 import { useAppContext } from '../context/AppContext';
@@ -441,12 +441,6 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         if (res && res.data) return res;
       }
     } catch (e) {}
-    try {
-      if (typeof window !== 'undefined' && typeof (window as any).jsQR === 'function') {
-        const res = (window as any).jsQR(data, width, height, options);
-        if (res && res.data) return res;
-      }
-    } catch (e) {}
     return null;
   };
 
@@ -793,15 +787,25 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
               // QR'dan Sınav ve Öğrenciyi Çözme (Öncelikli Adım)
               const parts = qrRes.split('|');
               const qrObj: any = {};
-              parts.forEach(p => { const [k, v] = p.split(':'); qrObj[k] = v; });
-              if (qrObj.E) {
-                const foundExam = state.exams.find(e => String(e.id) === String(qrObj.E) || String(e.no) === String(qrObj.E));
-                if (foundExam) detectedExamRef.current = foundExam;
-              }
+              parts.forEach(p => { 
+                const [k, v] = p.split(':'); 
+                if (k && v) qrObj[k.trim()] = v.trim(); 
+              });
+              const qrExamId = qrObj.E;
               const qrStudentNo = qrObj.N;
-              const matchedStudent = qrStudentNo ? state.students.find(s => String(s.no) === String(qrStudentNo) || Number(s.no) === Number(qrStudentNo)) : null;
+
+              if (qrExamId) {
+                const foundExam = state.exams.find(e => String(e.id) === String(qrExamId) || String(e.no) === String(qrExamId));
+                if (foundExam) {
+                  detectedExamRef.current = foundExam;
+                  setSelectedExamId(String(foundExam.id));
+                }
+              }
               const targetExam = detectedExamRef.current || exam;
-              setStatus(`🎯 ${matchedStudent ? matchedStudent.name : 'Öğrenci No: ' + qrStudentNo} (${targetExam.name})`);
+              const matchedStudent = qrStudentNo 
+                ? (state.students.find(s => String(s.no) === String(qrStudentNo)) || targetExam.studentList?.find(s => String(s.no) === String(qrStudentNo))) 
+                : null;
+              setStatus(`🎯 ${matchedStudent ? matchedStudent.name : 'Öğrenci No: ' + (qrStudentNo || '')} (${targetExam.name})`);
             }
           }
 
@@ -1193,11 +1197,18 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
       });
     }
 
-    // Hedef Sınav Şablonu: Kilitli değilse ve QR'da sınav varsa onu bul, yoksa seçili sınavı kullan
+    // Hedef Sınav Şablonu: Kağıttaki karekod hangi sınava aitse, anında o sınavın şablonunu dinamik olarak belleğe yükle
     let targetExam = exam;
-    if (!lockToSelectedExam && qrDataObj?.E) {
-      const foundExam = state.exams.find(e => String(e.id) === String(qrDataObj.E) || String(e.no) === String(qrDataObj.E));
-      if (foundExam) targetExam = foundExam;
+    const qrExamId = qrDataObj?.E;
+    const qrStudentNo = qrDataObj?.N;
+
+    if (qrExamId) {
+      const foundExam = state.exams.find(e => String(e.id) === String(qrExamId) || String(e.no) === String(qrExamId));
+      if (foundExam) {
+        targetExam = foundExam;
+        detectedExamRef.current = foundExam;
+        setSelectedExamId(String(foundExam.id));
+      }
     }
 
     // Milimetrik OMR_SPECS kullanımı
@@ -1960,16 +1971,18 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         }
 
         // 1. HEDEF SINAV ŞABLONUNU BELİRLEME
+        // Ekrandaki aktif sınav seçimine bağlı kalmadan, karekoddaki sınava anında dinamik geçiş
         const qrExamId = qrDataObj?.E;
         const qrStudentNo = qrDataObj?.N;
 
         let targetExam = exam;
-        if (!lockToSelectedExam && qrExamId) {
+        if (qrExamId) {
           const found = state.exams.find(e => String(e.id) === String(qrExamId) || String(e.no) === String(qrExamId));
           if (found) {
             targetExam = found;
+            setSelectedExamId(String(found.id));
           }
-        } else if (detectedExamRef.current && !lockToSelectedExam) {
+        } else if (detectedExamRef.current) {
           targetExam = detectedExamRef.current;
         }
         detectedExamRef.current = targetExam;

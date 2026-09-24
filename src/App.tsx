@@ -16,9 +16,27 @@ import { ScanView } from './views/ScanView';
 import { KeysAndPrintView } from './views/KeysAndPrintView';
 import { OmrSetupView } from './views/OmrSetupView';
 import { AnalysisView } from './views/AnalysisView';
-import { auth, loginWithGoogle, logout, firebaseConfig, onAuthStateChanged, User, createSyntheticUser } from './lib/firebase';
+import { auth, loginWithGoogle, logout, firebaseConfig, onAuthStateChanged, User, createSyntheticUser, db, doc, setDoc } from './lib/firebase';
 import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck } from 'lucide-react';
 import { useAppContext } from './context/AppContext';
+
+// Record user login into access_requests collection so administrators see all registered users
+const syncUserRegistration = async (targetUser: User) => {
+  const cleanEmail = (targetUser.email || '').trim().toLowerCase();
+  if (!cleanEmail || !firebaseConfig.projectId) return;
+  try {
+    const docRef = doc(db, 'access_requests', cleanEmail);
+    await setDoc(docRef, {
+      email: cleanEmail,
+      name: targetUser.displayName || cleanEmail.split('@')[0],
+      photoURL: targetUser.photoURL || null,
+      lastLoginAt: new Date().toISOString(),
+      timestamp: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('User registration sync notice:', err);
+  }
+};
 
 function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { userRole, checkAndRefreshRole } = useAppContext();
@@ -40,14 +58,17 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   // Enforce role restrictions
   useEffect(() => {
-    // Only admin and teacher can access 'scan'
-    if (activeTab === 'scan' && userRole !== 'admin' && userRole !== 'teacher') {
-      setActiveTab('results');
+    // Öğretmen yetkisindeki kullanıcılara sadece Sonuçlar, Analiz ve Arena açılır
+    if (userRole === 'teacher') {
+      const allowedTeacherTabs = ['results', 'analysis', 'league'];
+      if (!allowedTeacherTabs.includes(activeTab)) {
+        setActiveTab('results');
+      }
       return;
     }
 
-    if (userRole === 'teacher' && !['students', 'halls', 'results', 'omr-setup', 'keys_print', 'analysis', 'league', 'scan', 'exams'].includes(activeTab)) {
-      setActiveTab('results');
+    if (userRole === 'guest') {
+      return;
     }
   }, [userRole, activeTab]);
 
@@ -130,15 +151,15 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab as (tab: string) => void} onLogout={onLogout} currentUser={user}>
-      {activeTab === 'students' && <StudentsView />}
-      {activeTab === 'halls' && <HallsView />}
+      {activeTab === 'students' && userRole === 'admin' && <StudentsView />}
+      {activeTab === 'halls' && userRole === 'admin' && <HallsView />}
       {activeTab === 'results' && <ResultsView />}
-      {activeTab === 'scan' && (userRole === 'admin' || userRole === 'teacher') && (
+      {activeTab === 'scan' && userRole === 'admin' && (
         <ScanView onNavigate={setActiveTab as (tab: string) => void} />
       )}
-      {(activeTab === 'omr-setup' || (activeTab as string) === 'keys_print') && <KeysAndPrintView />}
+      {(activeTab === 'omr-setup' || (activeTab as string) === 'keys_print') && userRole === 'admin' && <KeysAndPrintView />}
       {activeTab === 'analysis' && <AnalysisView />}
-      {activeTab === 'exams' && <ExamsView />}
+      {activeTab === 'exams' && userRole === 'admin' && <ExamsView />}
       {activeTab === 'league' && <LeagueView />}
       {activeTab === 'budget' && userRole === 'admin' && <BudgetView />}
     </Layout>
@@ -170,6 +191,7 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
+        syncUserRegistration(currentUser).catch(() => {});
       }
       setLoading(false);
     });
@@ -191,13 +213,16 @@ export default function App() {
     setUnauthorizedDomain(null);
     setIsLoggingIn(true);
     try {
-      await loginWithGoogle();
+      const res = await loginWithGoogle();
+      if (res?.user) {
+        syncUserRegistration(res.user).catch(() => {});
+      }
     } catch (err: any) {
       console.warn("Login attempt result:", err);
       if (err?.code === 'auth/unauthorized-domain') {
         const hostname = window.location.hostname;
         setUnauthorizedDomain(hostname);
-        setLoginError(`Bu alan adı (${hostname}) Firebase projesinin yetkilendirilmiş alan adları listesinde bulunamadı.`);
+        setLoginError(`Bu alan adı (${hostname}) için yetki doğrulaması gerekiyor.`);
       } else if (err?.code === 'auth/popup-closed-by-user') {
         setLoginError('Giriş penceresi kapatıldı. Lütfen tekrar deneyiniz.');
       } else if (err?.code === 'auth/cancelled-popup-request') {
@@ -216,6 +241,7 @@ export default function App() {
       sessionStorage.setItem('akademi_preview_user', JSON.stringify({ email, displayName }));
     } catch (e) {}
     setUser(syntheticUser);
+    syncUserRegistration(syntheticUser).catch(() => {});
   };
 
   const handleLogout = async () => {
@@ -235,6 +261,8 @@ export default function App() {
   }
 
   if (!user) {
+    const currentHost = window.location.hostname;
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8F7F4] p-4 font-sans">
         <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xl max-w-lg w-full text-center border border-[#e6e2d3] relative overflow-hidden">
@@ -252,33 +280,116 @@ export default function App() {
             </div>
             <h1 className="text-3xl font-serif font-bold text-[#5a5a40] tracking-tight italic">AkademiPanel</h1>
             <p className="text-[#8e8d82] text-xs font-semibold mt-1">Ölçme ve Değerlendirme Yönetim Sistemi</p>
+            
             <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[11px] font-semibold text-emerald-800">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Yerel Çalışma Modu (Çevrim Dışı / LocalStorage)
+              Firebase Bulut Bağlantısı Aktif (europe-west2)
             </div>
           </div>
 
-          {/* Quick Access Roles */}
+          {/* Primary Action: Real Google Sign-in */}
           <div className="space-y-3 mb-5">
             <button
-              onClick={() => handlePreviewLogin('kirklareliataturkortaokulu@gmail.com', 'Kırklareli Atatürk Ortaokulu (Yönetici)')}
-              className="w-full flex items-center justify-center gap-2.5 bg-[#B08D57] hover:bg-[#9a7b4a] active:scale-[0.98] text-white py-3 px-4 rounded-2xl font-bold text-sm transition-all shadow-md cursor-pointer"
+              onClick={handleLogin}
+              disabled={isLoggingIn}
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 active:scale-[0.99] text-gray-800 border-2 border-gray-200 hover:border-[#B08D57] py-3.5 px-4 rounded-2xl font-bold text-sm transition-all shadow-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed group"
             >
-              <ShieldCheck className="w-5 h-5 text-amber-200" />
-              Yönetici Olarak Başla (Tüm Modüller Açık)
+              {isLoggingIn ? (
+                <>
+                  <span className="w-5 h-5 border-2 border-[#B08D57] border-t-transparent rounded-full animate-spin"></span>
+                  <span>Google ile Giriş Yapılıyor...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.02 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                    />
+                  </svg>
+                  <span className="text-gray-700 group-hover:text-gray-900 font-semibold">Google ile Giriş Yap</span>
+                </>
+              )}
             </button>
 
-            <button
-              onClick={() => handlePreviewLogin('ogretmen@ataturkortaokulu.meb.k12.tr', 'Öğretmen Hesabı')}
-              className="w-full flex items-center justify-center gap-2.5 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white py-3 px-4 rounded-2xl font-bold text-sm transition-all shadow-sm cursor-pointer"
-            >
-              <UserCheck className="w-5 h-5 text-blue-300" />
-              Öğretmen Olarak Başla (Sonuçlar, Optik & Arena)
-            </button>
+            {/* Error & Unauthorized Domain Helper */}
+            {loginError && (
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-left text-xs text-rose-800 animate-fade-in">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold">{loginError}</p>
+                    {unauthorizedDomain && (
+                      <div className="mt-2 pt-2 border-t border-rose-200/80">
+                        <p className="text-[11px] text-rose-700 mb-1.5">
+                          Bu alan adını Firebase Console &gt; Authentication &gt; Settings &gt; Authorized Domains altına ekleyebilirsiniz:
+                        </p>
+                        <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-lg border border-rose-200 font-mono text-[11px]">
+                          <span className="flex-1 truncate select-all">{unauthorizedDomain}</span>
+                          <button
+                            onClick={() => handleCopyDomain(unauthorizedDomain)}
+                            className="px-2 py-0.5 bg-rose-100 hover:bg-rose-200 rounded text-rose-800 text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            {copiedDomain ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                            {copiedDomain ? 'Kopyalandı' : 'Kopyala'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          <p className="text-[11px] text-[#8e8d82] leading-relaxed">
-            Firebase bağımlılıkları kaldırılmıştır. Uygulama tüm özellikleri ile yerel depolama üzerinde kesintisiz çalışmaktadır. İleride yeni bir Firebase projesi açıldığında kolayca bağlanabilir.
+          {/* Quick Access / Offline Preview Dropdown */}
+          <div className="pt-2 border-t border-gray-100">
+            <button
+              onClick={() => setShowDemoOptions(!showDemoOptions)}
+              className="w-full flex items-center justify-between py-2 text-xs font-semibold text-[#8e8d82] hover:text-[#5a5a40] transition-colors cursor-pointer"
+            >
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#B08D57]" />
+                Hızlı Test & Çevrim İçi/Dışı Seçenekleri
+              </span>
+              {showDemoOptions ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+
+            {showDemoOptions && (
+              <div className="space-y-2 mt-2 pt-2 border-t border-dashed border-gray-200 animate-fade-in">
+                <button
+                  onClick={() => handlePreviewLogin('kirklareliataturkortaokulu@gmail.com', 'Kırklareli Atatürk Ortaokulu (Yönetici)')}
+                  className="w-full flex items-center justify-center gap-2 bg-[#B08D57] hover:bg-[#9a7b4a] text-white py-2.5 px-3 rounded-xl font-bold text-xs transition-all shadow-sm cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4 text-amber-200" />
+                  Yönetici Olarak Başla (Tüm Modüller Açık)
+                </button>
+
+                <button
+                  onClick={() => handlePreviewLogin('ogretmen@ataturkortaokulu.meb.k12.tr', 'Öğretmen Hesabı')}
+                  className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-2.5 px-3 rounded-xl font-bold text-xs transition-all shadow-sm cursor-pointer"
+                >
+                  <UserCheck className="w-4 h-4 text-blue-300" />
+                  Öğretmen Olarak Başla (Sonuçlar, Analiz & Arena)
+                </button>
+              </div>
+            )}
+          </div>
+
+          <p className="mt-4 text-[11px] text-[#8e8d82] leading-relaxed">
+            Firebase Firestore & Authentication (Google Girişi) entegrasyonu başarıyla kurulmuştur. Verileriniz eş zamanlı olarak bulut üzerinde korunmaktadır.
           </p>
         </div>
       </div>

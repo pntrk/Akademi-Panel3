@@ -2413,7 +2413,7 @@ export function ResultsView() {
 
               {/* Action Buttons Toolbar */}
               <div className="flex items-center gap-2 flex-wrap">
-                {exam.examType === 'internal' && (
+                {exam.examType === 'internal' && userRole === 'admin' && (
                   <>
                     <button
                       type="button"

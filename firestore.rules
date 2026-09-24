@@ -1,38 +1,81 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Default deny all documents by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Health check and connection validation test document
-    match /test/connection {
-      allow read: if true;
+    function userEmail() {
+      return request.auth.token.email.lower();
     }
 
-    // Central school database: students, exams, results, academy arena, halls, budget
-    match /schools/{schoolId} {
-      allow read, write: if isSignedIn();
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        userEmail() == 'kirklareliataturkortaokulu@gmail.com' ||
+        userEmail() == 'bahadirkumcu@gmail.com'
+      );
+    }
 
-      // Cloud backups snapshot collection
+    function isSchoolAdmin() {
+      return isSuperAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/schools/main) &&
+        (userEmail() in get(/databases/$(database)/documents/schools/main).data.admins)
+      );
+    }
+
+    function isSchoolTeacher() {
+      return isSchoolAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/schools/main) &&
+        (userEmail() in get(/databases/$(database)/documents/schools/main).data.teachers)
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Connection test document
+    match /test/{testId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // School collection & data
+    match /schools/{schoolId} {
+      allow get, list: if isSignedIn();
+      allow write: if isSchoolAdmin() || isSuperAdmin();
+
+      // Cloud Backups subcollection
       match /backups/{backupId} {
-        allow read, write, delete: if isSignedIn();
+        allow read, write: if isSchoolAdmin() || isSuperAdmin();
       }
     }
 
-    // Top-level backups collection (direct access path fallback)
-    match /backups/{backupId} {
-      allow read, write, delete: if isSignedIn();
+    // Broadcast Notifications
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn();
+      allow create: if isSchoolTeacher();
+      allow update: if isSchoolAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
+      allow delete: if isSchoolAdmin() || isSuperAdmin();
     }
 
-    // Access authorization requests
-    match /access_requests/{document=**} {
-      allow read, write, delete: if true;
-    }
-
-    // Real-time notifications and announcements
-    match /notifications/{document=**} {
-      allow read, write, delete: if true;
+    // Access Requests & User Registrations
+    match /access_requests/{requestId} {
+      allow get: if isSchoolAdmin() || (isSignedIn() && userEmail() == requestId.lower());
+      allow list: if isSchoolAdmin();
+      allow create: if isSignedIn() && (userEmail() == requestId.lower() || isSchoolAdmin());
+      allow update: if isSchoolAdmin() || (isSignedIn() && userEmail() == requestId.lower());
+      allow delete: if isSchoolAdmin() || isSuperAdmin();
     }
   }
 }

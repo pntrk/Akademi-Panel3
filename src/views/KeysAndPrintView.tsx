@@ -109,20 +109,9 @@ async function generateQrDataUrl(data: string, size = 160): Promise<string> {
       }
     });
   } catch (e) {
-    if (typeof window !== 'undefined' && (window as any).QRious) {
-      try {
-        const qr = new (window as any).QRious({
-          value: data,
-          size: size,
-          background: 'white',
-          foreground: 'black',
-          level: 'M'
-        });
-        return qr.toDataURL();
-      } catch (err) {}
-    }
+    console.warn('QR code generation error:', e);
+    return '';
   }
-  return '';
 }
 
 /* =========================================================================
@@ -1008,13 +997,7 @@ export function KeysAndPrintView() {
               size: A4 portrait;
               margin: 0;
             }
-            *, *::before, *::after {
-              box-sizing: border-box;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-              color-adjust: exact !important;
-            }
-            html, body {
+            body {
               margin: 0;
               padding: 0;
               background: #fff;
@@ -1023,12 +1006,17 @@ export function KeysAndPrintView() {
               color-adjust: exact !important;
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             }
+            *, *::before, *::after {
+              box-sizing: border-box;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
             .optik-page {
               width: 210mm;
               height: 297mm;
-              position: relative;
               page-break-after: always;
-              page-break-inside: avoid;
+              position: relative;
               overflow: hidden;
               background-color: #fff;
               -webkit-print-color-adjust: exact !important;

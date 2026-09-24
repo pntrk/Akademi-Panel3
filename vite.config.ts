@@ -11,6 +11,7 @@ export default defineConfig(({ command }) => {
       react(),
       tailwindcss(),
       VitePWA({
+        disable: true,
         registerType: 'autoUpdate',
         includeAssets: [
           'favicon.ico',
@@ -63,8 +64,8 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+          globPatterns: ['index.html', 'manifest.webmanifest'],
+          maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
         },
         devOptions: {
           enabled: false,
@@ -72,12 +73,27 @@ export default defineConfig(({ command }) => {
       }),
     ],
     build: {
-      chunkSizeWarningLimit: 2500,
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 2000,
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('pdfmake')) {
-              return 'pdfmake';
+            if (id.includes('node_modules')) {
+              if (id.includes('pdfmake')) {
+                return 'pdfmake';
+              }
+              if (id.includes('firebase')) {
+                return 'vendor-firebase';
+              }
+              if (id.includes('xlsx')) {
+                return 'vendor-xlsx';
+              }
+              if (id.includes('recharts') || id.includes('d3')) {
+                return 'vendor-charts';
+              }
+              if (id.includes('lucide-react')) {
+                return 'vendor-icons';
+              }
             }
           },
         },

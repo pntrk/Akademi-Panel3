@@ -276,17 +276,17 @@ const ALL_STEPS: StepItem[] = [
     icon: Cloud,
     gradient: 'from-blue-500 via-indigo-600 to-slate-800',
     tagColor: 'bg-blue-100 text-blue-900 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800',
-    summary: 'Tüm öğrenci, sınav, sonuç ve salon verileriniz Firebase bulutunda anlık korunur ve yedeklenir.',
+    summary: 'Tüm öğrenci, sınav, sonuç ve salon verileriniz yerel hafızada tam koruma altındadır ve JSON ile kolayca yedeklenir.',
     keyPoints: [
-      'Yapılan her işlem (öğrenci ekleme, optik tarama, cevap anahtarı) Google Firebase Firestore ile anlık çift yönlü senkronize edilir.',
-      'İnternet kesintilerinde "Yerel Koruma" modu devreye girer; bağlantı sağlandığında tüm veriler otomatik olarak buluta aktarılır.',
-      '"Tam Sistem Yedeği İndir" butonuyla tüm okul veritabanını tek bir JSON dosyası halinde bilgisayarınıza kaydedebilirsiniz.',
+      'Yapılan her işlem (öğrenci ekleme, optik tarama, cevap anahtarı) cihazınızın güvenli yerel hafızasında anında saklanır.',
+      'İnternet bağlantısı olmasa dahi kesintisiz ve tam performanslı çalışma garantisi sunulur.',
+      '"Tam Sistem Yedeği İndir" butonuyla tüm okul veritabanını tek bir JSON dosyası halinde bilgisayarınıza veya telefonunuza kaydedebilirsiniz.',
       'İhtiyaç halinde JSON yedeğini yükleyerek saniyeler içinde tüm sistemi eski veya yeni bir cihaza eksiksiz geri yükleyebilirsiniz.'
     ],
-    proTip: 'Profil & Ayarlar menüsünden Google hesabınızla giriş yaparak verilerinize dilediğiniz bilgisayar veya telefondan güvenle erişebilirsiniz.',
-    tags: ['Firebase Firestore Canlı Senkron', 'Çevrimdışı Yerel Koruma', 'Tek Tıkla JSON Yedek/Geri Yükle'],
+    proTip: 'Düzenli aralıklarla "Tam Sistem Yedeği İndir" butonunu kullanarak okul verilerinizin harici bir kopyasını bilgisayarınızda saklamanız önerilir.',
+    tags: ['Yerel Güvenli Depolama', 'Çevrimdışı Tam Destek', 'Tek Tıkla JSON Yedek/Geri Yükle'],
     mockData: {
-      stat1: { label: 'Altyapı', value: 'Google Cloud & Firebase' },
+      stat1: { label: 'Altyapı', value: 'Yerel Depolama & Yedekleme' },
       stat2: { label: 'Çevrimdışı Mod', value: 'Tam Yerel Koruma Destekli' },
       tipHighlight: 'Tek tıkla JSON yedeği alabilir ve başka cihaza aktarabilirsiniz.'
     }
