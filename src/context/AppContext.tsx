@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { Student, Exam, ExamResult, BudgetData, ExamHall, SeatingPlanItem, CloudBackupRecord, FullBackupData, FullBackupSummary, AppNotification, ExamKeys } from '../types';
 import { generateId, recalculateLeagueForStudents } from '../lib/utils';
+import { generateExamOmrMap } from '../lib/omrEngine';
 import { db, firebaseConfig, auth, doc, getDoc, setDoc, onSnapshot, collection, getDocs, deleteDoc, query, User } from '../lib/firebase';
 import { 
   subscribeToNotifications, 
@@ -109,15 +110,19 @@ const syncFinancials = (students: Student[], exams: Exam[], budget: BudgetData):
 
   const otherIncomes = safeBudget.incomes.filter(i => !i.studentId);
   
-  const newExpenses = exams.filter(e => e.publisher && e.publisherFee && e.orderQuantity).map(exam => {
+  const newExpenses = exams.filter(e => e.publisherFee && e.orderQuantity).map(exam => {
     const key = exam.id;
     const existing = currentExpenseMap.get(key);
     if (existing) return existing;
     
+    const expenseName = exam.examType === 'internal'
+      ? `${exam.name} - ${exam.publisher || 'Kurum İçi'} Optik Baskı & Sınav Gideri`
+      : `${exam.name} - ${exam.publisher || 'Yayın'} Ödemesi`;
+
     return {
       id: generateId(),
       no: exam.no,
-      name: `${exam.name} - ${exam.publisher} Yayınları Ödemesi`,
+      name: expenseName,
       amount: (exam.publisherFee || 0) * (exam.orderQuantity || 0),
       examId: exam.id
     };
@@ -1010,29 +1015,42 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
     // 2. Sanitize exams
     const cleanExams: Exam[] = Array.isArray(source.exams)
-      ? source.exams.map((e: any) => ({
-          id: String(e.id || generateId()),
-          no: Number(e.no) || 0,
-          date: String(e.date || ''),
-          name: String(e.name || '').trim(),
-          participantCount: Number(e.participantCount) || 0,
-          publisher: e.publisher ? String(e.publisher) : undefined,
-          publisherFee: e.publisherFee !== undefined ? Number(e.publisherFee) : undefined,
-          orderQuantity: e.orderQuantity !== undefined ? Number(e.orderQuantity) : undefined,
-          gradeOrderQuantities: e.gradeOrderQuantities || undefined,
-          participatingClasses: Array.isArray(e.participatingClasses) ? e.participatingClasses : [],
-          assignedHalls: Array.isArray(e.assignedHalls) ? e.assignedHalls : [],
-          institution: e.institution ? String(e.institution) : undefined,
-          logo: e.logo || null,
-          studentList: Array.isArray(e.studentList) ? e.studentList : undefined,
-          layoutType: e.layoutType || undefined,
-          format: e.format || undefined,
-          subjects: Array.isArray(e.subjects) ? e.subjects : undefined,
-          optionsCount: e.optionsCount !== undefined ? Number(e.optionsCount) : undefined,
-          penalty: e.penalty !== undefined ? Number(e.penalty) : undefined,
-          keys: e.keys && typeof e.keys === 'object' ? e.keys : undefined,
-          results: Array.isArray(e.results) ? e.results : undefined
-        }))
+      ? source.exams.map((e: any) => {
+          let resolvedExamType: 'publisher' | 'internal' = 'publisher';
+          if (e.examType === 'internal' || e.examType === 'kurum_ici' || e.examType === 'okul_ici') {
+            resolvedExamType = 'internal';
+          } else if (e.examType === 'publisher' || e.examType === 'yayinci') {
+            resolvedExamType = 'publisher';
+          } else if (e.publisher && (String(e.publisher).trim().toLowerCase() === 'kurum içi' || String(e.publisher).trim().toLowerCase() === 'okul içi')) {
+            resolvedExamType = 'internal';
+          }
+
+          return {
+            id: String(e.id || generateId()),
+            no: Number(e.no) || 0,
+            date: String(e.date || ''),
+            name: String(e.name || '').trim(),
+            participantCount: Number(e.participantCount) || 0,
+            examType: resolvedExamType,
+            publisher: e.publisher ? String(e.publisher) : (resolvedExamType === 'internal' ? 'Kurum İçi' : undefined),
+            publisherFee: e.publisherFee !== undefined ? Number(e.publisherFee) : undefined,
+            orderQuantity: e.orderQuantity !== undefined ? Number(e.orderQuantity) : undefined,
+            gradeOrderQuantities: e.gradeOrderQuantities || undefined,
+            participatingClasses: Array.isArray(e.participatingClasses) ? e.participatingClasses : [],
+            assignedHalls: Array.isArray(e.assignedHalls) ? e.assignedHalls : [],
+            institution: e.institution ? String(e.institution) : undefined,
+            logo: e.logo || null,
+            studentList: Array.isArray(e.studentList) ? e.studentList : undefined,
+            layoutType: e.layoutType || undefined,
+            format: e.format || undefined,
+            subjects: Array.isArray(e.subjects) ? e.subjects : undefined,
+            optionsCount: e.optionsCount !== undefined ? Number(e.optionsCount) : undefined,
+            penalty: e.penalty !== undefined ? Number(e.penalty) : undefined,
+            keys: e.keys && typeof e.keys === 'object' ? e.keys : undefined,
+            omrMap: e.omrMap && typeof e.omrMap === 'object' ? e.omrMap : generateExamOmrMap(e),
+            results: Array.isArray(e.results) ? e.results : undefined
+          };
+        })
       : [];
 
     // 3. Sanitize results
@@ -1148,7 +1166,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   // --- Backup & Snapshot Engine ---
   const fetchCloudBackups = async () => {
-    if (userRole !== 'admin') return;
+    if (userRole !== 'admin' && userRole !== 'teacher') return;
     setIsLoadingBackups(true);
     try {
       const localListRaw = localStorage.getItem('akademi_cloud_backups_local');
@@ -1179,7 +1197,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   };
 
   useEffect(() => {
-    if (userRole === 'admin') {
+    if (userRole === 'admin' || userRole === 'teacher') {
       fetchCloudBackups();
 
       if (firebaseConfig.projectId) {
@@ -1203,7 +1221,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   const createCloudBackup = async (backupName?: string, note?: string): Promise<{ success: boolean; message: string; backupId?: string }> => {
     if (userRole !== 'admin') {
-      return { success: false, message: 'Yedek alma yetkisi yalnızca yöneticilere aittir.' };
+      return { success: false, message: 'Firebase üzerine yedek alma ve yazma yetkisi yalnızca İdareci ve Süper Admin kullanıcılara aittir. Öğretmenler yedeklenmiş verileri yalnızca görüntüleyebilir.' };
     }
 
     try {
@@ -1292,7 +1310,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   const saveLocalBackupToCloud = async (backupData: any, customName?: string): Promise<{ success: boolean; message: string; backupId?: string }> => {
     if (userRole !== 'admin') {
-      return { success: false, message: 'Yetkisiz işlem.' };
+      return { success: false, message: 'Buluta yedek yükleme ve yazma yetkisi yalnızca İdareci ve Süper Admin kullanıcılara aittir.' };
     }
     try {
       const source = (backupData.students || backupData.exams || backupData.results || backupData.budget || backupData.examHalls)

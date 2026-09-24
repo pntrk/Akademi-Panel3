@@ -317,7 +317,7 @@ export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) 
         </svg>
       </div>
 
-      {/* Sınav ve Kurum Üst Başlığı (x:10mm, y:12mm, w:190mm, h:18mm) */}
+      {/* Sınav ve Kurum Üst Başlığı (Köşe çapalardan bağımsız, 16.5mm'den başlar) */}
       <div
         className="absolute border-[2px] print-border bg-slate-50 flex items-center justify-between px-3 py-1 rounded-xs"
         style={{ left: `${renderOMR.header.x}mm`, top: `${renderOMR.header.y}mm`, width: `${renderOMR.header.w}mm`, height: `${renderOMR.header.h}mm` }}
@@ -328,21 +328,21 @@ export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) 
         </div>
       </div>
 
-      {/* Öğrenci Bilgi ve Karekod Alanı (x:10mm, y:32mm, w:190mm, h:32mm) */}
+      {/* Öğrenci Bilgi ve Karekod Alanı */}
       <div
         className="absolute border-[2px] print-border bg-white rounded-xs"
         style={{ left: `${renderOMR.infoBox.x}mm`, top: `${renderOMR.infoBox.y}mm`, width: `${renderOMR.infoBox.w}mm`, height: `${renderOMR.infoBox.h}mm` }}
       >
-        <div className="flex p-3 gap-3 h-full items-center justify-between relative">
+        <div className="flex p-2.5 gap-3 h-full items-center justify-between relative">
           <div className="flex-1 flex flex-col justify-center gap-1 pl-2 min-w-0">
             <div 
-              className="font-black tracking-tight text-slate-900 truncate max-w-[95mm]"
+              className="font-black tracking-tight text-slate-900 truncate max-w-[85mm]"
               style={nameStyle.style}
               title={studentName}
             >
               {studentName}
             </div>
-            <div className="flex items-center gap-4 font-bold text-slate-700 mt-0.5" style={{ fontSize: textFit.metaFontSize }}>
+            <div className="flex items-center gap-3.5 font-bold text-slate-700 mt-0.5" style={{ fontSize: textFit.metaFontSize }}>
               <div>ÖĞRENCİ NO: <span className="text-black font-mono font-bold" style={{ fontSize: textFit.noFontSize }}>{studentNo}</span></div>
               <div>SINIF / ŞUBE: <span className="text-black font-bold" style={{ fontSize: textFit.classFontSize }}>{studentClass}</span></div>
             </div>
@@ -351,13 +351,13 @@ export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) 
             </div>
           </div>
 
-          {/* Kitapçık Türü (x:135mm, y:18mm nispi, aralık: 7mm) */}
-          <div className="absolute text-[8px] font-bold text-center w-[30mm] -translate-x-1/2" style={{ left: '145.5mm', top: '7.5mm' }}>
+          {/* Kitapçık Türü */}
+          <div className="absolute text-[8px] font-bold text-center w-[30mm] -translate-x-1/2" style={{ left: `${renderOMR.infoBox.booklet.startX + 10.5}mm`, top: '5.5mm' }}>
             KİTAPÇIK TÜRÜ
           </div>
           {["A", "B", "C", "D"].map((b, idx) => {
-            const bx = 135 + (idx * 7);
-            const by = 18;
+            const bx = renderOMR.infoBox.booklet.startX + (idx * renderOMR.infoBox.booklet.gap);
+            const by = renderOMR.infoBox.booklet.y;
             return (
               <div
                 key={b}
@@ -369,17 +369,22 @@ export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) 
             );
           })}
 
-          {/* Öğrenci Karekodu (x:160mm, y:3.5mm nispi, boyut: 25x25mm) */}
+          {/* Öğrenci Karekodu */}
           <div 
             className="absolute border-2 border-slate-900 p-0.5 bg-white flex flex-col items-center justify-center"
-            style={{ left: '160mm', top: '3.5mm', width: '25mm', height: '25mm' }}
+            style={{ 
+              left: `${renderOMR.infoBox.qrCode.x}mm`, 
+              top: `${renderOMR.infoBox.qrCode.y}mm`, 
+              width: `${renderOMR.infoBox.qrCode.size}mm`, 
+              height: `${renderOMR.infoBox.qrCode.size}mm` 
+            }}
           >
             <LocalQRCode data={qrData} size={150} />
           </div>
         </div>
       </div>
 
-      {/* Soru ve Cevap Optik Kabarcık Alanı */}
+      {/* Soru ve Cevap Optik Kabarcık Alanı (Alt köşe çapalarla çakışmaz; 276mm'de biter) */}
       <div
         className="absolute border-[2px] print-border bg-white rounded-xs"
         style={{ left: `${renderOMR.qBox.x}mm`, top: `${renderOMR.qBox.y}mm`, width: `${renderOMR.qBox.w}mm`, height: `${finalQBoxH}mm` }}
@@ -389,25 +394,25 @@ export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) 
           <>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
-              style={{ left: '1mm', width: '45.5mm' }}
+              style={{ left: '0.8mm', width: `${renderOMR.questions.colW - 1.6}mm` }}
             >
               {isTyt ? '1. TÜRKÇE TESTİ' : isAyt ? '1. EDEBİYAT - SOS-1' : '1. TEST ALANI'}
             </div>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
-              style={{ left: '48.5mm', width: '45.5mm' }}
+              style={{ left: `${renderOMR.questions.colW + 0.8}mm`, width: `${renderOMR.questions.colW - 1.6}mm` }}
             >
               {isTyt ? '2. SOSYAL BİLİMLER' : isAyt ? '2. SOSYAL BİLİMLER-2' : '2. TEST ALANI'}
             </div>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
-              style={{ left: '96mm', width: '45.5mm' }}
+              style={{ left: `${(renderOMR.questions.colW * 2) + 0.8}mm`, width: `${renderOMR.questions.colW - 1.6}mm` }}
             >
               {isTyt ? '3. TEMEL MATEMATİK' : isAyt ? '3. MATEMATİK TESTİ' : '3. TEST ALANI'}
             </div>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
-              style={{ left: '143.5mm', width: '45.5mm' }}
+              style={{ left: `${(renderOMR.questions.colW * 3) + 0.8}mm`, width: `${renderOMR.questions.colW - 1.6}mm` }}
             >
               {isTyt ? '4. FEN BİLİMLERİ' : isAyt ? '4. FEN BİLİMLERİ' : '4. TEST ALANI'}
             </div>
@@ -416,13 +421,13 @@ export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) 
           <>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[8px] tracking-wider uppercase border print-border rounded-sm"
-              style={{ left: '1mm', width: '92.5mm' }}
+              style={{ left: '0.8mm', width: `${(renderOMR.questions.colW * 2) - 1.6}mm` }}
             >
               1. BÖLÜM (SÖZEL ALAN)
             </div>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[8px] tracking-wider uppercase border print-border rounded-sm"
-              style={{ left: '96.5mm', width: '92.5mm' }}
+              style={{ left: `${(renderOMR.questions.colW * 2) + 0.8}mm`, width: `${(renderOMR.questions.colW * 2) - 1.6}mm` }}
             >
               2. BÖLÜM (SAYISAL ALAN)
             </div>
@@ -432,21 +437,21 @@ export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) 
         {/* Ana Seksiyon Ayraçları */}
         {hasFourSections ? (
           <>
-            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: '47.5mm' }} />
-            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: '95mm' }} />
-            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: '142.5mm' }} />
+            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: `${renderOMR.questions.colW}mm` }} />
+            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: `${renderOMR.questions.colW * 2}mm` }} />
+            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: `${renderOMR.questions.colW * 3}mm` }} />
           </>
         ) : isSplit ? (
           <>
-            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: '95mm' }} />
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '47.5mm', top: '7.5mm', bottom: '1mm' }} />
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '142.5mm', top: '7.5mm', bottom: '1mm' }} />
+            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: `${renderOMR.questions.colW * 2}mm` }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW}mm`, top: '7.5mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW * 3}mm`, top: '7.5mm', bottom: '1mm' }} />
           </>
         ) : (
           <>
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '47.5mm', top: '1mm', bottom: '1mm' }} />
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '95mm', top: '1mm', bottom: '1mm' }} />
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '142.5mm', top: '1mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW}mm`, top: '1mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW * 2}mm`, top: '1mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW * 3}mm`, top: '1mm', bottom: '1mm' }} />
           </>
         )}
 
@@ -541,13 +546,37 @@ export function KeysAndPrintView() {
   }, [state.exams]);
 
   const [selectedExamId, setSelectedExamId] = useState<string>(() => {
+    const saved = typeof window !== 'undefined' ? sessionStorage.getItem('akademi_selected_keys_exam_id') : null;
+    if (saved && state.exams.some(e => String(e.id) === String(saved))) {
+      return saved;
+    }
     if (internalExams.length > 0) return String(internalExams[0].id);
     if (state.exams.length > 0) return String(state.exams[0].id);
     return "1";
   });
 
+  // Global navigation handler for setting exam ID
+  useEffect(() => {
+    (window as any).__keysPrintSetExamId = (id: string) => {
+      setSelectedExamId(String(id));
+      sessionStorage.setItem('akademi_selected_keys_exam_id', String(id));
+    };
+  }, []);
+
+  // Save selected exam id to sessionStorage
+  useEffect(() => {
+    if (selectedExamId) {
+      sessionStorage.setItem('akademi_selected_keys_exam_id', String(selectedExamId));
+    }
+  }, [selectedExamId]);
+
   // Keep selectedExamId in sync if exams array changes
   useEffect(() => {
+    const saved = typeof window !== 'undefined' ? sessionStorage.getItem('akademi_selected_keys_exam_id') : null;
+    if (saved && state.exams.some(e => String(e.id) === String(saved))) {
+      setSelectedExamId(saved);
+      return;
+    }
     if (!selectedExamId && state.exams.length > 0) {
       setSelectedExamId(String(internalExams[0]?.id || state.exams[0].id));
     }
@@ -869,27 +898,27 @@ export function KeysAndPrintView() {
 
         if (hasFourSections) {
           questionsHTML += `
-            <div class="sec-badge" style="left: 1mm; width: 45.5mm;">${isTyt ? '1. TÜRKÇE TESTİ' : isAyt ? '1. EDEBİYAT - SOS-1' : '1. TEST ALANI'}</div>
-            <div class="sec-badge" style="left: 48.5mm; width: 45.5mm;">${isTyt ? '2. SOSYAL BİLİMLER' : isAyt ? '2. SOSYAL BİLİMLER-2' : '2. TEST ALANI'}</div>
-            <div class="sec-badge" style="left: 96mm; width: 45.5mm;">${isTyt ? '3. TEMEL MATEMATİK' : isAyt ? '3. MATEMATİK TESTİ' : '3. TEST ALANI'}</div>
-            <div class="sec-badge" style="left: 143.5mm; width: 45.5mm;">${isTyt ? '4. FEN BİLİMLERİ' : isAyt ? '4. FEN BİLİMLERİ' : '4. TEST ALANI'}</div>
-            <div class="sec-divider" style="left: 47.5mm;"></div>
-            <div class="sec-divider" style="left: 95mm; border-right-width: 2px;"></div>
-            <div class="sec-divider" style="left: 142.5mm;"></div>
+            <div class="sec-badge" style="left: 0.8mm; width: ${renderOMR.questions.colW - 1.6}mm;">${isTyt ? '1. TÜRKÇE TESTİ' : isAyt ? '1. EDEBİYAT - SOS-1' : '1. TEST ALANI'}</div>
+            <div class="sec-badge" style="left: ${renderOMR.questions.colW + 0.8}mm; width: ${renderOMR.questions.colW - 1.6}mm;">${isTyt ? '2. SOSYAL BİLİMLER' : isAyt ? '2. SOSYAL BİLİMLER-2' : '2. TEST ALANI'}</div>
+            <div class="sec-badge" style="left: ${(renderOMR.questions.colW * 2) + 0.8}mm; width: ${renderOMR.questions.colW - 1.6}mm;">${isTyt ? '3. TEMEL MATEMATİK' : isAyt ? '3. MATEMATİK TESTİ' : '3. TEST ALANI'}</div>
+            <div class="sec-badge" style="left: ${(renderOMR.questions.colW * 3) + 0.8}mm; width: ${renderOMR.questions.colW - 1.6}mm;">${isTyt ? '4. FEN BİLİMLERİ' : isAyt ? '4. FEN BİLİMLERİ' : '4. TEST ALANI'}</div>
+            <div class="sec-divider" style="left: ${renderOMR.questions.colW}mm;"></div>
+            <div class="sec-divider" style="left: ${renderOMR.questions.colW * 2}mm; border-right-width: 2px;"></div>
+            <div class="sec-divider" style="left: ${renderOMR.questions.colW * 3}mm;"></div>
           `;
         } else if (isSplit) {
           questionsHTML += `
-            <div class="sec-badge" style="left: 1mm; width: 92.5mm;">1. BÖLÜM (SÖZEL ALAN)</div>
-            <div class="sec-badge" style="left: 96.5mm; width: 92.5mm;">2. BÖLÜM (SAYISAL ALAN)</div>
-            <div class="sec-divider" style="left: 95mm; border-right-width: 2px;"></div>
-            <div class="sub-divider" style="left: 47.5mm;"></div>
-            <div class="sub-divider" style="left: 142.5mm;"></div>
+            <div class="sec-badge" style="left: 0.8mm; width: ${(renderOMR.questions.colW * 2) - 1.6}mm;">1. BÖLÜM (SÖZEL ALAN)</div>
+            <div class="sec-badge" style="left: ${(renderOMR.questions.colW * 2) + 0.8}mm; width: ${(renderOMR.questions.colW * 2) - 1.6}mm;">2. BÖLÜM (SAYISAL ALAN)</div>
+            <div class="sec-divider" style="left: ${renderOMR.questions.colW * 2}mm; border-right-width: 2px;"></div>
+            <div class="sub-divider" style="left: ${renderOMR.questions.colW}mm;"></div>
+            <div class="sub-divider" style="left: ${renderOMR.questions.colW * 3}mm;"></div>
           `;
         } else {
           questionsHTML += `
-            <div class="sub-divider" style="left: 47.5mm; top: 1mm;"></div>
-            <div class="sub-divider" style="left: 95mm; top: 1mm;"></div>
-            <div class="sub-divider" style="left: 142.5mm; top: 1mm;"></div>
+            <div class="sub-divider" style="left: ${renderOMR.questions.colW}mm; top: 1mm;"></div>
+            <div class="sub-divider" style="left: ${renderOMR.questions.colW * 2}mm; top: 1mm;"></div>
+            <div class="sub-divider" style="left: ${renderOMR.questions.colW * 3}mm; top: 1mm;"></div>
           `;
         }
 
@@ -906,7 +935,7 @@ export function KeysAndPrintView() {
             `;
           } else {
             const qNumLeft = colLeft + (renderOMR.questions.qNumOffset ?? 1.0);
-            const qNumWidth = renderOMR.questions.qNumWidth ?? 7.0;
+            const qNumWidth = renderOMR.questions.qNumWidth ?? 6.5;
             const qNumber = (item.localIdx !== undefined ? item.localIdx + 1 : (item.qIdx !== undefined ? item.qIdx + 1 : 1));
 
             questionsHTML += `
@@ -951,7 +980,7 @@ export function KeysAndPrintView() {
             <!-- Öğrenci Bilgi ve Karekod Alanı -->
             <div class="info-box" style="left: ${renderOMR.infoBox.x}mm; top: ${renderOMR.infoBox.y}mm; width: ${renderOMR.infoBox.w}mm; height: ${renderOMR.infoBox.h}mm;">
               <div class="info-content">
-                <div class="student-details" style="max-width: 95mm; min-width: 0;">
+                <div class="student-details" style="max-width: 85mm; min-width: 0;">
                   <div class="st-name" style="${textFit.printStyleStr}">${studentName}</div>
                   <div class="st-meta" style="font-size: ${textFit.metaFontSize};">
                     <div>ÖĞRENCİ NO: <span class="st-bold-no" style="${textFit.noStyleStr}">${studentNo}</span></div>
@@ -960,14 +989,15 @@ export function KeysAndPrintView() {
                   <div class="st-note">* Kodlamalarınızı kurşun kalemle, dairelerin dışına taşırmadan yapınız.</div>
                 </div>
 
-                <div class="booklet-label">KİTAPÇIK TÜRÜ</div>
-                <div class="info-bubble" style="left: 135mm; top: 18mm;">A</div>
-                <div class="info-bubble" style="left: 142mm; top: 18mm;">B</div>
-                <div class="info-bubble" style="left: 149mm; top: 18mm;">C</div>
-                <div class="info-bubble" style="left: 156mm; top: 18mm;">D</div>
+                <div class="booklet-label" style="left: ${renderOMR.infoBox.booklet.startX + 10.5}mm; top: 5.5mm;">KİTAPÇIK TÜRÜ</div>
+                ${['A', 'B', 'C', 'D'].map((b, idx) => {
+                  const bx = renderOMR.infoBox.booklet.startX + (idx * renderOMR.infoBox.booklet.gap);
+                  const by = renderOMR.infoBox.booklet.y;
+                  return `<div class="info-bubble" style="left: ${bx}mm; top: ${by}mm;">${b}</div>`;
+                }).join('')}
 
-                <div class="qr-container" style="left: 160mm; top: 3.5mm; width: 25mm; height: 25mm;">
-                  ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR" style="width: 25mm; height: 25mm; display: block;"/>` : ''}
+                <div class="qr-container" style="left: ${renderOMR.infoBox.qrCode.x}mm; top: ${renderOMR.infoBox.qrCode.y}mm; width: ${renderOMR.infoBox.qrCode.size}mm; height: ${renderOMR.infoBox.qrCode.size}mm;">
+                  ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR" style="width: ${renderOMR.infoBox.qrCode.size}mm; height: ${renderOMR.infoBox.qrCode.size}mm; display: block;"/>` : ''}
                 </div>
               </div>
             </div>

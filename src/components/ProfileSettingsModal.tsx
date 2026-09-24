@@ -3,7 +3,7 @@ import {
   X, User, Shield, Moon, Sun, 
   DownloadCloud, UploadCloud, LogOut, Check, 
   RefreshCw, Database, Activity, ChevronRight, AlertCircle,
-  Bell, BellRing, Sparkles, ShieldCheck, Users
+  Bell, BellRing, Sparkles, ShieldCheck, Users, Smartphone, HardDriveDownload
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { User as FirebaseUser, db, collection, query, onSnapshot } from '../lib/firebase';
@@ -22,6 +22,7 @@ interface ProfileSettingsModalProps {
   onOpenFirebaseStatus?: () => void;
   onOpenUserManagement?: () => void;
   onOpenNotifications?: () => void;
+  onOpenCloudBackup?: () => void;
   handleBackup?: () => void;
   handleRestore?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleManualSave?: () => Promise<void>;
@@ -42,6 +43,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   onOpenFirebaseStatus,
   onOpenUserManagement,
   onOpenNotifications,
+  onOpenCloudBackup,
   handleBackup,
   handleRestore,
   handleManualSave,
@@ -391,6 +393,42 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Install PWA App Card (iOS / iPhone / Android / Desktop) */}
+              {onOpenAppHub && (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-500/10 via-indigo-500/5 to-transparent border border-sky-500/25 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0">
+                        <Smartphone className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-white">iPhone & Cihaza Uygulama Olarak Yükle</h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            PWA Desteği
+                          </span>
+                        </div>
+                        <p className="text-xs text-white/50">Safari adres çubuğu olmadan bağımsız tam ekran mobil uygulama yapın</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      onOpenAppHub();
+                      onClose();
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-xs border border-sky-500/30 transition-all cursor-pointer group shadow-sm active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <HardDriveDownload className="w-4 h-4 text-sky-400" />
+                      <span>Ana Ekrana Ekleme & Kurulum Rehberini Aç</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-sky-300 group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+                </div>
+              )}
+
               {/* User Permissions Management (Admin Only) */}
               {userRole === 'admin' && onOpenUserManagement && (
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/25 space-y-3">
@@ -445,6 +483,51 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           {/* TAB 2: BACKUP & RESTORE */}
           {activeTab === 'backup' && (
             <div className="space-y-3.5">
+              {/* Bulut Yedekleme Merkezi Butonu */}
+              {onOpenCloudBackup && (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-amber-500/5 to-transparent border border-amber-500/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                        <Database className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-white">Firebase Bulut Yedekleme Merkezi</h4>
+                          <span className={cn(
+                            "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                            userRole === 'admin' 
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                              : "bg-sky-500/20 text-sky-300 border-sky-500/30"
+                          )}>
+                            {userRole === 'admin' ? 'Tam Yetkili' : 'Salt Okunur Görünüm'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-white/50">
+                          {userRole === 'admin' 
+                            ? 'Bulut yedeklerini görüntüleyin, yeni sistem yedeği alın veya geri yükleyin' 
+                            : 'Bulut üzerindeki sistem yedeklerini ve istatistiklerini görüntüleyin'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      onOpenCloudBackup();
+                      onClose();
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-xl bg-[#B08D57]/20 hover:bg-[#B08D57]/30 text-amber-200 font-semibold text-xs border border-amber-500/30 transition-all cursor-pointer group shadow-sm active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <DownloadCloud className="w-4 h-4 text-amber-400" />
+                      <span>{userRole === 'admin' ? 'Bulut Yedekleme Merkezini Aç' : 'Bulut Yedeklerini Görüntüle'}</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-amber-300 group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+                </div>
+              )}
+
               {userRole === 'admin' ? (
                 <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
                   <div>
@@ -479,9 +562,16 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 text-amber-200 text-xs">
-                  <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
-                  <span>Sistem yedeği indirme ve yükleme yetkisi yalnızca okul yöneticilerine tanımlıdır.</span>
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5">
+                  <div className="flex items-start gap-2.5 text-xs text-sky-200">
+                    <AlertCircle className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-sky-100">Salt Okunur Yedekleme Erişimi</p>
+                      <p className="text-white/60 text-[11px] mt-0.5 leading-relaxed">
+                        Öğretmen yetkisiyle sistem yedeklerini ve istatistiklerini sadece görüntüleyebilirsiniz. Firebase üzerine yeni yedek yazma, cihaza JSON yedek indirme ve geri yükleme işlemleri veri güvenliği politikası gereğince yalnızca İdarecilere aittir.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

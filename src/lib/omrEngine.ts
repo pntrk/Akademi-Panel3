@@ -21,58 +21,61 @@ export const OMR_SPECS = {
   anchorMargin: 10,
   anchorSize: 8,
 
+  // Üst Başlık Alanı (Köşe çapalarla [6-14mm] çakışmaz; 16.5mm'den başlar)
   header: {
-    x: 10,
-    y: 12,
-    w: 190,
-    h: 18
+    x: 14.5,
+    y: 16.5,
+    w: 181.0,
+    h: 14.5
   },
 
+  // Öğrenci Bilgi, Kitapçık ve Karekod Alanı
   infoBox: {
-    x: 10,
-    y: 32,
-    w: 190,
-    h: 32,
+    x: 14.5,
+    y: 33.0,
+    w: 181.0,
+    h: 28.0,
     booklet: {
-      startX: 135,
-      y: 18,
-      gap: 7,
+      startX: 115.0,
+      y: 15.5,
+      gap: 7.0,
       bubbles: [
-        { label: 'A', x: 135, y: 18 },
-        { label: 'B', x: 142, y: 18 },
-        { label: 'C', x: 149, y: 18 },
-        { label: 'D', x: 156, y: 18 }
+        { label: 'A', x: 115.0, y: 15.5 },
+        { label: 'B', x: 122.0, y: 15.5 },
+        { label: 'C', x: 129.0, y: 15.5 },
+        { label: 'D', x: 136.0, y: 15.5 }
       ]
     },
     qrCode: {
-      x: 160,
-      y: 3.5,
-      size: 25
+      x: 154.0,
+      y: 2.25,
+      size: 23.5
     }
   },
 
+  // Soru ve Cevap Baloncukları Alanı (Alt köşe çapalardan [283-291mm] 7mm yukarıda; 276mm'de biter)
   qBox: {
-    x: 10,
-    y: 66,
-    w: 190,
-    h: 220
+    x: 14.5,
+    y: 63.0,
+    w: 181.0,
+    h: 213.0
   },
 
   questions: {
     colCount: 4,
-    colW: 47.5,
-    rowH: 4.8,
-    bubbleRadius: 1.8,
-    bubbleGap: 4.6,
-    startXOffset: 14.0,
+    colW: 45.25,
+    rowH: 4.65,
+    bubbleRadius: 1.75,
+    bubbleGap: 4.5,
+    startXOffset: 13.5,
     qNumOffset: 1.0,
-    qNumWidth: 7.0,
+    qNumWidth: 6.5,
     rowHeightMod: 1.0
   },
 
   info: {
-    colW: 5.0,
-    rowH: 3.65,
+    colW: 4.8,
+    rowH: 3.5,
     labelY: 29,
     inputY: 32,
     startY: 38,
@@ -88,6 +91,39 @@ export const OMR_SPECS = {
 };
 
 export const DEFAULT_OMR = OMR_SPECS;
+
+/**
+ * Her sınavın şablonunu ve milimetrik OMR koordinat haritasını veritabanında saklamak üzere oluşturan fonksiyon.
+ */
+export function generateExamOmrMap(exam: Exam, omr = OMR_SPECS) {
+  const layout = getQuestionsLayout(exam, omr);
+  return {
+    version: '2.0-anchor-safe',
+    examId: exam.id,
+    examName: exam.name,
+    format: exam.format || 'lgs',
+    optionsCount: exam.optionsCount || 4,
+    penalty: exam.penalty !== undefined ? exam.penalty : 3,
+    layoutType: exam.layoutType || 'split',
+    specs: {
+      paperW: omr.paperW,
+      paperH: omr.paperH,
+      anchorMargin: omr.anchorMargin,
+      anchorSize: omr.anchorSize,
+      header: omr.header,
+      infoBox: omr.infoBox,
+      qBox: omr.qBox,
+      questions: omr.questions
+    },
+    anchors: getAnchorMarks(omr),
+    qrCodeBox: getQrCodeBox(omr),
+    bookletPositions: getBookletBubblePositions(omr),
+    subjects: exam.subjects || [],
+    totalQuestions: layout.totalQuestions,
+    bubbleMap: layout.allBubbleCenters,
+    updatedAt: new Date().toISOString()
+  };
+}
 
 export function getBookletBubblePositions(omr = OMR_SPECS): { booklet: string; x: number; y: number }[] {
   return omr.infoBox.booklet.bubbles.map(b => ({
@@ -327,7 +363,7 @@ export function getQuestionsLayout(exam: Exam, omr = OMR_SPECS): QuestionsLayout
     colMaxY[currentCIdx] = currentY;
   });
 
-  const finalQBoxH = Math.max(...colMaxY) - omr.qBox.y;
+  const finalQBoxH = Math.max(omr.qBox.h || 213.0, Math.max(...colMaxY) - omr.qBox.y);
   const questions = items.filter(it => it.type === 'question');
   const headers = items.filter(it => it.type === 'header');
 
@@ -338,7 +374,7 @@ export function getQuestionsLayout(exam: Exam, omr = OMR_SPECS): QuestionsLayout
     allBubbleCenters,
     rowH,
     colW,
-    finalQBoxH: Math.max(finalQBoxH, omr.qBox.h || 220),
+    finalQBoxH: omr.qBox.h ? Math.max(omr.qBox.h, finalQBoxH) : finalQBoxH,
     isSplit,
     hasFourSections,
     topPadding,

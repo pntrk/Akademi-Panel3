@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, Calendar, BarChart2, DollarSign, LayoutTemplate, Save, 
   DownloadCloud, UploadCloud, Trophy, Sun, Moon, X, Settings, 
@@ -34,7 +34,6 @@ const navItems = [
   { id: 'keys_print', label: 'Cevap & Form Baskı', shortLabel: 'Baskı', icon: Printer, colorClass: 'text-purple-400', hoverColorClass: 'group-hover:text-purple-400', activeClass: 'bg-purple-500/15 border-purple-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
   { id: 'scan', label: 'Canlı Optik Tarama', shortLabel: 'Tarama', icon: Camera, colorClass: 'text-teal-400', hoverColorClass: 'group-hover:text-teal-400', activeClass: 'bg-teal-500/15 border-teal-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
   { id: 'results', label: 'Sınav Sonuçları', shortLabel: 'Sonuçlar', icon: BarChart2, colorClass: 'text-emerald-400', hoverColorClass: 'group-hover:text-emerald-400', activeClass: 'bg-emerald-500/15 border-emerald-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
-  { id: 'analysis', label: 'Sonuçlar Analiz', shortLabel: 'Analiz', icon: TrendingUp, colorClass: 'text-blue-400', hoverColorClass: 'group-hover:text-blue-400', activeClass: 'bg-blue-500/15 border-blue-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
   { id: 'league', label: 'Akademi Arena', shortLabel: 'Arena', icon: Trophy, colorClass: 'text-yellow-400', hoverColorClass: 'group-hover:text-yellow-400', activeClass: 'bg-yellow-500/15 border-yellow-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
   { id: 'budget', label: 'Bütçe & Finans', shortLabel: 'Bütçe', icon: DollarSign, colorClass: 'text-cyan-400', hoverColorClass: 'group-hover:text-cyan-400', activeClass: 'bg-cyan-500/15 border-cyan-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
 ];
@@ -64,10 +63,20 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(propUser || auth.currentUser);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const mobileNavRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     (window as any).__navigateToTab = (tab: string) => setActiveTab(tab);
   }, [setActiveTab]);
+
+  useEffect(() => {
+    if (mobileNavRef.current) {
+      const activeEl = mobileNavRef.current.querySelector<HTMLElement>('[data-active="true"]');
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (propUser) {
@@ -220,12 +229,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     // Admin & Süper Admin tüm menülerde tam yetkili ve kısıtlamasızdır
     if (userRole === 'admin') return true;
     
-    // Öğretmen yetkisindeki kullanıcılara sadece Sonuçlar, Analiz ve Akademi Arena gösterilir
+    // Öğretmen yetkisindeki kullanıcılara sadece Sonuçlar ve Akademi Arena gösterilir
     if (userRole === 'teacher') {
-      return ['results', 'analysis', 'league'].includes(itemId);
+      return ['results', 'league'].includes(itemId);
     }
     
-    return ['results', 'analysis', 'league'].includes(itemId);
+    return ['results', 'league'].includes(itemId);
   };
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
@@ -660,6 +669,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
         onOpenFirebaseStatus={() => setIsFirebaseStatusOpen(true)}
         onOpenUserManagement={() => setIsSettingsOpen(true)}
         onOpenNotifications={() => openNotificationModal()}
+        onOpenCloudBackup={() => setIsCloudBackupOpen(true)}
         handleBackup={handleBackup}
         handleRestore={handleRestore}
         handleManualSave={handleManualSave}
@@ -765,42 +775,72 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       </main>
 
       {/* 📱 Mobile Bottom Navigation - Modern Touch-Optimized Scrollable Glass Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#121316]/95 backdrop-blur-2xl border-t border-white/10 z-40 px-1 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(0,0,0,0.45)]">
-        <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar-none snap-x snap-mandatory px-1 max-w-xl mx-auto">
-          {navItems.filter(item => isNavItemVisible(item.id)).map((item) => {
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={cn(
-                  "relative flex flex-col items-center justify-center min-w-[62px] flex-1 py-1 px-1.5 rounded-xl transition-all duration-200 cursor-pointer active:scale-95 snap-center shrink-0 group",
-                  isActive ? "text-white" : "text-white/40 hover:text-white/70"
-                )}
-              >
-                {/* Active Glow Pill */}
-                <div className={cn(
-                  "relative flex items-center justify-center w-9 h-7 rounded-xl transition-all duration-200",
-                  isActive ? "bg-white/15 shadow-inner" : "bg-transparent"
-                )}>
-                  <item.icon className={cn(
-                    "w-4.5 h-4.5 transition-transform duration-200",
-                    isActive ? cn(item.colorClass, "scale-110 drop-shadow-[0_0_8px_currentColor]") : "text-white/45 group-hover:text-white/75"
-                  )} />
-                  {isActive && (
-                    <span className="absolute -top-1 w-2 h-0.5 rounded-full bg-brand-accent shadow-[0_0_8px_#B08D57]" />
-                  )}
-                </div>
-                <span className={cn(
-                  "text-[9.5px] font-semibold tracking-tight transition-colors duration-200 mt-0.5 whitespace-nowrap",
-                  isActive ? "text-white font-bold" : "text-white/40"
-                )}>
-                  {item.shortLabel}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0d0e12]/95 backdrop-blur-2xl border-t border-white/[0.1] z-40 px-2 py-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] shadow-[0_-12px_36px_rgba(0,0,0,0.65)] select-none">
+        {(() => {
+          const visibleItems = navItems.filter(item => isNavItemVisible(item.id));
+          const isFewItems = visibleItems.length <= 4;
+
+          return (
+            <div 
+              ref={mobileNavRef}
+              className={cn(
+                "mx-auto flex items-center transition-all",
+                isFewItems 
+                  ? "max-w-md w-full justify-around gap-2 px-1" 
+                  : "max-w-xl w-full gap-1.5 overflow-x-auto no-scrollbar scroll-smooth px-1 snap-x snap-mandatory"
+              )}
+            >
+              {visibleItems.map((item) => {
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    data-active={isActive ? "true" : "false"}
+                    aria-label={item.label}
+                    className={cn(
+                      "relative flex flex-col items-center justify-center rounded-2xl transition-all duration-200 cursor-pointer active:scale-90 snap-center shrink-0 group focus:outline-none",
+                      isFewItems 
+                        ? "flex-1 py-1.5 px-2 min-w-[76px]" 
+                        : "min-w-[68px] flex-1 py-1.5 px-1.5",
+                      isActive 
+                        ? "text-white bg-white/[0.09] border border-white/12 shadow-sm" 
+                        : "text-white/40 hover:text-white/70 hover:bg-white/[0.03] border border-transparent"
+                    )}
+                  >
+                    {/* Top Glow Accent Line */}
+                    {isActive && (
+                      <span className="absolute -top-1.5 w-6 h-0.5 rounded-full bg-gradient-to-r from-amber-400 via-[#B08D57] to-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.8)] animate-fade-in" />
+                    )}
+
+                    {/* Icon Container */}
+                    <div className={cn(
+                      "relative flex items-center justify-center w-8 h-6.5 rounded-xl transition-transform duration-200",
+                      isActive ? "scale-105" : "group-hover:scale-105"
+                    )}>
+                      <item.icon className={cn(
+                        "w-4.5 h-4.5 transition-all duration-200",
+                        isActive 
+                          ? cn(item.colorClass, "scale-105 drop-shadow-[0_0_10px_currentColor]") 
+                          : "text-white/45 group-hover:text-white/75"
+                      )} />
+                    </div>
+
+                    {/* Label */}
+                    <span className={cn(
+                      "text-[10px] tracking-tight transition-colors duration-200 mt-0.5 whitespace-nowrap",
+                      isActive 
+                        ? "text-white font-bold drop-shadow-xs" 
+                        : "text-white/45 font-medium group-hover:text-white/70"
+                    )}>
+                      {item.shortLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
       </nav>
     </div>
   );

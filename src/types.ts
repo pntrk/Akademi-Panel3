@@ -108,6 +108,7 @@ export interface Exam {
   institution?: string;
   logo?: string | null;
   studentList?: (Student | OmrStudent)[];
+  omrMap?: any; // Titizlikle saklanan milimetrik OMR koordinat ve şablon haritası
   results?: ExamResult[];
 }
 

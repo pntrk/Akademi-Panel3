@@ -10,7 +10,7 @@ import {
   MapPin, HelpCircle, Activity, TrendingUp, Sparkles, BookOpen, AlertCircle, Settings,
   Search, Filter, ChevronDown, Package, Layers, DoorOpen, Printer, Edit3, Check, Bell,
   FileJson, RotateCcw, Type, Palette, Sliders, CheckCircle2, ZoomIn, ZoomOut, Maximize2,
-  QrCode, Key, SlidersHorizontal
+  QrCode, Key, SlidersHorizontal, ArrowRight
 } from 'lucide-react';
 
 // Setup pdfMake Turkish fonts
@@ -1480,18 +1480,23 @@ export const ExamsView = () => {
     const file = e.target.files?.[0];
     if (file) {
       importFromExcel(file, (data) => {
-        const newExams: Exam[] = data.map((row: any) => ({
-          id: generateId(),
-          no: parseInt(row['ÖLÇME'] || row['ölçme'] || row['No'] || '0'),
-          date: row['TARİH'] || row['Tarih'] || row['date'] || '',
-          name: row['8. SINIF'] || row['8. Sınıf'] || row['Deneme'] || '',
-          participantCount: parseInt(row['KATILAN KİŞİ'] || row['Katılan Kişi'] || '0'),
-          publisher: row['Yayıncı'] || row['YAYINCI'] || '',
-          publisherFee: parseFloat(row['Ücret'] || row['ÜCRET'] || '0') || 0,
-          orderQuantity: parseInt(row['Sipariş'] || row['SİPARİŞ'] || '0') || 0,
-          participatingClasses: [],
-          assignedHalls: []
-        }));
+        const newExams: Exam[] = data.map((row: any) => {
+          const typeRaw = String(row['SINAV TÜRÜ'] || row['Sınav Türü'] || row['TÜR'] || row['Tür'] || '').toLowerCase();
+          const isInternal = typeRaw.includes('kurum') || typeRaw.includes('içi') || typeRaw.includes('okul') || typeRaw.includes('internal');
+          return {
+            id: generateId(),
+            no: parseInt(row['ÖLÇME'] || row['ölçme'] || row['No'] || '0'),
+            date: row['TARİH'] || row['Tarih'] || row['date'] || '',
+            name: row['8. SINIF'] || row['8. Sınıf'] || row['Deneme'] || row['SINAV ADI'] || '',
+            examType: isInternal ? 'internal' : 'publisher',
+            participantCount: parseInt(row['KATILAN KİŞİ'] || row['Katılan Kişi'] || '0'),
+            publisher: row['Yayıncı'] || row['YAYINCI'] || (isInternal ? 'Kurum İçi' : ''),
+            publisherFee: parseFloat(row['Ücret'] || row['ÜCRET'] || '0') || 0,
+            orderQuantity: parseInt(row['Sipariş'] || row['SİPARİŞ'] || '0') || 0,
+            participatingClasses: [],
+            assignedHalls: []
+          };
+        });
         setExams([...state.exams, ...newExams]);
       });
     }
@@ -1503,7 +1508,8 @@ export const ExamsView = () => {
       'ÖLÇME': e.no,
       'TARİH': e.date,
       'SINAV ADI': e.name,
-      'YAYINCI': e.publisher || '',
+      'SINAV TÜRÜ': e.examType === 'internal' ? 'Kurum İçi Deneme' : 'Yayıncı Denemesi',
+      'YAYINCI': e.publisher || (e.examType === 'internal' ? 'Kurum İçi' : ''),
       'YAYINCI ÜCRETİ': e.publisherFee || 0,
       'SİPARİŞ MİKTARI': e.orderQuantity || 0,
       'TOPLAM GİDER': (e.publisherFee || 0) * (e.orderQuantity || 0),
@@ -1612,9 +1618,9 @@ export const ExamsView = () => {
           name: newName,
           participantCount: examParticipantCount || examResults.length,
           publisher: examType === 'publisher' ? examPublisher.trim() : (examPublisher.trim() || 'Kurum İçi'),
-          publisherFee: examType === 'publisher' ? examPublisherFee : 0,
-          orderQuantity: examType === 'publisher' ? examOrderQuantity : 0,
-          gradeOrderQuantities: examType === 'publisher' ? examGradeOrderQuantities : {},
+          publisherFee: examPublisherFee || 0,
+          orderQuantity: examOrderQuantity || 0,
+          gradeOrderQuantities: examGradeOrderQuantities || {},
           participatingClasses: selectedClasses,
           assignedHalls: selectedHalls,
           optionsCount: examOptionsCount,
@@ -2681,393 +2687,238 @@ export const ExamsView = () => {
                       </div>
                     </div>
 
-                    {/* Section 2: HİBRİT KOŞULLU ALAN */}
-                    {examType === 'publisher' ? (
-                      /* Section 2A: Yayıncı Denemesi Bütçe Takibi Entegrasyonu */
-                      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#e6e2d3] shadow-xs space-y-4 hover:border-[#d4d0be] transition-colors">
-                        <div className="flex items-center justify-between border-b border-[#f2efe9] pb-3">
-                          <div className="flex items-center space-x-2">
-                            <div className="p-1.5 bg-emerald-50 text-emerald-700 rounded-lg">
-                              <DollarSign className="h-4 w-4" />
-                            </div>
+                    {/* Section 2: Bütçe Gider & Maliyet Entegrasyonu (Hem Yayıncı Hem Kurum İçi İçin Aktif) */}
+                    <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#e6e2d3] shadow-xs space-y-4 hover:border-[#d4d0be] transition-colors">
+                      <div className="flex items-center justify-between border-b border-[#f2efe9] pb-3">
+                        <div className="flex items-center space-x-2">
+                          <div className={`p-1.5 rounded-lg ${examType === 'internal' ? 'bg-purple-50 text-purple-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                            <DollarSign className="h-4 w-4" />
+                          </div>
+                          <div>
                             <h4 className="text-xs sm:text-sm font-bold text-[#43423b] uppercase tracking-wider">
-                              Bütçe Gider Entegrasyonu
+                              {examType === 'internal' ? 'Kurum İçi Baskı & Sınav Maliyeti' : 'Yayıncı Bütçe Gider Entegrasyonu'}
                             </h4>
                           </div>
-                          <span className="text-[10px] sm:text-[11px] bg-emerald-50 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full border border-emerald-200/80 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Canlı Bağlantı
-                          </span>
                         </div>
-
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-[11px] font-bold text-[#737265] uppercase tracking-wider mb-1.5">
-                                Kişi Başı Kitapçık Ücreti
-                              </label>
-                              <div className="relative">
-                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#737265] text-sm font-bold">₺</span>
-                                <input 
-                                  type="number" 
-                                  step="0.5"
-                                  value={examPublisherFee || ''} 
-                                  onChange={(e) => setExamPublisherFee(parseFloat(e.target.value) || 0)}
-                                  className="w-full bg-[#fcfbf7] hover:bg-white focus:bg-white border border-[#e6e2d3] rounded-xl pl-8 pr-3.5 py-2 text-sm font-bold text-[#2d2c25] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all shadow-2xs"
-                                  placeholder="0,00"
-                                />
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="block text-[11px] font-bold text-[#737265] uppercase tracking-wider mb-1.5">
-                                Toplam Sipariş Miktarı
-                              </label>
-                              <div className="relative">
-                                <input 
-                                  type="number" 
-                                  min="0"
-                                  value={examOrderQuantity || ''} 
-                                  onChange={(e) => setExamOrderQuantity(parseInt(e.target.value) || 0)}
-                                  className="w-full bg-[#fcfbf7] hover:bg-white focus:bg-white border border-[#e6e2d3] rounded-xl pl-9 pr-3.5 py-2 text-sm font-bold text-[#2d2c25] focus:ring-2 focus:ring-[#5a5a40]/20 focus:border-[#5a5a40] transition-all shadow-2xs"
-                                  placeholder="Adet"
-                                />
-                                <Package className="w-4 h-4 text-[#8e8d82] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Sınıf Seviyelerine Göre Sipariş Detayı */}
-                          <div className="bg-[#fcfbf7] p-3.5 sm:p-4 rounded-xl border border-[#e6e2d3]/80 space-y-3">
-                            <div className="flex items-center justify-between flex-wrap gap-2">
-                              <span className="text-xs font-bold text-[#43423b] flex items-center gap-1.5">
-                                <Layers className="w-3.5 h-3.5 text-[#737265]" />
-                                Sınıf Seviyelerine Göre Sipariş Adetleri
-                              </span>
-                              {(() => {
-                                const sum = (Object.values(examGradeOrderQuantities) as number[]).reduce((acc, val) => acc + (val || 0), 0);
-                                return (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[11px] font-semibold text-[#737265] bg-white px-2 py-0.5 rounded-md border border-[#e6e2d3]">
-                                      Sınıf Toplamı: <strong className="text-[#2d2c25]">{sum}</strong> adet
-                                    </span>
-                                    {sum !== examOrderQuantity && sum > 0 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setExamOrderQuantity(sum)}
-                                        className="text-[10px] font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 transition-colors cursor-pointer"
-                                        title="Sipariş adedini sınıf toplamına eşitle"
-                                      >
-                                        Siparişe Eşitle
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              {availableGradeLevels.map(lvl => {
-                                const qty = examGradeOrderQuantities[lvl] || 0;
-                                return (
-                                  <div key={lvl} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-[#e6e2d3] gap-2 shadow-2xs">
-                                    <span className="text-xs font-bold text-[#43423b] truncate">
-                                      {lvl === 'Diğer' ? 'Diğer' : `${lvl}. Sınıf`}
-                                    </span>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={qty || ''}
-                                      onChange={(e) => handleGradeOrderQuantityChange(lvl, parseInt(e.target.value) || 0)}
-                                      className="w-16 bg-[#fcfbf7] border border-[#e6e2d3] rounded-lg px-2 py-1 text-xs font-bold text-[#2d2c25] text-center focus:ring-1 focus:ring-[#5a5a40] focus:border-[#5a5a40]"
-                                      placeholder="0"
-                                    />
-                                  </div>
-                                );
-                              })}
-                              {availableGradeLevels.length === 0 && (
-                                <span className="text-xs text-[#8e8d82] italic col-span-2 py-2 text-center">
-                                  Sistemde henüz sınıf bulunmamaktadır.
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Canlı Hesaplanan Gider Özeti Kartı */}
-                          {examPublisherFee > 0 && examOrderQuantity > 0 ? (
-                            <div className="bg-gradient-to-br from-emerald-50/90 to-teal-50/70 p-3.5 sm:p-4 rounded-xl border border-emerald-200/80 text-xs text-emerald-950 space-y-1.5 shadow-2xs">
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <span className="font-bold flex items-center text-emerald-900 gap-1.5">
-                                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-                                  Otomatik Gider Senkronu Aktif
-                                </span>
-                                <span className="text-sm font-black text-emerald-800 bg-white/80 px-2.5 py-0.5 rounded-lg border border-emerald-200">
-                                  ₺{(examPublisherFee * examOrderQuantity).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                                </span>
-                              </div>
-                              <p className="text-emerald-800/80 leading-relaxed text-[11px]">
-                                Sınavı kaydettiğinizde, bütçede harcama sütununa {examOrderQuantity} adet × ₺{examPublisherFee} = <strong>₺{(examPublisherFee * examOrderQuantity).toLocaleString('tr-TR')}</strong> tutarında <strong>"{examName || 'Sınav'} Yayın Ücreti"</strong> kalemi işlenecektir.
-                              </p>
-                            </div>
-                          ) : (
-                            <p className="text-[11px] text-[#8e8d82] leading-normal italic bg-[#fcfbf7] p-2.5 rounded-lg border border-[#e6e2d3]/50">
-                              💡 Kişi başı kitapçık ücreti ve sipariş adedi girildiğinde toplam tutar Bütçe Harcamalar tablosuna otomatik olarak gider olarak yansıtılır.
-                            </p>
-                          )}
-                        </div>
+                        <span className={`text-[10px] sm:text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                          examType === 'internal' 
+                            ? 'bg-purple-50 text-purple-800 border-purple-200' 
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200/80'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${examType === 'internal' ? 'bg-purple-500' : 'bg-emerald-500'}`} />
+                          Canlı Bütçe Senkronu
+                        </span>
                       </div>
-                    ) : (
-                      /* Section 2B: Kurum İçi Optik Deneme Konfigürasyonu */
-                      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-purple-200 shadow-xs space-y-4 hover:border-purple-300 transition-colors">
-                        <div className="flex items-center justify-between border-b border-purple-100 pb-3 flex-wrap gap-2">
-                          <div className="flex items-center space-x-2">
-                            <div className="p-1.5 bg-purple-100 text-purple-700 rounded-lg">
-                              <QrCode className="h-4 w-4" />
+
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-[#737265] uppercase tracking-wider mb-1.5">
+                              {examType === 'internal' ? 'Kişi Başı Baskı/Optik Maliyeti' : 'Kişi Başı Kitapçık Ücreti'}
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#737265] text-sm font-bold">₺</span>
+                              <input 
+                                type="number" 
+                                step="0.5"
+                                value={examPublisherFee || ''} 
+                                onChange={(e) => setExamPublisherFee(parseFloat(e.target.value) || 0)}
+                                className="w-full bg-[#fcfbf7] hover:bg-white focus:bg-white border border-[#e6e2d3] rounded-xl pl-8 pr-3.5 py-2 text-sm font-bold text-[#2d2c25] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all shadow-2xs"
+                                placeholder="0,00"
+                              />
                             </div>
-                            <h4 className="text-xs sm:text-sm font-bold text-purple-950 uppercase tracking-wider">
-                              Kurum İçi Optik Ölçme Ayarları
-                            </h4>
                           </div>
-                          <span className="text-[10px] sm:text-[11px] bg-purple-50 text-purple-800 font-bold px-2.5 py-0.5 rounded-full border border-purple-200 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
-                            Toplam {totalExamQuestions} Soru
-                          </span>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-[#737265] uppercase tracking-wider mb-1.5">
+                              {examType === 'internal' ? 'Toplam Baskı / Öğrenci Miktarı' : 'Toplam Sipariş Miktarı'}
+                            </label>
+                            <div className="relative">
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={examOrderQuantity || ''} 
+                                onChange={(e) => setExamOrderQuantity(parseInt(e.target.value) || 0)}
+                                className="w-full bg-[#fcfbf7] hover:bg-white focus:bg-white border border-[#e6e2d3] rounded-xl pl-9 pr-3.5 py-2 text-sm font-bold text-[#2d2c25] focus:ring-2 focus:ring-[#5a5a40]/20 focus:border-[#5a5a40] transition-all shadow-2xs"
+                                placeholder="Adet"
+                              />
+                              <Package className="w-4 h-4 text-[#8e8d82] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="space-y-4">
-                          {/* Parametreler: Şık Sayısı, Ceza Katsayısı, Düzen */}
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                            <div className="bg-[#fcfbf7] p-2.5 rounded-xl border border-[#e6e2d3]">
-                              <label className="block text-[10px] font-bold text-[#737265] uppercase tracking-wider mb-1">
-                                Şık Sayısı
-                              </label>
-                              <div className="grid grid-cols-2 gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => setExamOptionsCount(4)}
-                                  className={`py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                                    examOptionsCount === 4
-                                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
-                                      : 'bg-white text-[#737265] border-[#e6e2d3] hover:bg-gray-50'
-                                  }`}
-                                >
-                                  4 Şık (A-D)
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setExamOptionsCount(5)}
-                                  className={`py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                                    examOptionsCount === 5
-                                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
-                                      : 'bg-white text-[#737265] border-[#e6e2d3] hover:bg-gray-50'
-                                  }`}
-                                >
-                                  5 Şık (A-E)
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="bg-[#fcfbf7] p-2.5 rounded-xl border border-[#e6e2d3]">
-                              <label className="block text-[10px] font-bold text-[#737265] uppercase tracking-wider mb-1">
-                                Yanlış Katsayısı
-                              </label>
-                              <select
-                                value={examPenalty}
-                                onChange={(e) => setExamPenalty(parseFloat(e.target.value))}
-                                className="w-full bg-white border border-[#e6e2d3] rounded-lg px-2 py-1 text-xs font-bold text-[#2d2c25] focus:ring-1 focus:ring-purple-600 focus:border-purple-600"
-                              >
-                                <option value={3}>3 Yanlış 1 Doğru (LGS)</option>
-                                <option value={4}>4 Yanlış 1 Doğru (TYT)</option>
-                                <option value={0}>Yanlış Götürmez (0)</option>
-                              </select>
-                            </div>
-
-                            <div className="bg-[#fcfbf7] p-2.5 rounded-xl border border-[#e6e2d3]">
-                              <label className="block text-[10px] font-bold text-[#737265] uppercase tracking-wider mb-1">
-                                Optik Form Düzeni
-                              </label>
-                              <div className="grid grid-cols-2 gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => setExamLayoutType('split')}
-                                  className={`py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                                    examLayoutType === 'split'
-                                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
-                                      : 'bg-white text-[#737265] border-[#e6e2d3] hover:bg-gray-50'
-                                  }`}
-                                  title="Sözel (50) ve Sayısal (40) iki ayrı blok"
-                                >
-                                  Ayrık (Split)
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setExamLayoutType('standard')}
-                                  className={`py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                                    examLayoutType === 'standard'
-                                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
-                                      : 'bg-white text-[#737265] border-[#e6e2d3] hover:bg-gray-50'
-                                  }`}
-                                  title="Standart tek parça optik blok"
-                                >
-                                  Standart
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Ders ve Soru Dağılımı Yönetimi */}
-                          <div className="bg-[#fcfbf7] p-3 rounded-xl border border-[#e6e2d3] space-y-2.5">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-[#43423b] flex items-center gap-1.5">
-                                <Layers className="w-3.5 h-3.5 text-purple-600" />
-                                Dersler ve Soru Dağılımı
-                              </span>
-                              <span className="text-[11px] font-semibold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-                                Toplam: <strong>{totalExamQuestions}</strong> soru
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
-                              {examSubjects.map((sub) => (
-                                <div key={sub.id} className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-xl border border-[#e6e2d3] gap-1.5 shadow-2xs">
-                                  <div className="min-w-0 flex-1">
-                                    <span className="text-xs font-bold text-[#2d2c25] truncate block" title={sub.name}>
-                                      {sub.name}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max="100"
-                                      value={sub.count || ''}
-                                      onChange={(e) => handleUpdateSubjectCount(sub.id, parseInt(e.target.value) || 0)}
-                                      className="w-12 bg-[#fcfbf7] border border-[#e6e2d3] rounded-lg px-1.5 py-0.5 text-xs font-bold text-center text-[#2d2c25]"
-                                      title="Soru Sayısı"
-                                    />
+                        {/* Sınıf Seviyelerine Göre Sipariş/Baskı Detayı */}
+                        <div className="bg-[#fcfbf7] p-3.5 sm:p-4 rounded-xl border border-[#e6e2d3]/80 space-y-3">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-xs font-bold text-[#43423b] flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5 text-[#737265]" />
+                              {examType === 'internal' ? 'Kademelere Göre Baskı Adetleri' : 'Sınıf Seviyelerine Göre Sipariş Adetleri'}
+                            </span>
+                            {(() => {
+                              const sum = (Object.values(examGradeOrderQuantities) as number[]).reduce((acc, val) => acc + (val || 0), 0);
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-semibold text-[#737265] bg-white px-2 py-0.5 rounded-md border border-[#e6e2d3]">
+                                    Sınıf Toplamı: <strong className="text-[#2d2c25]">{sum}</strong> adet
+                                  </span>
+                                  {sum !== examOrderQuantity && sum > 0 && (
                                     <button
                                       type="button"
-                                      onClick={() => handleRemoveSubject(sub.id)}
-                                      className="text-gray-400 hover:text-red-600 p-0.5 rounded-md hover:bg-red-50 transition-colors"
-                                      title="Dersi Kaldır"
+                                      onClick={() => setExamOrderQuantity(sum)}
+                                      className="text-[10px] font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                                      title="Baskı/sipariş adedini sınıf toplamına eşitle"
                                     >
-                                      <X className="w-3.5 h-3.5" />
+                                      Siparişe Eşitle
                                     </button>
-                                  </div>
+                                  )}
                                 </div>
-                              ))}
-                            </div>
-
-                            {/* Yeni Ders Ekleme */}
-                            <div className="flex items-center gap-2 pt-1 border-t border-[#e6e2d3]/60">
-                              <input
-                                type="text"
-                                value={newSubName}
-                                onChange={(e) => setNewSubName(e.target.value)}
-                                placeholder="Yeni ders adı..."
-                                className="flex-1 bg-white border border-[#e6e2d3] rounded-lg px-2.5 py-1 text-xs text-[#2d2c25] font-semibold"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleAddSubject();
-                                  }
-                                }}
-                              />
-                              <input
-                                type="number"
-                                min="1"
-                                max="100"
-                                value={newSubCount || ''}
-                                onChange={(e) => setNewSubCount(parseInt(e.target.value) || 10)}
-                                placeholder="Soru"
-                                className="w-16 bg-white border border-[#e6e2d3] rounded-lg px-2 py-1 text-xs text-[#2d2c25] font-bold text-center"
-                              />
-                              <button
-                                type="button"
-                                onClick={handleAddSubject}
-                                className="px-3 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                Ekle
-                              </button>
-                            </div>
+                              );
+                            })()}
                           </div>
 
-                          {/* Cevap Anahtarları Tanımlama & Düzenleme Butonu */}
-                          <div className="bg-gradient-to-br from-purple-50/90 to-indigo-50/70 p-3.5 sm:p-4 rounded-xl border border-purple-200/80 space-y-2.5 shadow-2xs">
-                            <div className="flex items-center justify-between flex-wrap gap-2">
-                              <div className="flex items-center gap-2">
-                                <div className="p-1.5 bg-purple-600 text-white rounded-lg">
-                                  <Key className="w-4 h-4" />
-                                </div>
-                                <div>
-                                  <span className="font-bold text-xs text-purple-950 block">
-                                    Cevap Anahtarları (A / B / C / D)
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {availableGradeLevels.map(lvl => {
+                              const qty = examGradeOrderQuantities[lvl] || 0;
+                              return (
+                                <div key={lvl} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-[#e6e2d3] gap-2 shadow-2xs">
+                                  <span className="text-xs font-bold text-[#43423b] truncate">
+                                    {lvl === 'Diğer' ? 'Diğer' : `${lvl}. Sınıf`}
                                   </span>
-                                  <span className="text-[11px] text-purple-800/80">
-                                    Optik form ve kamera taramasında doğru cevap eşleşmesi
-                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={qty || ''}
+                                    onChange={(e) => handleGradeOrderQuantityChange(lvl, parseInt(e.target.value) || 0)}
+                                    className="w-16 bg-[#fcfbf7] border border-[#e6e2d3] rounded-lg px-2 py-1 text-xs font-bold text-[#2d2c25] text-center focus:ring-1 focus:ring-[#5a5a40] focus:border-[#5a5a40]"
+                                    placeholder="0"
+                                  />
                                 </div>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveKeyBooklet('A');
-                                  setShowKeyModal(true);
-                                }}
-                                className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                              >
-                                <Key className="w-3.5 h-3.5" />
-                                Cevap Anahtarını Düzenle
-                              </button>
-                            </div>
-
-                            {/* Kitapçık Durum Rozetleri */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
-                              {['A', 'B', 'C', 'D'].map(bk => {
-                                const filledCount = (examKeys[bk] || []).filter(Boolean).length;
-                                const isReady = filledCount > 0 && filledCount >= totalExamQuestions;
-                                return (
-                                  <div
-                                    key={bk}
-                                    onClick={() => {
-                                      setActiveKeyBooklet(bk);
-                                      setShowKeyModal(true);
-                                    }}
-                                    className={`p-2 rounded-lg border text-left cursor-pointer transition-all ${
-                                      filledCount > 0
-                                        ? 'bg-white border-purple-200 hover:border-purple-400'
-                                        : 'bg-white/60 border-dashed border-gray-300 hover:border-gray-400'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between mb-0.5">
-                                      <span className="text-xs font-black text-purple-900">{bk} Kitapçığı</span>
-                                      {isReady ? (
-                                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                      ) : filledCount > 0 ? (
-                                        <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1 rounded">Eksik</span>
-                                      ) : (
-                                        <span className="text-[9px] text-gray-400">Boş</span>
-                                      )}
-                                    </div>
-                                    <div className="text-[10px] text-purple-950/70 font-semibold font-mono">
-                                      {filledCount} / {totalExamQuestions} Soru
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                              );
+                            })}
+                            {availableGradeLevels.length === 0 && (
+                              <span className="text-xs text-[#8e8d82] italic col-span-2 py-2 text-center">
+                                Sistemde henüz sınıf bulunmamaktadır.
+                              </span>
+                            )}
                           </div>
-
                         </div>
+
+                        {/* Canlı Hesaplanan Gider Özeti Kartı */}
+                        {examPublisherFee > 0 && examOrderQuantity > 0 ? (
+                          <div className={`p-3.5 sm:p-4 rounded-xl border text-xs space-y-1.5 shadow-2xs ${
+                            examType === 'internal'
+                              ? 'bg-gradient-to-br from-purple-50/90 to-indigo-50/70 border-purple-200/80 text-purple-950'
+                              : 'bg-gradient-to-br from-emerald-50/90 to-teal-50/70 border-emerald-200/80 text-emerald-950'
+                          }`}>
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <span className="font-bold flex items-center gap-1.5">
+                                <Sparkles className={`w-4 h-4 shrink-0 ${examType === 'internal' ? 'text-purple-600' : 'text-emerald-600'}`} />
+                                Otomatik Gider Senkronu Aktif
+                              </span>
+                              <span className={`text-sm font-black bg-white/80 px-2.5 py-0.5 rounded-lg border ${
+                                examType === 'internal' ? 'text-purple-800 border-purple-200' : 'text-emerald-800 border-emerald-200'
+                              }`}>
+                                ₺{(examPublisherFee * examOrderQuantity).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <p className={`leading-relaxed text-[11px] ${examType === 'internal' ? 'text-purple-800/80' : 'text-emerald-800/80'}`}>
+                              Sınavı kaydettiğinizde, bütçede harcama sütununa {examOrderQuantity} adet × ₺{examPublisherFee} = <strong>₺{(examPublisherFee * examOrderQuantity).toLocaleString('tr-TR')}</strong> tutarında <strong>"{examName || 'Sınav'} {examType === 'internal' ? 'Baskı Gideri' : 'Yayın Ücreti'}"</strong> kalemi işlenecektir.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-[#8e8d82] leading-normal italic bg-[#fcfbf7] p-2.5 rounded-lg border border-[#e6e2d3]/50">
+                            💡 Kişi başı {examType === 'internal' ? 'baskı/maliyet ücreti' : 'kitapçık ücreti'} ve miktar girildiğinde toplam tutar Bütçe Harcamalar tablosuna otomatik olarak gider olarak yansıtılır.
+                          </p>
+                        )}
                       </div>
-                    )}
+                    </div>
 
                   </div>
 
-                {/* COLUMN 2: CLASSES & HALLS */}
+                {/* COLUMN 2: OPTICAL SHORTCUT, CLASSES & HALLS */}
                 <div className="space-y-5 sm:space-y-6">
+                    
+                    {/* Section 2B: Kurum İçi Optik Deneme Kısayolu (Sağ Taraf - Temiz ve Hızlı Bağlantı) */}
+                    {examType === 'internal' && (
+                      <div className="bg-gradient-to-br from-purple-50/80 via-indigo-50/40 to-white rounded-2xl p-4 sm:p-5 border border-purple-200/90 shadow-xs space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-purple-100 pb-3 flex-wrap gap-2">
+                          <div className="flex items-center space-x-2">
+                            <div className="p-2 bg-purple-600 text-white rounded-xl shadow-2xs">
+                              <Printer className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h4 className="text-xs sm:text-sm font-bold text-purple-950 uppercase tracking-wider">
+                                Cevap Anahtarı & Optik Form Baskısı
+                              </h4>
+                              <p className="text-[11px] text-purple-800/80">
+                                Karekodlu A4 optik form çıktısı, ders dağılımı ve cevap anahtarları
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold bg-purple-100 text-purple-900 px-2.5 py-0.5 rounded-full border border-purple-200">
+                            Özel Baskı Stüdyosu
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 bg-white/95 rounded-xl border border-purple-100/90 space-y-3 shadow-2xs">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <QrCode className="w-4 h-4 text-purple-600 shrink-0" />
+                              <span className="text-xs font-bold text-[#2d2c25]">
+                                {examName || 'Kurum İçi Deneme Sınavı'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                              Format: {examFormat.toUpperCase()} ({totalExamQuestions} Soru)
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-[#6e705b] leading-relaxed">
+                            Bu sınav için ders ve soru dağılımını yapılandırmak, A/B/C/D cevap anahtarlarını girmek ve her öğrenciye özel karekodlu A4 optik form çıktısı almak için Cevap & Form Baskı menüsünü kullanabilirsiniz.
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (editingExam) {
+                                const newName = (examName || editingExam.name).trim();
+                                const updated = state.exams.map(e => e.id === editingExam.id ? {
+                                  ...e,
+                                  examType: 'internal' as const,
+                                  no: examNo,
+                                  date: formatDateShort(examDate) || examDate.trim(),
+                                  name: newName,
+                                  publisher: examPublisher.trim() || 'Kurum İçi',
+                                  publisherFee: examPublisherFee || 0,
+                                  orderQuantity: examOrderQuantity || 0,
+                                  gradeOrderQuantities: examGradeOrderQuantities || {},
+                                  participatingClasses: selectedClasses,
+                                  assignedHalls: selectedHalls,
+                                  format: examFormat,
+                                  optionsCount: examOptionsCount,
+                                  penalty: examPenalty,
+                                  layoutType: examLayoutType,
+                                  subjects: examSubjects,
+                                  keys: examKeys
+                                } : e);
+                                setExams(updated);
+                                sessionStorage.setItem('akademi_selected_keys_exam_id', editingExam.id);
+                                (window as any).__keysPrintSetExamId?.(editingExam.id);
+                              }
+                              setEditingExam(null);
+                              if ((window as any).__navigateToTab) {
+                                (window as any).__navigateToTab('keys_print');
+                              }
+                            }}
+                            className="w-full py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 active:scale-[0.99] text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Printer className="w-4 h-4" />
+                            <span>Cevap & Optik Baskı Menüsüne Git (Bu Sınavı Aç)</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Section 3: Katılacak Sınıflar (Öğrenci Kayıtları Entegrasyonu) */}
                     <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#e6e2d3] shadow-xs space-y-4 hover:border-[#d4d0be] transition-colors">

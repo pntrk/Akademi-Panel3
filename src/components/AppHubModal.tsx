@@ -151,7 +151,7 @@ export const AppHubModal: React.FC<AppHubModalProps> = ({ isOpen, onClose }) => 
             {isInstalled ? (
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
-                <span>Uygulama cihazınızda zaten yüklü ve aktif!</span>
+                <span>Uygulama cihazınızda zaten ana ekranda / tam ekran modunda yüklü!</span>
               </div>
             ) : canPromptDirectly ? (
               <button
@@ -159,27 +159,56 @@ export const AppHubModal: React.FC<AppHubModalProps> = ({ isOpen, onClose }) => 
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.99] cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Cihazıma Hemen Yükle</span>
+                <span>Cihazıma Hemen Yükle (Doğrudan PWA)</span>
               </button>
-            ) : isIOS ? (
-              <div className="space-y-2 text-xs text-slate-300 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-                <p className="font-semibold text-amber-300 flex items-center gap-1">
-                  <Smartphone className="w-3.5 h-3.5" /> iOS Kurulum Rehberi:
-                </p>
-                <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-300">
-                  <li>Safari menüsündeki <span className="font-bold text-white bg-slate-800 px-1.5 py-0.5 rounded"><Share className="w-3 h-3 inline text-sky-400" /> Paylaş</span> ikonuna dokunun.</li>
-                  <li>Açılan listeden <span className="font-bold text-white bg-slate-800 px-1.5 py-0.5 rounded"><PlusSquare className="w-3 h-3 inline text-emerald-400" /> Ana Ekrana Ekle</span> seçeneğini tıklayın.</li>
-                </ol>
+            ) : null}
+
+            {/* Comprehensive iPhone / iOS Safari Guide */}
+            <div className="space-y-3 bg-gradient-to-br from-amber-500/10 via-slate-900 to-slate-950 p-3.5 rounded-2xl border border-amber-500/30 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-bold text-amber-300 text-xs">
+                  <Smartphone className="w-4 h-4 text-amber-400" />
+                  <span>iPhone & iPad Kurulumu (Safari'den Kurtulun)</span>
+                </div>
+                <span className="text-[10px] font-bold bg-amber-400/20 text-amber-200 px-2 py-0.5 rounded-full border border-amber-400/30">
+                  10 Saniyelik İşlem
+                </span>
               </div>
-            ) : (
-              <button
-                onClick={handleInstallClick}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 transition-all cursor-pointer"
-              >
-                <Monitor className="w-4 h-4 text-sky-400" />
-                <span>Masaüstüne Yükle (Tarayıcı İslemi)</span>
-              </button>
-            )}
+
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Apple politikaları gereği iPhone'lar web sitelerini arka planda otomatik yüklemez. Ancak Safari linkinde kalmak <strong>zorunda değilsiniz!</strong> Sadece 1 kez ana ekrana ekleyerek gerçek bir yerel uygulama yapabilirsiniz:
+              </p>
+
+              <div className="space-y-2 bg-slate-950/80 p-3 rounded-xl border border-slate-800 text-[11px] text-slate-200">
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 border border-sky-500/40 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
+                  <div>
+                    Safari'nin en altındaki <span className="font-bold text-white bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 inline-flex items-center gap-1"><Share className="w-3 h-3 text-sky-400 inline" /> Paylaş</span> butonuna dokunun.
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
+                  <div>
+                    Açılan menüyü aşağı kaydırıp <span className="font-bold text-white bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 inline-flex items-center gap-1"><PlusSquare className="w-3 h-3 text-emerald-400 inline" /> Ana Ekrana Ekle</span> seçeneğini tıklayın.
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
+                  <div>
+                    Sağ üst köşedeki <strong>"Ekle"</strong> butonuna basın.
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/25 rounded-xl text-[11px] text-emerald-200/90 flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>
+                  <strong>Artık hazır:</strong> Uygulama ana ekranınıza logosuyla gelir. Safari adres çubuğu olmadan tam ekran mobil uygulama modunda doğrudan açılır!
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Vercel Live Link Section */}

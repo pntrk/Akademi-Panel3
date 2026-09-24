@@ -117,7 +117,7 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
         </svg>
       </div>
 
-      {/* Sınav ve Kurum Üst Başlığı */}
+      {/* Sınav ve Kurum Üst Başlığı (Köşe çapalardan bağımsız, 16.5mm'den başlar) */}
       <div
         className="absolute border-[2px] print-border bg-gray-50 flex items-center justify-between px-3 py-1"
         style={{ left: `${renderOMR.header.x}mm`, top: `${renderOMR.header.y}mm`, width: `${renderOMR.header.w}mm`, height: `${renderOMR.header.h}mm` }}
@@ -139,16 +139,16 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
         className="absolute border-[2px] print-border bg-white"
         style={{ left: `${renderOMR.infoBox.x}mm`, top: `${renderOMR.infoBox.y}mm`, width: `${renderOMR.infoBox.w}mm`, height: `${renderOMR.infoBox.h}mm` }}
       >
-        <div className="flex p-3 gap-3 h-full items-center justify-between relative">
-          <div className="flex-1 flex flex-col justify-center gap-1 pl-3 min-w-0">
+        <div className="flex p-2.5 gap-3 h-full items-center justify-between relative">
+          <div className="flex-1 flex flex-col justify-center gap-1 pl-2 min-w-0">
             <div 
-              className="font-black tracking-tight text-slate-900 truncate max-w-[100mm]"
+              className="font-black tracking-tight text-slate-900 truncate max-w-[85mm]"
               style={textFit.style}
               title={studentName}
             >
               {studentName}
             </div>
-            <div className="flex items-center gap-4 font-bold text-slate-600 mt-0.5" style={{ fontSize: textFit.metaFontSize }}>
+            <div className="flex items-center gap-3.5 font-bold text-slate-600 mt-0.5" style={{ fontSize: textFit.metaFontSize }}>
               <div>ÖĞRENCİ NO: <span className="text-black font-mono font-bold" style={{ fontSize: textFit.noFontSize }}>{studentNo}</span></div>
               <div>SINIF / ŞUBE: <span className="text-black font-bold" style={{ fontSize: textFit.classFontSize }}>{studentClass}</span></div>
             </div>
@@ -157,13 +157,13 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
             </div>
           </div>
 
-          {/* Kitapçık Türü (Öğrencinin kodlayabilmesi için hazır işaretli basılmaz, boş bırakılır) */}
-          <div className="absolute text-[8px] font-bold text-center w-[30mm] -translate-x-1/2" style={{ left: '145.5mm', top: '7.5mm' }}>
+          {/* Kitapçık Türü */}
+          <div className="absolute text-[8px] font-bold text-center w-[30mm] -translate-x-1/2" style={{ left: `${renderOMR.infoBox.booklet.startX + 10.5}mm`, top: '5.5mm' }}>
             KİTAPÇIK TÜRÜ
           </div>
           {["A", "B", "C", "D"].map((b, idx) => {
-            const bx = 135 + (idx * 7);
-            const by = 18;
+            const bx = renderOMR.infoBox.booklet.startX + (idx * renderOMR.infoBox.booklet.gap);
+            const by = renderOMR.infoBox.booklet.y;
             return (
               <div
                 key={b}
@@ -175,14 +175,22 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
             );
           })}
 
-          {/* Öğrenci Karekodu (Otomatik Eşleşme İçin) */}
-          <div className="absolute right-[5mm] top-[5mm] w-[25mm] h-[25mm] flex flex-col items-center justify-center border-2 border-black p-1 bg-white">
+          {/* Öğrenci Karekodu */}
+          <div 
+            className="absolute border-2 border-slate-900 p-0.5 bg-white flex flex-col items-center justify-center"
+            style={{ 
+              left: `${renderOMR.infoBox.qrCode.x}mm`, 
+              top: `${renderOMR.infoBox.qrCode.y}mm`, 
+              width: `${renderOMR.infoBox.qrCode.size}mm`, 
+              height: `${renderOMR.infoBox.qrCode.size}mm` 
+            }}
+          >
             <LocalQRCode data={qrData} size={150} />
           </div>
         </div>
       </div>
 
-      {/* Soru ve Cevap Optik Kabarcık Alanı */}
+      {/* Soru ve Cevap Optik Kabarcık Alanı (Alt köşe çapalarla çakışmaz; 276mm'de biter) */}
       <div
         className="absolute border-[2px] print-border bg-white"
         style={{ left: `${renderOMR.qBox.x}mm`, top: `${renderOMR.qBox.y}mm`, width: `${renderOMR.qBox.w}mm`, height: `${finalQBoxH}mm` }}
@@ -192,25 +200,25 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
           <>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
-              style={{ left: '1mm', width: '45.5mm' }}
+              style={{ left: '0.8mm', width: `${renderOMR.questions.colW - 1.6}mm` }}
             >
               {isTyt ? '1. TÜRKÇE TESTİ' : isAyt ? '1. EDEBİYAT - SOS-1' : '1. TEST ALANI'}
             </div>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
-              style={{ left: '48.5mm', width: '45.5mm' }}
+              style={{ left: `${renderOMR.questions.colW + 0.8}mm`, width: `${renderOMR.questions.colW - 1.6}mm` }}
             >
               {isTyt ? '2. SOSYAL BİLİMLER' : isAyt ? '2. SOSYAL BİLİMLER-2' : '2. TEST ALANI'}
             </div>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
-              style={{ left: '96mm', width: '45.5mm' }}
+              style={{ left: `${(renderOMR.questions.colW * 2) + 0.8}mm`, width: `${renderOMR.questions.colW - 1.6}mm` }}
             >
               {isTyt ? '3. TEMEL MATEMATİK' : isAyt ? '3. MATEMATİK TESTİ' : '3. TEST ALANI'}
             </div>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
-              style={{ left: '143.5mm', width: '45.5mm' }}
+              style={{ left: `${(renderOMR.questions.colW * 3) + 0.8}mm`, width: `${renderOMR.questions.colW - 1.6}mm` }}
             >
               {isTyt ? '4. FEN BİLİMLERİ' : isAyt ? '4. FEN BİLİMLERİ' : '4. TEST ALANI'}
             </div>
@@ -219,13 +227,13 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
           <>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[8px] tracking-wider uppercase border print-border rounded-sm"
-              style={{ left: '1mm', width: '92.5mm' }}
+              style={{ left: '0.8mm', width: `${(renderOMR.questions.colW * 2) - 1.6}mm` }}
             >
               1. BÖLÜM (SÖZEL ALAN)
             </div>
             <div
               className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[8px] tracking-wider uppercase border print-border rounded-sm"
-              style={{ left: '96.5mm', width: '92.5mm' }}
+              style={{ left: `${(renderOMR.questions.colW * 2) + 0.8}mm`, width: `${(renderOMR.questions.colW * 2) - 1.6}mm` }}
             >
               2. BÖLÜM (SAYISAL ALAN)
             </div>
@@ -235,21 +243,21 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
         {/* Ana Seksiyon Ayraçları */}
         {hasFourSections ? (
           <>
-            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: '47.5mm' }} />
-            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: '95mm' }} />
-            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: '142.5mm' }} />
+            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: `${renderOMR.questions.colW}mm` }} />
+            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: `${renderOMR.questions.colW * 2}mm` }} />
+            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: `${renderOMR.questions.colW * 3}mm` }} />
           </>
         ) : isSplit ? (
           <>
-            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: '95mm' }} />
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '47.5mm', top: '7.5mm', bottom: '1mm' }} />
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '142.5mm', top: '7.5mm', bottom: '1mm' }} />
+            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: `${renderOMR.questions.colW * 2}mm` }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW}mm`, top: '7.5mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW * 3}mm`, top: '7.5mm', bottom: '1mm' }} />
           </>
         ) : (
           <>
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '47.5mm', top: '1mm', bottom: '1mm' }} />
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '95mm', top: '1mm', bottom: '1mm' }} />
-            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '142.5mm', top: '1mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW}mm`, top: '1mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW * 2}mm`, top: '1mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: `${renderOMR.questions.colW * 3}mm`, top: '1mm', bottom: '1mm' }} />
           </>
         )}
 

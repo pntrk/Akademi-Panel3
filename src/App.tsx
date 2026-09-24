@@ -280,15 +280,10 @@ export default function App() {
             </div>
             <h1 className="text-3xl font-serif font-bold text-[#5a5a40] tracking-tight italic">AkademiPanel</h1>
             <p className="text-[#8e8d82] text-xs font-semibold mt-1">Ölçme ve Değerlendirme Yönetim Sistemi</p>
-            
-            <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[11px] font-semibold text-emerald-800">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Firebase Bulut Bağlantısı Aktif (europe-west2)
-            </div>
           </div>
 
           {/* Primary Action: Real Google Sign-in */}
-          <div className="space-y-3 mb-5">
+          <div className="space-y-3">
             <button
               onClick={handleLogin}
               disabled={isLoggingIn}
@@ -353,44 +348,6 @@ export default function App() {
               </div>
             )}
           </div>
-
-          {/* Quick Access / Offline Preview Dropdown */}
-          <div className="pt-2 border-t border-gray-100">
-            <button
-              onClick={() => setShowDemoOptions(!showDemoOptions)}
-              className="w-full flex items-center justify-between py-2 text-xs font-semibold text-[#8e8d82] hover:text-[#5a5a40] transition-colors cursor-pointer"
-            >
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#B08D57]" />
-                Hızlı Test & Çevrim İçi/Dışı Seçenekleri
-              </span>
-              {showDemoOptions ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-
-            {showDemoOptions && (
-              <div className="space-y-2 mt-2 pt-2 border-t border-dashed border-gray-200 animate-fade-in">
-                <button
-                  onClick={() => handlePreviewLogin('kirklareliataturkortaokulu@gmail.com', 'Kırklareli Atatürk Ortaokulu (Yönetici)')}
-                  className="w-full flex items-center justify-center gap-2 bg-[#B08D57] hover:bg-[#9a7b4a] text-white py-2.5 px-3 rounded-xl font-bold text-xs transition-all shadow-sm cursor-pointer"
-                >
-                  <ShieldCheck className="w-4 h-4 text-amber-200" />
-                  Yönetici Olarak Başla (Tüm Modüller Açık)
-                </button>
-
-                <button
-                  onClick={() => handlePreviewLogin('ogretmen@ataturkortaokulu.meb.k12.tr', 'Öğretmen Hesabı')}
-                  className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-2.5 px-3 rounded-xl font-bold text-xs transition-all shadow-sm cursor-pointer"
-                >
-                  <UserCheck className="w-4 h-4 text-blue-300" />
-                  Öğretmen Olarak Başla (Sonuçlar, Analiz & Arena)
-                </button>
-              </div>
-            )}
-          </div>
-
-          <p className="mt-4 text-[11px] text-[#8e8d82] leading-relaxed">
-            Firebase Firestore & Authentication (Google Girişi) entegrasyonu başarıyla kurulmuştur. Verileriniz eş zamanlı olarak bulut üzerinde korunmaktadır.
-          </p>
         </div>
       </div>
     );
