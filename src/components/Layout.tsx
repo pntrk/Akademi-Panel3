@@ -28,14 +28,102 @@ interface LayoutProps {
 }
 
 const navItems = [
-  { id: 'exams', label: 'Sınav Takvimi', shortLabel: 'Sınavlar', icon: Calendar, colorClass: 'text-rose-400', hoverColorClass: 'group-hover:text-rose-400', activeClass: 'bg-rose-500/15 border-rose-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
-  { id: 'students', label: 'Öğrenciler & Kayıt', shortLabel: 'Öğrenci', icon: Users, colorClass: 'text-indigo-400', hoverColorClass: 'group-hover:text-indigo-400', activeClass: 'bg-indigo-500/15 border-indigo-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
-  { id: 'halls', label: 'Salonlar & Yerleşim', shortLabel: 'Salonlar', icon: LayoutTemplate, colorClass: 'text-sky-400', hoverColorClass: 'group-hover:text-sky-400', activeClass: 'bg-sky-500/15 border-sky-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
-  { id: 'keys_print', label: 'Cevap & Form Baskı', shortLabel: 'Baskı', icon: Printer, colorClass: 'text-purple-400', hoverColorClass: 'group-hover:text-purple-400', activeClass: 'bg-purple-500/15 border-purple-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
-  { id: 'scan', label: 'Canlı Optik Tarama', shortLabel: 'Tarama', icon: Camera, colorClass: 'text-teal-400', hoverColorClass: 'group-hover:text-teal-400', activeClass: 'bg-teal-500/15 border-teal-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
-  { id: 'results', label: 'Sınav Sonuçları', shortLabel: 'Sonuçlar', icon: BarChart2, colorClass: 'text-emerald-400', hoverColorClass: 'group-hover:text-emerald-400', activeClass: 'bg-emerald-500/15 border-emerald-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
-  { id: 'league', label: 'Akademi Arena', shortLabel: 'Arena', icon: Trophy, colorClass: 'text-yellow-400', hoverColorClass: 'group-hover:text-yellow-400', activeClass: 'bg-yellow-500/15 border-yellow-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
-  { id: 'budget', label: 'Bütçe & Finans', shortLabel: 'Bütçe', icon: DollarSign, colorClass: 'text-cyan-400', hoverColorClass: 'group-hover:text-cyan-400', activeClass: 'bg-cyan-500/15 border-cyan-400 border-l-2 pl-3.5 text-white font-semibold shadow-sm' },
+  { 
+    id: 'exams', 
+    label: 'Sınav Takvimi', 
+    shortLabel: 'Sınavlar', 
+    subtitle: 'Deneme Planı & Takvim',
+    icon: Calendar, 
+    iconBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30 group-hover:bg-rose-500 group-hover:text-white',
+    activeIconBg: 'bg-rose-500 text-white shadow-md shadow-rose-500/30',
+    colorClass: 'text-rose-400', 
+    hoverBorder: 'hover:border-rose-500/40',
+    activeClass: 'bg-gradient-to-r from-rose-500/20 via-rose-500/10 to-transparent border-rose-500/50 text-white shadow-xs' 
+  },
+  { 
+    id: 'students', 
+    label: 'Öğrenciler & Kayıt', 
+    shortLabel: 'Öğrenci', 
+    subtitle: 'e-Okul & Sınıf Kütüğü',
+    icon: Users, 
+    iconBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30 group-hover:bg-indigo-500 group-hover:text-white',
+    activeIconBg: 'bg-indigo-500 text-white shadow-md shadow-indigo-500/30',
+    colorClass: 'text-indigo-400', 
+    hoverBorder: 'hover:border-indigo-500/40',
+    activeClass: 'bg-gradient-to-r from-indigo-500/20 via-indigo-500/10 to-transparent border-indigo-500/50 text-white shadow-xs' 
+  },
+  { 
+    id: 'halls', 
+    label: 'Salonlar & Yerleşim', 
+    shortLabel: 'Salonlar', 
+    subtitle: 'Kelebek Dağıtım & Etiket',
+    icon: LayoutTemplate, 
+    iconBg: 'bg-sky-500/20 text-sky-300 border-sky-500/30 group-hover:bg-sky-500 group-hover:text-white',
+    activeIconBg: 'bg-sky-500 text-white shadow-md shadow-sky-500/30',
+    colorClass: 'text-sky-400', 
+    hoverBorder: 'hover:border-sky-500/40',
+    activeClass: 'bg-gradient-to-r from-sky-500/20 via-sky-500/10 to-transparent border-sky-500/50 text-white shadow-xs' 
+  },
+  { 
+    id: 'keys_print', 
+    label: 'Cevap & Form Baskı', 
+    shortLabel: 'Baskı', 
+    subtitle: 'A4 QR Optik & A-B-C-D',
+    icon: Printer, 
+    iconBg: 'bg-purple-500/20 text-purple-300 border-purple-500/30 group-hover:bg-purple-500 group-hover:text-white',
+    activeIconBg: 'bg-purple-600 text-white shadow-md shadow-purple-500/30',
+    colorClass: 'text-purple-400', 
+    hoverBorder: 'hover:border-purple-500/40',
+    activeClass: 'bg-gradient-to-r from-purple-500/20 via-purple-500/10 to-transparent border-purple-500/50 text-white shadow-xs' 
+  },
+  { 
+    id: 'scan', 
+    label: 'Canlı Optik Tarama', 
+    shortLabel: 'Tarama', 
+    subtitle: '0.1sn Kamera & PDF Okuma',
+    icon: Camera, 
+    iconBg: 'bg-teal-500/20 text-teal-300 border-teal-500/30 group-hover:bg-teal-500 group-hover:text-white',
+    activeIconBg: 'bg-teal-600 text-white shadow-md shadow-teal-500/30',
+    colorClass: 'text-teal-400', 
+    hoverBorder: 'hover:border-teal-500/40',
+    activeClass: 'bg-gradient-to-r from-teal-500/20 via-teal-500/10 to-transparent border-teal-500/50 text-white shadow-xs' 
+  },
+  { 
+    id: 'results', 
+    label: 'Sınav Sonuçları', 
+    shortLabel: 'Sonuçlar', 
+    subtitle: 'Karneler & Madde Analizi',
+    icon: BarChart2, 
+    iconBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 group-hover:bg-emerald-500 group-hover:text-white',
+    activeIconBg: 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30',
+    colorClass: 'text-emerald-400', 
+    hoverBorder: 'hover:border-emerald-500/40',
+    activeClass: 'bg-gradient-to-r from-emerald-500/20 via-emerald-500/10 to-transparent border-emerald-500/50 text-white shadow-xs' 
+  },
+  { 
+    id: 'league', 
+    label: 'Akademi Arena', 
+    shortLabel: 'Arena', 
+    subtitle: 'Lig Puanı & Takım Ligi',
+    icon: Trophy, 
+    iconBg: 'bg-amber-500/20 text-amber-300 border-amber-500/30 group-hover:bg-amber-500 group-hover:text-slate-950',
+    activeIconBg: 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 font-bold',
+    colorClass: 'text-amber-400', 
+    hoverBorder: 'hover:border-amber-500/40',
+    activeClass: 'bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border-amber-500/50 text-white shadow-xs' 
+  },
+  { 
+    id: 'budget', 
+    label: 'Bütçe & Finans', 
+    shortLabel: 'Bütçe', 
+    subtitle: 'Sınav Gelir-Gider Takibi',
+    icon: DollarSign, 
+    iconBg: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30 group-hover:bg-cyan-500 group-hover:text-white',
+    activeIconBg: 'bg-cyan-600 text-white shadow-md shadow-cyan-500/30',
+    colorClass: 'text-cyan-400', 
+    hoverBorder: 'hover:border-cyan-500/40',
+    activeClass: 'bg-gradient-to-r from-cyan-500/20 via-cyan-500/10 to-transparent border-cyan-500/50 text-white shadow-xs' 
+  },
 ];
 
 export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onLogout, currentUser: propUser }) => {
@@ -370,18 +458,18 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
               {/* Nasıl Çalışır? Banner */}
               <button 
                 onClick={() => { setIsGuideOpen(true); closeMobileMenu(); }} 
-                className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-purple-600/30 via-indigo-600/20 to-amber-500/20 hover:from-purple-600/40 border border-purple-500/40 text-white transition-all active:scale-[0.98] cursor-pointer shadow-sm"
+                className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-white transition-all active:scale-[0.98] cursor-pointer shadow-xs"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-amber-400 to-yellow-300 text-slate-950 flex items-center justify-center font-bold text-xs shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-amber-400/20 border border-amber-400/30 text-amber-300 flex items-center justify-center font-bold text-xs shrink-0">
                     <Zap className="w-3.5 h-3.5 fill-current" />
                   </div>
                   <div className="text-left min-w-0">
-                    <p className="text-xs font-black text-white leading-tight">Nasıl Çalışır? (9 Adım Rehberi)</p>
-                    <p className="text-[10px] text-white/60 truncate">Sınav, Kelebek, Optik & Lig Kullanımı</p>
+                    <p className="text-xs font-bold text-white leading-tight">Nasıl Çalışır?</p>
+                    <p className="text-[10px] text-white/50 truncate">Sınav, Kelebek & Optik Rehberi</p>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-amber-400 shrink-0" />
+                <ChevronRight className="w-4 h-4 text-white/40 shrink-0" />
               </button>
 
               {/* 2-Column Grid for Secondary Tools */}
@@ -506,23 +594,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
             {/* Quick Guide & How It Works Banner */}
             <button
               onClick={() => setIsGuideOpen(true)}
-              className="w-full mb-3 flex items-center justify-between p-2.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-purple-500/15 to-indigo-500/20 hover:from-amber-500/25 hover:via-purple-500/25 hover:to-indigo-500/30 border border-amber-500/30 hover:border-amber-400/50 text-white transition-all cursor-pointer shadow-sm active:scale-[0.98] group relative overflow-hidden"
-              title="AkademiPanel 9 Adımlı Kullanım & İş Akışı Rehberini Aç"
+              className="w-full mb-3 flex items-center justify-between p-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 hover:border-amber-400/40 text-white transition-all cursor-pointer shadow-xs active:scale-[0.98] group"
+              title="AkademiPanel Kullanım ve İş Akışı Rehberini Aç"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-amber-400/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-              <div className="flex items-center gap-2.5 min-w-0 relative z-10">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs font-bold">
-                  <Zap className="w-4 h-4 text-slate-950 fill-current" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-amber-400/20 border border-amber-400/30 text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-amber-400 group-hover:text-slate-950 transition-all font-bold">
+                  <Zap className="w-3.5 h-3.5 fill-current" />
                 </div>
                 <div className="text-left min-w-0">
-                  <div className="text-xs font-black text-white flex items-center gap-1.5 leading-tight">
-                    <span>Nasıl Çalışır?</span>
-                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded-md bg-amber-400 text-slate-950 shadow-xs uppercase tracking-wider">9 Adım</span>
-                  </div>
-                  <p className="text-[10px] text-white/70 font-medium truncate">Sınav, Kelebek, Optik & Lig Rehberi</p>
+                  <p className="text-xs font-bold text-white leading-tight">Nasıl Çalışır?</p>
+                  <p className="text-[10px] text-white/50 font-medium truncate">Sınav, Kelebek & Optik Rehberi</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-amber-400 group-hover:text-amber-300 group-hover:translate-x-0.5 transition-all shrink-0 ml-1 relative z-10" />
+              <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-amber-300 group-hover:translate-x-0.5 transition-all shrink-0 ml-1" />
             </button>
 
             {navItems.filter(item => isNavItemVisible(item.id)).map((item) => {
@@ -535,17 +619,41 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     closeMobileMenu();
                   }}
                   className={cn(
-                    "flex items-center w-full gap-3 px-3.5 py-2.5 rounded-xl text-left text-[0.875rem] font-medium transition-all cursor-pointer group",
+                    "w-full flex items-center justify-between p-2 rounded-xl text-left transition-all cursor-pointer group select-none border",
                     isActive 
-                      ? item.activeClass 
-                      : "text-white/70 hover:bg-white/5 hover:text-white"
+                      ? item.activeClass
+                      : cn("bg-white/[0.03] hover:bg-white/[0.08] text-white/75 hover:text-white border-white/5", item.hoverBorder)
                   )}
                 >
-                  <item.icon className={cn(
-                    "w-[19px] h-[19px] transition-transform duration-200 group-hover:scale-110", 
-                    isActive ? item.colorClass : cn("text-white/60", item.hoverColorClass)
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={cn(
+                      "w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200",
+                      isActive ? item.activeIconBg : item.iconBg
+                    )}>
+                      <item.icon className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={cn(
+                        "text-xs font-bold leading-tight truncate transition-colors",
+                        isActive ? "text-white" : "text-white/85 group-hover:text-white"
+                      )}>
+                        {item.label}
+                      </p>
+                      <p className={cn(
+                        "text-[9.5px] truncate transition-colors font-medium",
+                        isActive ? "text-white/80" : "text-white/40 group-hover:text-white/60"
+                      )}>
+                        {item.subtitle}
+                      </p>
+                    </div>
+                  </div>
+
+                  <ChevronRight className={cn(
+                    "w-3.5 h-3.5 shrink-0 transition-all duration-200 ml-1",
+                    isActive 
+                      ? cn("translate-x-0.5", item.colorClass) 
+                      : "text-white/20 group-hover:text-white/60 group-hover:translate-x-0.5"
                   )} />
-                  <span className={cn("transition-colors", isActive ? "text-white font-semibold" : "group-hover:text-white")}>{item.label}</span>
                 </button>
               );
             })}
