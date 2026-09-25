@@ -743,8 +743,8 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         const avgOthers = others.length > 0 ? others.reduce((s, x) => s + x.score, 0) / others.length : 0;
 
         const isMarkedCol = best && (
-          (best.score >= 10.0 && best.mean >= 15.0 && best.ratio >= 0.22 && (best.score - avgOthers >= 5.0)) ||
-          (best.score >= 20.0)
+          (best.score >= 12.0 && best.mean >= 15.0 && best.ratio >= 0.28 && (best.score - avgOthers >= 5.0)) ||
+          (best.score >= 22.0)
         );
 
         if (isMarkedCol) {
@@ -1290,7 +1290,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
     const omrToUse = (targetExam?.omrMap?.specs) ? { ...OMR_SPECS, ...targetExam.omrMap.specs } : OMR_SPECS;
     let mebiCodedBk: string | null = null;
     const scalePxPerMm = finalRotW / (omrToUse.paperW || 210);
-    const bubbleRadiusPx = (omrToUse.questions?.bubbleRadius || 1.75) * scalePxPerMm;
+    const bubbleRadiusPx = (omrToUse.questions?.bubbleRadius || 1.6) * scalePxPerMm;
     const bookletRadiusPx = 2.4 * scalePxPerMm;
 
     // 1. Kitapçık Türü Tespiti (A - B - C - D) - Sınavın omr_map haritasından veya standart şablondan
