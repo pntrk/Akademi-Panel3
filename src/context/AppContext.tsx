@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useRe
 import { Student, Exam, ExamResult, BudgetData, ExamHall, SeatingPlanItem, CloudBackupRecord, FullBackupData, FullBackupSummary, AppNotification, ExamKeys } from '../types';
 import { generateId, recalculateLeagueForStudents } from '../lib/utils';
 import { generateExamOmrMap } from '../lib/omrEngine';
-import { db, firebaseConfig, auth, doc, getDoc, setDoc, onSnapshot, collection, getDocs, deleteDoc, query, User } from '../lib/firebase';
+import { db, firebaseConfig, auth, doc, getDoc, setDoc, onSnapshot, collection, getDocs, deleteDoc, query, disableNetwork, enableNetwork, User } from '../lib/firebase';
 import { 
   subscribeToNotifications, 
   displayBrowserNotification, 
@@ -205,9 +205,9 @@ const loadInitialState = (): AppState => {
   return defaultState;
 };
 
-const getTodayDateStr = () => new Date().toISOString().slice(0, 10);
+export const getTodayDateStr = () => new Date().toISOString().slice(0, 10);
 
-const checkIsQuotaExceededToday = () => {
+export const checkIsQuotaExceededToday = () => {
   try {
     const savedDate = localStorage.getItem('firestore_quota_exceeded_date');
     const savedProject = localStorage.getItem('firestore_quota_exceeded_project');
@@ -217,17 +217,47 @@ const checkIsQuotaExceededToday = () => {
   }
 };
 
-const markQuotaExceededToday = () => {
+export const markQuotaExceededToday = () => {
   try {
     localStorage.setItem('firestore_quota_exceeded_date', getTodayDateStr());
     localStorage.setItem('firestore_quota_exceeded_project', firebaseConfig.projectId);
+    disableNetwork(db).catch(() => {});
   } catch (e) {}
 };
 
-const clearQuotaExceeded = () => {
+export const clearQuotaExceeded = () => {
   try {
     localStorage.removeItem('firestore_quota_exceeded_date');
     localStorage.removeItem('firestore_quota_exceeded_project');
+    enableNetwork(db).catch(() => {});
+  } catch (e) {}
+};
+
+export const getCachedAuthorizedRole = (cleanEmail: string): 'admin' | 'teacher' | null => {
+  if (!cleanEmail) return null;
+  try {
+    const cached = localStorage.getItem('akademi_authorized_roles');
+    if (cached) {
+      const map = JSON.parse(cached);
+      if (map && (map[cleanEmail] === 'admin' || map[cleanEmail] === 'teacher')) {
+        return map[cleanEmail];
+      }
+    }
+  } catch (e) {}
+  return null;
+};
+
+export const setCachedAuthorizedRole = (cleanEmail: string, role: 'admin' | 'teacher' | 'guest') => {
+  if (!cleanEmail) return;
+  try {
+    const cached = localStorage.getItem('akademi_authorized_roles');
+    const map = cached ? JSON.parse(cached) : {};
+    if (role === 'guest') {
+      delete map[cleanEmail];
+    } else {
+      map[cleanEmail] = role;
+    }
+    localStorage.setItem('akademi_authorized_roles', JSON.stringify(map));
   } catch (e) {}
 };
 
@@ -238,14 +268,29 @@ export const evaluateUserRole = (
 ): 'admin' | 'teacher' | 'guest' => {
   const cleanEmail = (userEmail || '').trim().toLowerCase();
   if (!cleanEmail) return 'guest';
-  if (cleanEmail === 'kirklareliataturkortaokulu@gmail.com' || cleanEmail === 'bahadirkumcu@gmail.com') return 'admin';
+  if (cleanEmail === 'kirklareliataturkortaokulu@gmail.com' || cleanEmail === 'bahadirkumcu@gmail.com') {
+    setCachedAuthorizedRole(cleanEmail, 'admin');
+    return 'admin';
+  }
   
   const normAdmins = (adminsList || []).map(a => (a || '').trim().toLowerCase());
-  if (normAdmins.includes(cleanEmail)) return 'admin';
+  if (normAdmins.includes(cleanEmail)) {
+    setCachedAuthorizedRole(cleanEmail, 'admin');
+    return 'admin';
+  }
   
   const normTeachers = (teachersList || []).map(t => (t || '').trim().toLowerCase());
-  if (normTeachers.includes(cleanEmail)) return 'teacher';
+  if (normTeachers.includes(cleanEmail)) {
+    setCachedAuthorizedRole(cleanEmail, 'teacher');
+    return 'teacher';
+  }
   
+  // Fallback to locally cached authorized role so users are never blocked or demoted during offline / slow network / initial load
+  const cachedRole = getCachedAuthorizedRole(cleanEmail);
+  if (cachedRole) {
+    return cachedRole;
+  }
+
   return 'guest';
 };
 
@@ -270,6 +315,12 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   );
   const [cloudBackups, setCloudBackups] = useState<CloudBackupRecord[]>([]);
   const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+
+  useEffect(() => {
+    if (isInitialQuotaExceeded) {
+      disableNetwork(db).catch(() => {});
+    }
+  }, []);
 
   // Push Notification & Announcement States
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -325,13 +376,26 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   const checkAndRefreshRole = async (): Promise<'admin' | 'teacher' | 'guest'> => {
     try {
       const cleanEmail = (user?.email || '').trim().toLowerCase();
-      if (!auth.currentUser) {
-        const localRole = evaluateUserRole(cleanEmail, stateRef.current.admins, stateRef.current.teachers);
-        setUserRole(localRole);
-        return localRole;
+
+      // Check access_requests collection directly for explicit user approvals
+      if (cleanEmail && firebaseConfig.projectId) {
+        try {
+          const reqSnap = await getDoc(doc(db, 'access_requests', cleanEmail));
+          if (reqSnap.exists()) {
+            const reqData = reqSnap.data();
+            if (reqData.role === 'admin' || reqData.role === 'teacher') {
+              const targetRole = reqData.role as 'admin' | 'teacher';
+              setCachedAuthorizedRole(cleanEmail, targetRole);
+              setUserRole(targetRole);
+              return targetRole;
+            }
+          }
+        } catch (e) {
+          console.warn('Error checking access_requests doc:', e);
+        }
       }
 
-      if (!firebaseConfig.projectId) {
+      if (!auth.currentUser || !firebaseConfig.projectId) {
         const localRole = evaluateUserRole(cleanEmail, stateRef.current.admins, stateRef.current.teachers);
         setUserRole(localRole);
         return localRole;
@@ -354,6 +418,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         const cleanTeachers = Array.from(new Set(
           (data.teachers || []).map(t => (t || '').trim().toLowerCase())
         ));
+
+        cleanAdmins.forEach(a => setCachedAuthorizedRole(a, 'admin'));
+        cleanTeachers.forEach(t => setCachedAuthorizedRole(t, 'teacher'));
 
         const safeExams = (data.exams || []).map(e => {
           if (!e.omrMap || !e.omrMap.specs) {
@@ -458,7 +525,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         const computedRole = evaluateUserRole(cleanUserEmail, safeData.admins, safeData.teachers);
         setUserRole(computedRole);
 
-        if (cleanUserEmail && !isQuotaExceededRef.current && firebaseConfig.projectId) {
+        if (cleanUserEmail && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
           setDoc(doc(db, 'access_requests', cleanUserEmail), {
             email: cleanUserEmail,
             name: user.displayName || cleanUserEmail.split('@')[0],
@@ -467,7 +534,14 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             status: computedRole === 'guest' ? 'pending' : 'approved',
             lastLoginAt: new Date().toISOString(),
             timestamp: new Date().toISOString()
-          }, { merge: true }).catch(() => {});
+          }, { merge: true }).catch((err: any) => {
+            const errStr = String(err?.message || err || '');
+            if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted') {
+              markQuotaExceededToday();
+              isQuotaExceededRef.current = true;
+              setSyncStatus('quota_exceeded');
+            }
+          });
         }
 
         if (!isQuotaExceededRef.current) {
@@ -540,8 +614,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setSyncErrorMessage(null);
     } catch (error: any) {
       console.warn('Sync write error:', error);
-      setSyncStatus('error');
-      setSyncErrorMessage(error?.message || 'Buluta kaydedilemedi. Verileriniz yerel olarak güvendedir.');
+      const errStr = String(error?.message || error || '');
+      if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || error?.code === 'resource-exhausted') {
+        markQuotaExceededToday();
+        isQuotaExceededRef.current = true;
+        setSyncStatus('quota_exceeded');
+        setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu. Verileriniz yerel hafızada (%100) kesintisiz ve güvende tutulmaktadır.');
+      } else {
+        setSyncStatus('error');
+        setSyncErrorMessage(error?.message || 'Buluta kaydedilemedi. Verileriniz yerel olarak güvendedir.');
+      }
     }
   };
 
@@ -557,8 +639,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
 
     // 2. If quota is known to be exceeded, don't spam background writes
-    if (isQuotaExceededRef.current) {
+    if (isQuotaExceededRef.current || checkIsQuotaExceededToday()) {
       setSyncStatus('quota_exceeded');
+      setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu. Verileriniz yerel hafızada (%100) kesintisiz ve güvende tutulmaktadır.');
       return;
     }
 
@@ -762,6 +845,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     if (userRole !== 'admin') return;
     const clean = (targetEmail || '').trim().toLowerCase();
     if (!clean) return;
+
+    setCachedAuthorizedRole(clean, newRole);
 
     let currentAdmins = stateRef.current.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'];
     let currentTeachers = stateRef.current.teachers || [];

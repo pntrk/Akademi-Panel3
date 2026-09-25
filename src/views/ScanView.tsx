@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import jsQR from 'jsqr';
 import QRCode from 'qrcode';
 import { Exam, Anchors, Point, LaserMark, Student, ExamResult, OmrStudent } from '../types';
-import { DEFAULT_OMR, OMR_SPECS, OPTS_4, OPTS_5, getHomography, applyHomography, getQuestionsLayout, calculateScore, formatClassSec, createUnifiedExamResult, getBookletBubblePositions, getQrCodeBox, warpPerspectiveToCanvas, evaluateQuestionAnswer, evaluateBubbleFill, sampleLocalBackground } from '../lib/omrEngine';
+import { DEFAULT_OMR, OMR_SPECS, OPTS_4, OPTS_5, getHomography, applyHomography, getQuestionsLayout, calculateScore, formatClassSec, createUnifiedExamResult, getBookletBubblePositions, getQrCodeBox, warpPerspectiveToCanvas, evaluateQuestionAnswer, evaluateBubbleFill, sampleLocalBackground, detectOmrAnchors } from '../lib/omrEngine';
 import { useAppContext } from '../context/AppContext';
 import { generateId } from '../lib/utils';
 import {
@@ -63,131 +63,8 @@ export interface BatchProcessItem {
 
 export const findAnchorsCore = (context: CanvasRenderingContext2D, w: number, h: number): { pts: Anchors; lockFailed: boolean } => {
   const imgData = context.getImageData(0, 0, w, h).data;
-  const intImg = new Uint32Array(w * h);
-
-  for (let y = 0; y < h; y++) {
-    let rowSum = 0;
-    for (let x = 0; x < w; x++) {
-      const idx = (y * w + x) * 4;
-      const l = 0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2];
-      rowSum += l;
-      intImg[y * w + x] = rowSum + (y > 0 ? intImg[(y - 1) * w + x] : 0);
-    }
-  }
-
-  const getBoxSum = (x1: number, y1: number, x2: number, y2: number) => {
-    x1 = Math.max(0, Math.min(w - 1, Math.floor(x1)));
-    y1 = Math.max(0, Math.min(h - 1, Math.floor(y1)));
-    x2 = Math.max(0, Math.min(w - 1, Math.floor(x2)));
-    y2 = Math.max(0, Math.min(h - 1, Math.floor(y2)));
-
-    const A = (x1 > 0 && y1 > 0) ? intImg[(y1 - 1) * w + (x1 - 1)] : 0;
-    const B = (y1 > 0) ? intImg[(y1 - 1) * w + x2] : 0;
-    const C = (x1 > 0) ? intImg[y2 * w + (x1 - 1)] : 0;
-    const D = intImg[y2 * w + x2];
-    return D - B - C + A;
-  };
-
-  const getBoxAvg = (x1: number, y1: number, x2: number, y2: number) => {
-    const cx1 = Math.max(0, Math.min(w - 1, Math.floor(x1)));
-    const cy1 = Math.max(0, Math.min(h - 1, Math.floor(y1)));
-    const cx2 = Math.max(0, Math.min(w - 1, Math.floor(x2)));
-    const cy2 = Math.max(0, Math.min(h - 1, Math.floor(y2)));
-    const area = (cx2 - cx1 + 1) * (cy2 - cy1 + 1);
-    if (area <= 0) return 255;
-    return getBoxSum(cx1, cy1, cx2, cy2) / area;
-  };
-
-  const findAnchorNear = (targetX: number, targetY: number, _isTop: boolean) => {
-    let bestAnchor: { x: number; y: number; score: number } | null = null;
-    let minScore = Infinity;
-
-    // Geniş arama yarıçapı: Taranan form eğik, kaymış veya kenar boşluklu olsa bile yakalar (%38)
-    const srX = w * 0.38;
-    const srY = h * 0.38;
-
-    const startX = Math.max(w * 0.02, targetX - srX);
-    const endX = Math.min(w * 0.98, targetX + srX);
-    const startY = Math.max(h * 0.02, targetY - srY);
-    const endY = Math.min(h * 0.98, targetY + srY);
-
-    for (let y = startY; y < endY; y += 2) {
-      for (let x = startX; x < endX; x += 2) {
-        const coreAvg = getBoxAvg(x - 2, y - 2, x + 2, y + 2);
-        if (coreAvg > 165) continue;
-
-        let left = x, right = x, top = y, bottom = y;
-        const threshold = Math.min(210, coreAvg + 45);
-
-        while (left > 0 && getBoxAvg(left - 1, y, left - 1, y) < threshold) left--;
-        while (right < w - 1 && getBoxAvg(right + 1, y, right + 1, y) < threshold) right++;
-        while (top > 0 && getBoxAvg(x, top - 1, x, top - 1) < threshold) top--;
-        while (bottom < h - 1 && getBoxAvg(x, bottom + 1, x, bottom + 1) < threshold) bottom++;
-
-        const bw = right - left;
-        const bh = bottom - top;
-
-        if (bw >= 8 && bw <= 200 && bh >= 8 && bh <= 200) {
-          const ratio = bw / bh;
-          if (ratio > 0.45 && ratio < 2.2) {
-            let sumX = 0, sumY = 0, weightSum = 0;
-            for (let py = top; py <= bottom; py += 1) {
-              for (let px = left; px <= right; px += 1) {
-                const avg = getBoxAvg(px - 1, py - 1, px + 1, py + 1);
-                if (avg < threshold) {
-                  let weight = 255 - avg;
-                  weight = weight * weight;
-                  sumX += px * weight;
-                  sumY += py * weight;
-                  weightSum += weight;
-                }
-              }
-            }
-
-            const cx = weightSum > 0 ? sumX / weightSum : left + (bw / 2);
-            const cy = weightSum > 0 ? sumY / weightSum : top + (bh / 2);
-
-            const dist = Math.hypot(cx - targetX, cy - targetY);
-            const shapePenalty = Math.abs(bw - bh) * 1.2;
-            const score = dist + shapePenalty + (coreAvg * 0.4);
-
-            if (score < minScore) {
-              minScore = score;
-              bestAnchor = { x: cx, y: cy, score: score };
-            }
-          }
-        }
-      }
-    }
-    return bestAnchor;
-  };
-
-  const marginXRatio = DEFAULT_OMR.anchorMargin / DEFAULT_OMR.paperW;
-  const marginYRatio = DEFAULT_OMR.anchorMargin / DEFAULT_OMR.paperH;
-
-  const defTL = { x: w * marginXRatio, y: h * marginYRatio };
-  const defTR = { x: w * (1 - marginXRatio), y: h * marginYRatio };
-  const defBL = { x: w * marginXRatio, y: h * (1 - marginYRatio) };
-  const defBR = { x: w * (1 - marginXRatio), y: h * (1 - marginYRatio) };
-
-  const tl = findAnchorNear(defTL.x, defTL.y, true);
-  const tr = findAnchorNear(defTR.x, defTR.y, true);
-  const bl = findAnchorNear(defBL.x, defBL.y, false);
-  const br = findAnchorNear(defBR.x, defBR.y, false);
-
-  let lockFailed = !tl || !tr || !bl || !br;
-
-  const finalTL = tl || defTL;
-  const finalTR = tr || defTR;
-  const finalBL = bl || defBL;
-  const finalBR = br || defBR;
-
-  if (!lockFailed) {
-    if (finalTR.x - finalTL.x < w * 0.55 || finalBR.x - finalBL.x < w * 0.55) lockFailed = true;
-    if (finalBL.y - finalTL.y < h * 0.55 || finalBR.y - finalTR.y < h * 0.55) lockFailed = true;
-  }
-
-  return { pts: { tl: finalTL, tr: finalTR, bl: finalBL, br: finalBR }, lockFailed };
+  const res = detectOmrAnchors(imgData, w, h);
+  return { pts: res.pts, lockFailed: res.lockFailed };
 };
 
 interface ScanViewProps {

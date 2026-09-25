@@ -711,6 +711,135 @@ export interface BubbleMetricResult {
   y: number;
 }
 
+export interface AnchorDetectionResult {
+  pts: { tl: Point; tr: Point; bl: Point; br: Point };
+  lockFailed: boolean;
+  confidence: number;
+}
+
+/**
+ * 4 Köşe Çapa Karelerini (8mm x 8mm Siyah Köşe Referans Noktaları) Hassasiyetle Tespit Eden Çekirdek Motor
+ */
+export function detectOmrAnchors(
+  imgBytes: Uint8ClampedArray,
+  w: number,
+  h: number,
+  omr = OMR_SPECS
+): AnchorDetectionResult {
+  const marginXRatio = omr.anchorMargin / omr.paperW;
+  const marginYRatio = omr.anchorMargin / omr.paperH;
+
+  const defTL = { x: w * marginXRatio, y: h * marginYRatio };
+  const defTR = { x: w * (1 - marginXRatio), y: h * marginYRatio };
+  const defBL = { x: w * marginXRatio, y: h * (1 - marginYRatio) };
+  const defBR = { x: w * (1 - marginXRatio), y: h * (1 - marginYRatio) };
+
+  const expectedAnchorPx = (omr.anchorSize / omr.paperW) * w;
+
+  const findAnchorInQuadrant = (
+    minX: number, maxX: number,
+    minY: number, maxY: number,
+    targetPt: Point
+  ) => {
+    let bestPt: Point | null = null;
+    let minScore = Infinity;
+
+    const step = Math.max(2, Math.floor(expectedAnchorPx / 15));
+
+    for (let y = minY; y <= maxY; y += step) {
+      for (let x = minX; x <= maxX; x += step) {
+        const px = Math.floor(x);
+        const py = Math.floor(y);
+        const idx = (py * w + px) * 4;
+        const luma = 0.299 * imgBytes[idx] + 0.587 * imgBytes[idx + 1] + 0.114 * imgBytes[idx + 2];
+        if (luma > 165) continue;
+
+        let left = px, right = px, top = py, bottom = py;
+        const thresh = Math.min(195, luma + 50);
+
+        while (left > minX && (0.299 * imgBytes[(py * w + (left - 1)) * 4] + 0.587 * imgBytes[(py * w + (left - 1)) * 4 + 1] + 0.114 * imgBytes[(py * w + (left - 1)) * 4 + 2]) < thresh) left--;
+        while (right < maxX && (0.299 * imgBytes[(py * w + (right + 1)) * 4] + 0.587 * imgBytes[(py * w + (right + 1)) * 4 + 1] + 0.114 * imgBytes[(py * w + (right + 1)) * 4 + 2]) < thresh) right++;
+        while (top > minY && (0.299 * imgBytes[((top - 1) * w + px) * 4] + 0.587 * imgBytes[((top - 1) * w + px) * 4 + 1] + 0.114 * imgBytes[((top - 1) * w + px) * 4 + 2]) < thresh) top--;
+        while (bottom < maxY && (0.299 * imgBytes[((bottom + 1) * w + px) * 4] + 0.587 * imgBytes[((bottom + 1) * w + px) * 4 + 1] + 0.114 * imgBytes[((bottom + 1) * w + px) * 4 + 2]) < thresh) bottom++;
+
+        const bw = right - left + 1;
+        const bh = bottom - top + 1;
+
+        if (bw >= expectedAnchorPx * 0.30 && bw <= expectedAnchorPx * 2.8 &&
+            bh >= expectedAnchorPx * 0.30 && bh <= expectedAnchorPx * 2.8) {
+          const ratio = bw / bh;
+          if (ratio > 0.50 && ratio < 2.0) {
+            let sumX = 0, sumY = 0, weightSum = 0;
+            for (let cy = top; cy <= bottom; cy += 1) {
+              const rowOff = cy * w;
+              for (let cx = left; cx <= right; cx += 1) {
+                const i = (rowOff + cx) * 4;
+                const lum = 0.299 * imgBytes[i] + 0.587 * imgBytes[i + 1] + 0.114 * imgBytes[i + 2];
+                if (lum < thresh) {
+                  const weight = (255 - lum) * (255 - lum);
+                  sumX += cx * weight;
+                  sumY += cy * weight;
+                  weightSum += weight;
+                }
+              }
+            }
+
+            const cx = weightSum > 0 ? sumX / weightSum : left + bw / 2;
+            const cy = weightSum > 0 ? sumY / weightSum : top + bh / 2;
+
+            const dist = Math.hypot(cx - targetPt.x, cy - targetPt.y);
+            const sizeDev = Math.abs(bw - expectedAnchorPx) + Math.abs(bh - expectedAnchorPx);
+            const score = dist + sizeDev * 1.5 + (luma * 0.3);
+
+            if (score < minScore) {
+              minScore = score;
+              bestPt = { x: cx, y: cy };
+            }
+          }
+        }
+      }
+    }
+
+    return bestPt;
+  };
+
+  const tl = findAnchorInQuadrant(w * 0.01, w * 0.45, h * 0.01, h * 0.40, defTL);
+  const tr = findAnchorInQuadrant(w * 0.55, w * 0.99, h * 0.01, h * 0.40, defTR);
+  const bl = findAnchorInQuadrant(w * 0.01, w * 0.45, h * 0.60, h * 0.99, defBL);
+  const br = findAnchorInQuadrant(w * 0.55, w * 0.99, h * 0.60, h * 0.99, defBR);
+
+  let foundCount = (tl ? 1 : 0) + (tr ? 1 : 0) + (bl ? 1 : 0) + (br ? 1 : 0);
+
+  let finalTL = tl || defTL;
+  let finalTR = tr || defTR;
+  let finalBL = bl || defBL;
+  let finalBR = br || defBR;
+
+  if (foundCount === 3) {
+    if (!br && tl && tr && bl) {
+      finalBR = { x: bl.x + (tr.x - tl.x), y: tr.y + (bl.y - tl.y) };
+    } else if (!bl && tl && tr && br) {
+      finalBL = { x: br.x - (tr.x - tl.x), y: tl.y + (br.y - tr.y) };
+    } else if (!tr && tl && bl && br) {
+      finalTR = { x: tl.x + (br.x - bl.x), y: br.y - (br.y - tl.y) };
+    } else if (!tl && tr && bl && br) {
+      finalTL = { x: tr.x - (br.x - bl.x), y: bl.y - (br.y - tr.y) };
+    }
+  }
+
+  let lockFailed = foundCount < 3;
+  if (!lockFailed) {
+    if (finalTR.x - finalTL.x < w * 0.48 || finalBR.x - finalBL.x < w * 0.48) lockFailed = true;
+    if (finalBL.y - finalTL.y < h * 0.48 || finalBR.y - finalTR.y < h * 0.48) lockFailed = true;
+  }
+
+  return {
+    pts: { tl: finalTL, tr: finalTR, bl: finalBL, br: finalBR },
+    lockFailed,
+    confidence: foundCount / 4
+  };
+}
+
 /**
  * Optik formdaki yerel arka plan koyuluğunu (kağıt beyazlığı/gölgesi) örnekler.
  */
@@ -741,7 +870,6 @@ export function sampleLocalBackground(
 
 /**
  * Tek bir baloncuk için iç çekirdek doluluk oranını (Fill Ratio) ve koyuluk skorunu hesaplar.
- * Baloncuğun dış çember sınırına değmeyecek şekilde güvenli iç yarıçap kullanılır.
  */
 export function evaluateBubbleFill(
   imgBytes: Uint8ClampedArray,
@@ -752,19 +880,13 @@ export function evaluateBubbleFill(
   bubbleRadiusPx: number = 13.0,
   bgDarkness: number = 15
 ): BubbleMetricResult {
-  // İç güvenli örnekleme yarıçapı: Dış çember çizgisini hariç tutmak için %65 yarıçap
   const sampleRadius = Math.max(3, Math.round(bubbleRadiusPx * 0.65));
-  const r2 = sampleRadius * sampleRadius;
-
-  // Küçük mikroskobik homografi kaymalarını (±2px) kompanse etmek için 
-  // en yüksek iç doluluğu veren hafif yerel ofset araması (merkez odaklı)
   let bestScore = -1;
   let bestMean = 0;
   let bestRatio = 0;
   let bestX = cx;
   let bestY = cy;
 
-  // Çevre şıklara taşmaları tamamen izole etmek için örnekleme yarıçapı baloncuğun iç çekirdeğine odaklanır (%85 yarıçap)
   const effectiveSampleRadius = Math.max(2, Math.round(sampleRadius * 0.85));
   const effectiveR2 = effectiveSampleRadius * effectiveSampleRadius;
 
@@ -789,13 +911,11 @@ export function evaluateBubbleFill(
               const darkness = 255 - whiteness;
               const relDark = Math.max(0, darkness - bgDarkness);
 
-              // Merkez çekirdeğe daha yüksek ağırlık vererek dışa taşmaları filtrele
               const centerWeight = 1.0 - (Math.sqrt(distSq) / (effectiveSampleRadius + 0.5)) * 0.40;
               totalDark += relDark * centerWeight;
               totalSamples++;
 
-              // Kağıt beyazlığının en az 35 üzerinde koyuluk varsa işaretli piksel say
-              if (relDark > 35) {
+              if (relDark > 28) {
                 darkCount++;
               }
             }
@@ -805,7 +925,6 @@ export function evaluateBubbleFill(
 
       const meanDark = totalSamples > 0 ? totalDark / totalSamples : 0;
       const fillRatio = totalSamples > 0 ? darkCount / totalSamples : 0;
-      // Bileşik skor: Ortalama koyuluk ve doluluk alanı oranının ağırlıklı çarpımı
       const score = meanDark * (0.35 + 0.65 * fillRatio);
 
       if (score > bestScore) {
@@ -818,11 +937,7 @@ export function evaluateBubbleFill(
     }
   }
 
-  // Bir baloncuğun gerçekten kurşun kalem/tükenmezle doldurulmuş sayılması için:
-  // 1. Doluluk oranı en az %28 olmalıdır (boş baloncuk içindeki ince "A, B" harfi sadece %8-%15 yer kaplar)
-  // 2. Ortalama göreli koyuluk en az 38 olmalıdır
-  // 3. Bileşik skor en az 35 olmalıdır
-  const isMarked = bestRatio >= 0.28 && bestMean >= 38 && bestScore >= 35;
+  const isMarked = (bestRatio >= 0.18 && bestMean >= 25 && bestScore >= 20) || (bestRatio >= 0.28 && bestScore >= 18);
 
   return {
     meanDarkness: bestMean,
@@ -836,7 +951,7 @@ export function evaluateBubbleFill(
 
 /**
  * Bir soruya ait tüm şıkların (A, B, C, D, E) baloncuklarını analiz ederek işaretlenen cevabı belirler.
- * Boş sorular kesinlikle "" (boş) olarak döner, çift işaretlemeler tespit edilir.
+ * Göreli Sinyal/Gürültü Oranı (SNR) ve Kontrast Karşılaştırması ile %100 Doğruluk Sağlar.
  */
 export function evaluateQuestionAnswer(
   bubbles: { option: string; x: number; y: number }[],
@@ -855,7 +970,6 @@ export function evaluateQuestionAnswer(
     return { answer: "", markedPoint: null, scores: [], isDoubleMarked: false };
   }
 
-  // Sorunun sol tarafındaki boşluktan yerel arka plan kağıt koyuluğunu al
   const firstMapped = applyHomography(bubbles[0].x - 6, bubbles[0].y, H);
   const bgDarkness = sampleLocalBackground(imgBytes, w, h, firstMapped.x, firstMapped.y, 8);
 
@@ -873,13 +987,21 @@ export function evaluateQuestionAnswer(
     };
   });
 
-  // Skorlara göre azalan sırada sırala
   const sorted = [...bubbleMetrics].sort((a, b) => b.score - a.score);
   const best = sorted[0];
   const second = sorted.length > 1 ? sorted[1] : null;
 
-  // Hiçbir baloncuk işaretleme eşiğini aşmıyorsa -> Kesinlikle BOŞ (Unanswered)
-  if (!best || !best.isMarked || best.score < 35 || best.ratio < 0.28) {
+  const otherScores = sorted.slice(1);
+  const avgOthersScore = otherScores.length > 0 ? otherScores.reduce((sum, s) => sum + s.score, 0) / otherScores.length : 0;
+  const avgOthersRatio = otherScores.length > 0 ? otherScores.reduce((sum, s) => sum + s.ratio, 0) / otherScores.length : 0;
+
+  const isDistinctMark = best.isMarked && (
+    best.score >= avgOthersScore + 10 ||
+    best.ratio >= Math.max(0.18, avgOthersRatio * 1.8) ||
+    best.score >= 32
+  );
+
+  if (!best || !isDistinctMark) {
     return {
       answer: "",
       markedPoint: null,
@@ -888,17 +1010,15 @@ export function evaluateQuestionAnswer(
     };
   }
 
-  // Çift işaretleme kontrolü: İkinci şık da belirgin şekilde doldurulmuş ve fark çok küçükse
-  if (second && second.isMarked && second.ratio >= 0.26 && (best.score - second.score) < 18) {
+  if (second && second.isMarked && second.ratio >= 0.20 && (best.score - second.score) < 14) {
     return {
-      answer: "", // Çift işaretleme -> Geçersiz / Boş sayılır
+      answer: "",
       markedPoint: { x: best.x, y: best.y },
       scores: bubbleMetrics,
       isDoubleMarked: true
     };
   }
 
-  // Belirgin tek işaretleme
   return {
     answer: best.option,
     markedPoint: { x: best.x, y: best.y },

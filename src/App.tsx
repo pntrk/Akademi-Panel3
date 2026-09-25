@@ -18,12 +18,14 @@ import { OmrSetupView } from './views/OmrSetupView';
 import { AnalysisView } from './views/AnalysisView';
 import { auth, loginWithGoogle, logout, firebaseConfig, onAuthStateChanged, User, createSyntheticUser, db, doc, setDoc } from './lib/firebase';
 import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck } from 'lucide-react';
-import { useAppContext } from './context/AppContext';
+import { useAppContext, checkIsQuotaExceededToday, markQuotaExceededToday } from './context/AppContext';
 
 // Record user login into access_requests collection so administrators see all registered users
 const syncUserRegistration = async (targetUser: User) => {
   const cleanEmail = (targetUser.email || '').trim().toLowerCase();
   if (!cleanEmail || !firebaseConfig.projectId) return;
+  if (checkIsQuotaExceededToday()) return;
+
   try {
     const docRef = doc(db, 'access_requests', cleanEmail);
     await setDoc(docRef, {
@@ -33,8 +35,13 @@ const syncUserRegistration = async (targetUser: User) => {
       lastLoginAt: new Date().toISOString(),
       timestamp: new Date().toISOString()
     }, { merge: true });
-  } catch (err) {
-    console.warn('User registration sync notice:', err);
+  } catch (err: any) {
+    const errStr = String(err?.message || err || '');
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted') {
+      markQuotaExceededToday();
+    } else {
+      console.warn('User registration sync notice:', err);
+    }
   }
 };
 
@@ -177,13 +184,14 @@ export default function App() {
 
   useEffect(() => {
     try {
-      const saved = sessionStorage.getItem('akademi_preview_user');
+      const saved = localStorage.getItem('akademi_user_session') || sessionStorage.getItem('akademi_preview_user');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.email) {
-          setUser(createSyntheticUser(parsed.email, parsed.displayName));
+          const restoredUser = createSyntheticUser(parsed.email, parsed.displayName || parsed.name);
+          setUser(restoredUser);
+          syncUserRegistration(restoredUser).catch(() => {});
           setLoading(false);
-          return;
         }
       }
     } catch (e) {}
@@ -191,6 +199,14 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
+        try {
+          localStorage.setItem('akademi_user_session', JSON.stringify({
+            uid: currentUser.uid,
+            email: currentUser.email,
+            displayName: currentUser.displayName,
+            photoURL: currentUser.photoURL
+          }));
+        } catch (e) {}
         syncUserRegistration(currentUser).catch(() => {});
       }
       setLoading(false);
@@ -215,6 +231,14 @@ export default function App() {
     try {
       const res = await loginWithGoogle();
       if (res?.user) {
+        try {
+          localStorage.setItem('akademi_user_session', JSON.stringify({
+            uid: res.user.uid,
+            email: res.user.email,
+            displayName: res.user.displayName,
+            photoURL: res.user.photoURL
+          }));
+        } catch (e) {}
         syncUserRegistration(res.user).catch(() => {});
       }
     } catch (err: any) {
@@ -237,8 +261,10 @@ export default function App() {
 
   const handlePreviewLogin = (email: string, displayName: string) => {
     const syntheticUser = createSyntheticUser(email, displayName);
+    const sessionData = { uid: syntheticUser.uid, email, displayName };
     try {
-      sessionStorage.setItem('akademi_preview_user', JSON.stringify({ email, displayName }));
+      localStorage.setItem('akademi_user_session', JSON.stringify(sessionData));
+      sessionStorage.setItem('akademi_preview_user', JSON.stringify(sessionData));
     } catch (e) {}
     setUser(syntheticUser);
     syncUserRegistration(syntheticUser).catch(() => {});
@@ -246,6 +272,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
+      localStorage.removeItem('akademi_user_session');
       sessionStorage.removeItem('akademi_preview_user');
     } catch (e) {}
     setUser(null);

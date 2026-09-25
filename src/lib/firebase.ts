@@ -19,7 +19,9 @@ import {
   query, 
   orderBy, 
   limit, 
-  getDocFromServer 
+  getDocFromServer,
+  disableNetwork,
+  enableNetwork
 } from 'firebase/firestore';
 import rawFirebaseConfig from '../../firebase-applet-config.json';
 
@@ -37,10 +39,24 @@ export const auth = getAuth(app);
 // Test connection on boot as mandated by Firebase integration guidelines
 async function testConnection() {
   try {
+    const savedDate = localStorage.getItem('firestore_quota_exceeded_date');
+    const savedProject = localStorage.getItem('firestore_quota_exceeded_project');
+    const today = new Date().toISOString().slice(0, 10);
+    if (savedDate === today && savedProject === firebaseConfig.projectId) {
+      disableNetwork(db).catch(() => {});
+      return;
+    }
     await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
+  } catch (error: any) {
+    const errStr = String(error?.message || error || '');
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || error?.code === 'resource-exhausted') {
+      try {
+        localStorage.setItem('firestore_quota_exceeded_date', new Date().toISOString().slice(0, 10));
+        localStorage.setItem('firestore_quota_exceeded_project', firebaseConfig.projectId);
+        disableNetwork(db).catch(() => {});
+      } catch (e) {}
+    } else if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Please check your Firebase configuration.');
     }
   }
 }
@@ -148,6 +164,8 @@ export {
   query, 
   orderBy, 
   limit, 
+  disableNetwork,
+  enableNetwork,
   onAuthStateChanged, 
   signInWithPopup, 
   signOut, 
