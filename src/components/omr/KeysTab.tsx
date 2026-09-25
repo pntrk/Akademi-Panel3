@@ -133,6 +133,8 @@ export function KeysTab({ examId, exam: propExam, updateExam: propUpdateExam, to
   const [batchTarget, setBatchTarget] = useState<'all' | number | string>('all');
   const [showMatrixModal, setShowMatrixModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printBookletMode, setPrintBookletMode] = useState<string>("A");
+  const [isPrintingKey, setIsPrintingKey] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Ders akordiyon durumu
@@ -366,6 +368,402 @@ export function KeysTab({ examId, exam: propExam, updateExam: propUpdateExam, to
     setCollapsedSubjects(all);
   };
 
+  const generateAnswerKeyPrintHtml = (targetBooklet: string) => {
+    const institutionName = exam.institution || (state as any).schoolName || "KIRKLARELİ ATATÜRK ORTAOKULU";
+    const examDate = exam.date || new Date().toLocaleDateString('tr-TR');
+    const examName = exam.name || "Deneme Sınavı";
+    const isCompareAll = targetBooklet === 'all';
+    const activeBooklets = ['A', 'B', 'C', 'D'];
+
+    let contentHtml = '';
+
+    if (!isCompareAll) {
+      const bKeys = [...(examKeys[targetBooklet] || [])];
+      while (bKeys.length < totalQ) bKeys.push("");
+
+      contentHtml = subjectIndexMap.map((sub, sIdx) => {
+        const subKeys = bKeys.slice(sub.startIdx, sub.startIdx + sub.count);
+        const chunks: { qStart: number; keys: string[] }[] = [];
+        for (let i = 0; i < subKeys.length; i += 10) {
+          chunks.push({
+            qStart: sub.startIdx + i + 1,
+            keys: subKeys.slice(i, i + 10)
+          });
+        }
+
+        const tablesHtml = chunks.map(chunk => {
+          const qCells = chunk.keys.map((_, i) => `<th class="q-num">${chunk.qStart + i}</th>`).join('');
+          const aCells = chunk.keys.map((ans) => {
+            if (ans === '*' || ans === 'X') {
+              return `<td class="ans"><span class="badge-cancel">İPTAL</span></td>`;
+            }
+            if (!ans) {
+              return `<td class="ans ans-empty">-</td>`;
+            }
+            return `<td class="ans">${ans}</td>`;
+          }).join('');
+
+          const remaining = 10 - chunk.keys.length;
+          const padTh = remaining > 0 ? `<th colspan="${remaining}" class="q-num empty-pad"></th>` : '';
+          const padTd = remaining > 0 ? `<td colspan="${remaining}" class="ans empty-pad"></td>` : '';
+
+          return `
+            <table class="q-table">
+              <tr>
+                <td class="lbl">Soru</td>
+                ${qCells}
+                ${padTh}
+              </tr>
+              <tr>
+                <td class="lbl">Cevap</td>
+                ${aCells}
+                ${padTd}
+              </tr>
+            </table>
+          `;
+        }).join('');
+
+        return `
+          <div class="subject-section">
+            <div class="subject-header">
+              <span class="subject-title">${sIdx + 1}. ${sub.name}</span>
+              <span class="subject-meta">${sub.count} Soru • (${sub.startIdx + 1} - ${sub.startIdx + sub.count})</span>
+            </div>
+            <div class="table-container">
+              ${tablesHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    } else {
+      contentHtml = subjectIndexMap.map((sub, sIdx) => {
+        let rowsHtml = '';
+        for (let i = 0; i < sub.count; i++) {
+          const qNum = sub.startIdx + i + 1;
+          const cols = activeBooklets.map(bk => {
+            const bkKeys = examKeys[bk] || [];
+            const ans = bkKeys[sub.startIdx + i] || '-';
+            if (ans === '*' || ans === 'X') {
+              return `<td class="ans-compare"><span class="badge-cancel">İPTAL</span></td>`;
+            }
+            return `<td class="ans-compare ${ans === '-' ? 'ans-empty' : ''}">${ans}</td>`;
+          }).join('');
+
+          rowsHtml += `
+            <tr>
+              <td class="q-col font-bold">${qNum}</td>
+              ${cols}
+            </tr>
+          `;
+        }
+
+        return `
+          <div class="subject-section page-avoid">
+            <div class="subject-header">
+              <span class="subject-title">${sIdx + 1}. ${sub.name}</span>
+              <span class="subject-meta">${sub.count} Soru • Karşılaştırmalı Cevap Anahtarı</span>
+            </div>
+            <div class="table-container">
+              <table class="compare-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">Soru</th>
+                    ${activeBooklets.map(bk => `<th>${bk} Kitapçığı</th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rowsHtml}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    const titleSub = isCompareAll
+      ? `TÜM KİTAPÇIKLAR CEVAP ANAHTARI (A - B - C - D)`
+      : `${targetBooklet} KİTAPÇIĞI CEVAP ANAHTARI`;
+
+    return `
+      <!DOCTYPE html>
+      <html lang="tr">
+      <head>
+        <meta charset="utf-8"/>
+        <title>${examName} - ${titleSub}</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm 8mm 10mm;
+          }
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            color: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 11px;
+            line-height: 1.25;
+          }
+          .print-header {
+            text-align: center;
+            border-bottom: 2px solid #1e293b;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+          }
+          .inst-title {
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #475569;
+            margin: 0 0 2px 0;
+          }
+          .exam-title {
+            font-size: 16px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #0f172a;
+            margin: 0 0 4px 0;
+            letter-spacing: -0.02em;
+          }
+          .sub-badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 800;
+            padding: 3px 12px;
+            background: #f1f5f9;
+            border: 1.5px solid #94a3b8;
+            border-radius: 6px;
+            color: #0f172a;
+            margin-bottom: 4px;
+            letter-spacing: 0.03em;
+          }
+          .meta-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            font-size: 10px;
+            font-weight: 600;
+            color: #64748b;
+          }
+          .meta-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+          }
+          .subject-section {
+            margin-bottom: 8px;
+            border: 1.5px solid #94a3b8;
+            border-radius: 6px;
+            overflow: hidden;
+            page-break-inside: avoid;
+            break-inside: avoid;
+            background: #ffffff;
+          }
+          .subject-header {
+            background: #f1f5f9;
+            border-bottom: 1px solid #94a3b8;
+            padding: 3.5px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 800;
+            font-size: 11px;
+            color: #0f172a;
+            text-transform: uppercase;
+          }
+          .subject-meta {
+            font-size: 9.5px;
+            font-weight: 700;
+            color: #475569;
+          }
+          .table-container {
+            padding: 5px 6px;
+          }
+          table.q-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 4px;
+            table-layout: fixed;
+          }
+          table.q-table:last-child {
+            margin-bottom: 0;
+          }
+          table.q-table th, table.q-table td {
+            border: 1px solid #cbd5e1;
+            text-align: center;
+            padding: 2.5px 1px;
+            vertical-align: middle;
+          }
+          table.q-table .lbl {
+            background: #f8fafc;
+            font-weight: 800;
+            font-size: 9px;
+            width: 44px;
+            color: #475569;
+            text-transform: uppercase;
+            border-right: 1.5px solid #94a3b8;
+          }
+          table.q-table .q-num {
+            background: #f8fafc;
+            font-weight: 700;
+            font-size: 10px;
+            color: #334155;
+          }
+          table.q-table .ans {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 900;
+            font-size: 12px;
+            color: #000000;
+            height: 20px;
+          }
+          .ans-empty {
+            color: #cbd5e1 !important;
+            font-weight: 400 !important;
+          }
+          .empty-pad {
+            background: #fafafa;
+          }
+          .badge-cancel {
+            display: inline-block;
+            background: #fee2e2;
+            color: #b91c1c;
+            font-size: 8px;
+            font-weight: 800;
+            padding: 1px 3px;
+            border-radius: 3px;
+          }
+          table.compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+          }
+          table.compare-table th {
+            background: #f1f5f9;
+            border: 1px solid #94a3b8;
+            padding: 4px 6px;
+            font-weight: 800;
+            color: #0f172a;
+            text-align: center;
+          }
+          table.compare-table td {
+            border: 1px solid #cbd5e1;
+            padding: 3px 6px;
+            text-align: center;
+          }
+          table.compare-table .q-col {
+            background: #f8fafc;
+            font-weight: 800;
+            color: #475569;
+            width: 50px;
+          }
+          table.compare-table .ans-compare {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 900;
+            font-size: 11px;
+            color: #000000;
+          }
+          .print-footer {
+            margin-top: 10px;
+            padding-top: 5px;
+            border-top: 1px solid #cbd5e1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 9px;
+            font-weight: 600;
+            color: #64748b;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-header">
+          <div class="inst-title">${institutionName}</div>
+          <div class="exam-title">${examName}</div>
+          <div class="sub-badge">${titleSub}</div>
+          <div class="meta-bar">
+            <span class="meta-item">📅 Sınav Tarihi: <strong>${examDate}</strong></span>
+            <span class="meta-item">📝 Toplam: <strong>${totalQ} Soru</strong></span>
+            <span class="meta-item">🔘 Format: <strong>${exam.optionsCount || 4} Seçenekli</strong></span>
+            <span class="meta-item">📚 Ders Sayısı: <strong>${subjectIndexMap.length} Ders</strong></span>
+          </div>
+        </div>
+
+        <div class="print-body">
+          ${contentHtml}
+        </div>
+
+        <div class="print-footer">
+          <span>Akademi Panel • Deneme Sınavı Yönetim ve Optik Okuma Sistemi</span>
+          <span>Basım: ${new Date().toLocaleString('tr-TR')}</span>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  const handlePrintAnswerKey = () => {
+    setIsPrintingKey(true);
+
+    try {
+      let printFrame = document.getElementById('answer-key-print-iframe') as HTMLIFrameElement | null;
+      if (printFrame) {
+        try { printFrame.remove(); } catch {}
+      }
+
+      printFrame = document.createElement('iframe');
+      printFrame.id = 'answer-key-print-iframe';
+      printFrame.style.position = 'fixed';
+      printFrame.style.left = '-99999px';
+      printFrame.style.top = '0';
+      printFrame.style.width = '210mm';
+      printFrame.style.height = '297mm';
+      printFrame.style.border = 'none';
+      printFrame.style.opacity = '0';
+      printFrame.style.pointerEvents = 'none';
+      printFrame.style.zIndex = '-99999';
+      document.body.appendChild(printFrame);
+
+      const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
+      if (!frameDoc) {
+        setIsPrintingKey(false);
+        window.print();
+        return;
+      }
+
+      const html = generateAnswerKeyPrintHtml(printBookletMode);
+      frameDoc.open();
+      frameDoc.write(html);
+      frameDoc.close();
+
+      setTimeout(() => {
+        setIsPrintingKey(false);
+        try {
+          if (printFrame?.contentWindow) {
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+          } else {
+            window.print();
+          }
+        } catch {
+          window.print();
+        }
+      }, 350);
+    } catch (err) {
+      console.error("Answer key print error:", err);
+      setIsPrintingKey(false);
+      window.print();
+    }
+  };
+
   return (
     <div className="w-full max-w-6xl mx-auto flex flex-col gap-4 pb-20 select-none">
       {/* Toast Bildirimi */}
@@ -485,6 +883,7 @@ export function KeysTab({ examId, exam: propExam, updateExam: propUpdateExam, to
                   type="button"
                   onClick={() => {
                     setShowToolsMenu(false);
+                    setPrintBookletMode(activeBooklet);
                     setShowPrintModal(true);
                   }}
                   className="w-full text-left px-3.5 py-2 hover:bg-slate-50 text-slate-700 font-semibold flex items-center gap-2.5 cursor-pointer"
@@ -1046,7 +1445,7 @@ export function KeysTab({ examId, exam: propExam, updateExam: propUpdateExam, to
           onClick={() => setShowPrintModal(false)}
         >
           <div
-            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl border border-slate-200 overflow-hidden"
+            className="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-xl border border-slate-200 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
@@ -1056,11 +1455,12 @@ export function KeysTab({ examId, exam: propExam, updateExam: propUpdateExam, to
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                  onClick={handlePrintAnswerKey}
+                  disabled={isPrintingKey}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  Yazdır
+                  {isPrintingKey ? "Hazırlanıyor..." : "Yazdır"}
                 </button>
                 <button
                   type="button"
@@ -1072,34 +1472,137 @@ export function KeysTab({ examId, exam: propExam, updateExam: propUpdateExam, to
               </div>
             </div>
 
-            <div className="p-6 overflow-y-auto flex-1 font-sans bg-white">
-              <div className="text-center border-b pb-3 mb-4">
-                <h2 className="text-base font-black text-slate-900">{exam.name}</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {activeBooklet} KİTAPÇIĞI CEVAP ANAHTARI
-                </p>
+            {/* Kitapçık Seçim & Çıktı Düzeni Çubuğu */}
+            <div className="px-5 py-2.5 bg-slate-100/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0 no-print">
+              <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider px-2">Kitapçık:</span>
+                {booklets.map(bk => (
+                  <button
+                    key={bk}
+                    type="button"
+                    onClick={() => setPrintBookletMode(bk)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      printBookletMode === bk
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    {bk}
+                  </button>
+                ))}
+                <div className="w-[1px] h-4 bg-slate-200 mx-1" />
+                <button
+                  type="button"
+                  onClick={() => setPrintBookletMode('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    printBookletMode === 'all'
+                      ? 'bg-blue-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  Tüm Kitapçıklar (A-B-C-D)
+                </button>
               </div>
 
-              <div className="space-y-4">
-                {subjectIndexMap.map(sub => {
-                  const subKeys = currentKeys.slice(sub.startIdx, sub.startIdx + sub.count);
-                  return (
-                    <div key={sub.id} className="border border-slate-200 rounded-xl p-3 shadow-2xs">
-                      <div className="font-bold text-xs text-slate-800 mb-2 border-b pb-1">
-                        {sub.name} ({sub.count} Soru)
-                      </div>
-                      <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 text-center font-mono">
-                        {subKeys.map((ans, idx) => (
-                          <div key={idx} className="bg-slate-50 p-1.5 rounded-lg border border-slate-100 text-xs">
-                            <div className="text-[10px] text-slate-400">{idx + 1}</div>
-                            <div className="font-bold text-slate-800">{ans || "-"}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="text-xs text-slate-500 font-medium">
+                Toplam <strong className="text-slate-800 font-mono font-bold">{totalQ}</strong> Soru • A4 Çıktı Düzeni
               </div>
+            </div>
+
+            {/* Önizleme & A4 İçeriği */}
+            <div id="answer-key-printable" className="p-6 overflow-y-auto flex-1 font-sans bg-white custom-scrollbar">
+              <div className="text-center border-b pb-3 mb-4">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  {exam.institution || (state as any).schoolName || "KIRKLARELİ ATATÜRK ORTAOKULU"}
+                </div>
+                <h2 className="text-base font-black text-slate-900">{exam.name}</h2>
+                <div className="inline-block mt-1 px-3 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-xs font-bold text-slate-700">
+                  {printBookletMode === 'all' ? 'TÜM KİTAPÇIKLAR CEVAP ANAHTARI (A - B - C - D)' : `${printBookletMode} KİTAPÇIĞI CEVAP ANAHTARI`}
+                </div>
+                <div className="flex items-center justify-center gap-4 text-[11px] text-slate-500 mt-2">
+                  <span>Tarih: <strong>{exam.date || new Date().toLocaleDateString('tr-TR')}</strong></span>
+                  <span>Toplam: <strong>{totalQ} Soru</strong></span>
+                  <span>Şık: <strong>{exam.optionsCount || 4} Seçenek</strong></span>
+                </div>
+              </div>
+
+              {printBookletMode !== 'all' ? (
+                <div className="space-y-4">
+                  {subjectIndexMap.map((sub, sIdx) => {
+                    const activeKeys = [...(examKeys[printBookletMode] || [])];
+                    while (activeKeys.length < totalQ) activeKeys.push("");
+                    const subKeys = activeKeys.slice(sub.startIdx, sub.startIdx + sub.count);
+
+                    return (
+                      <div key={sub.id || sIdx} className="border border-slate-200 rounded-xl p-3.5 shadow-2xs bg-white">
+                        <div className="flex items-center justify-between font-bold text-xs text-slate-800 mb-2.5 pb-1.5 border-b border-slate-100">
+                          <span>{sIdx + 1}. {sub.name}</span>
+                          <span className="text-[11px] text-slate-500 font-mono">{sub.count} Soru • ({sub.startIdx + 1} - {sub.startIdx + sub.count})</span>
+                        </div>
+                        <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5 text-center font-mono">
+                          {subKeys.map((ans, idx) => (
+                            <div key={idx} className="bg-slate-50 p-1.5 rounded-lg border border-slate-200/80 text-xs">
+                              <div className="text-[10px] text-slate-400 font-bold">{sub.startIdx + idx + 1}</div>
+                              <div className={`font-black mt-0.5 ${
+                                ans === '*' || ans === 'X' ? 'text-rose-600 text-[10px]' : ans ? 'text-slate-900 text-sm' : 'text-slate-300'
+                              }`}>
+                                {ans === '*' || ans === 'X' ? 'İPTAL' : (ans || "-")}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {subjectIndexMap.map((sub, sIdx) => {
+                    return (
+                      <div key={sub.id || sIdx} className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+                        <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 border-b border-slate-200 font-bold text-xs text-slate-800">
+                          <span>{sIdx + 1}. {sub.name}</span>
+                          <span className="text-[11px] text-slate-500 font-mono">{sub.count} Soru</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs text-center border-collapse">
+                            <thead>
+                              <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-bold text-[11px]">
+                                <th className="p-2 w-16 border-r border-slate-200">Soru</th>
+                                {['A', 'B', 'C', 'D'].map(bk => (
+                                  <th key={bk} className="p-2 border-r border-slate-200 last:border-r-0">{bk} Kitapçığı</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-mono">
+                              {Array.from({ length: sub.count }).map((_, i) => {
+                                const qNum = sub.startIdx + i + 1;
+                                return (
+                                  <tr key={i} className="hover:bg-slate-50/50">
+                                    <td className="p-2 font-bold text-slate-500 border-r border-slate-200 bg-slate-50/30">{qNum}</td>
+                                    {['A', 'B', 'C', 'D'].map(bk => {
+                                      const ans = (examKeys[bk] || [])[sub.startIdx + i] || '-';
+                                      return (
+                                        <td key={bk} className="p-2 border-r border-slate-200 last:border-r-0 font-bold">
+                                          {ans === '*' || ans === 'X' ? (
+                                            <span className="text-[10px] text-rose-600 font-black">İPTAL</span>
+                                          ) : (
+                                            <span className={ans === '-' ? 'text-slate-300 font-normal' : 'text-slate-900'}>{ans}</span>
+                                          )}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>

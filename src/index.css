@@ -45,10 +45,27 @@ body {
   #seating-plan-printable, #seating-plan-printable *,
   #print-area-takvim, #print-area-takvim *,
   #optical-form-printable, #optical-form-printable *,
+  #answer-key-printable, #answer-key-printable *,
   .optik-page, .optik-page * {
     visibility: visible;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+  #answer-key-printable {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    box-sizing: border-box;
+    display: block !important;
+    z-index: 999999;
+  }
+  .no-print, .no-print * {
+    display: none !important;
+    visibility: hidden !important;
   }
   #optical-form-printable, .optik-page {
     position: absolute;
