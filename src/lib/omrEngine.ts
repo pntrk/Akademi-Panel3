@@ -152,16 +152,40 @@ export function getAnchorMarks(omr = OMR_SPECS): { tl: Point; tr: Point; bl: Poi
   };
 }
 
+export const HAZIRBULUNUSLUK_ANSWER_KEYS_A = [
+  // 1-20 Türkçe (ACBCCBDCCBABDCBBDCAC)
+  "A", "C", "B", "C", "C", "B", "D", "C", "C", "B", "A", "B", "D", "C", "B", "B", "D", "C", "A", "C",
+  // 21-30 T.C. İnkılap (DBACDBDBDB)
+  "D", "B", "A", "C", "D", "B", "D", "B", "D", "B",
+  // 31-40 Din Kültürü (CADCBACBDC)
+  "C", "A", "D", "C", "B", "A", "C", "B", "D", "C",
+  // 41-50 İngilizce (DBCABCBDDC)
+  "D", "B", "C", "A", "B", "C", "B", "D", "D", "C",
+  // 51-70 Matematik (BBDBBBDBABBACACCDABC)
+  "B", "B", "D", "B", "B", "B", "D", "B", "A", "B", "B", "A", "C", "A", "C", "C", "D", "A", "B", "C",
+  // 71-90 Fen Bilimleri (BDCADDBBCACBCDBCA CBD)
+  "B", "D", "C", "A", "D", "D", "B", "B", "C", "A", "C", "B", "C", "D", "B", "C", "A", "C", "B", "D"
+];
+
+export const HAZIRBULUNUSLUK_STUDENTS: Student[] = [
+  { id: "std-508", no: 508, name: "MUHAMMED ALİ SUYUBOL", className: "8/D", classStr: "8", sectionStr: "D", leagueTeam: "Taktik Avcıları" },
+  { id: "std-454", no: 454, name: "OSMAN ATAR", className: "8/D", classStr: "8", sectionStr: "D", leagueTeam: "Kutup Yıldızları" },
+  { id: "std-497", no: 497, name: "EZGİ BAŞTÜRK", className: "8/D", classStr: "8", sectionStr: "D", leagueTeam: "Sıçrama Ustaları" },
+  { id: "std-426", no: 426, name: "MEHMET BERAT ÖZASLAN", className: "8/D", classStr: "8", sectionStr: "D", leagueTeam: "Taktik Avcıları" },
+  { id: "std-423", no: 423, name: "İSA KEREM URAS", className: "8/D", classStr: "8", sectionStr: "D", leagueTeam: "Kutup Yıldızları" },
+  { id: "std-408", no: 408, name: "EGE TURAN", className: "8/D", classStr: "8", sectionStr: "D", leagueTeam: "Sıçrama Ustaları" }
+];
+
 export const initialExam: Exam = {
   id: "1",
   no: 1,
-  name: "LGS GENEL DENEME SINAVI - 1",
+  name: "HAZIRBULUNUŞLUK - 27.08.2026",
   examType: 'internal',
-  institution: "EĞİTİM KURUMU",
-  date: new Date().toLocaleDateString('tr-TR'),
+  institution: "KIRKLARELİ ATATÜRK ORTAOKULU",
+  date: "27.08.2026",
   logo: null,
-  participantCount: 0,
-  studentList: [],
+  participantCount: 6,
+  studentList: HAZIRBULUNUSLUK_STUDENTS,
   layoutType: 'split',
   format: 'lgs',
   subjects: [
@@ -174,7 +198,12 @@ export const initialExam: Exam = {
   ],
   optionsCount: 4,
   penalty: 3,
-  keys: { A: Array(90).fill(""), B: Array(90).fill(""), C: [], D: [] },
+  keys: {
+    A: HAZIRBULUNUSLUK_ANSWER_KEYS_A,
+    B: Array(90).fill(""),
+    C: [],
+    D: []
+  },
   results: []
 };
 
@@ -770,12 +799,15 @@ export function detectOmrAnchors(
           const ratio = bw / bh;
           if (ratio > 0.50 && ratio < 2.0) {
             let sumX = 0, sumY = 0, weightSum = 0;
+            let darkCount = 0;
+            const totalBoxPixels = bw * bh;
             for (let cy = top; cy <= bottom; cy += 1) {
               const rowOff = cy * w;
               for (let cx = left; cx <= right; cx += 1) {
                 const i = (rowOff + cx) * 4;
                 const lum = 0.299 * imgBytes[i] + 0.587 * imgBytes[i + 1] + 0.114 * imgBytes[i + 2];
                 if (lum < thresh) {
+                  darkCount++;
                   const weight = (255 - lum) * (255 - lum);
                   sumX += cx * weight;
                   sumY += cy * weight;
@@ -784,12 +816,16 @@ export function detectOmrAnchors(
               }
             }
 
+            const solidRatio = totalBoxPixels > 0 ? darkCount / totalBoxPixels : 0;
+            // Siyah optik çapa işareti dolu karedir; içi boş metin/çerçeveler elenir
+            if (solidRatio < 0.50) continue;
+
             const cx = weightSum > 0 ? sumX / weightSum : left + bw / 2;
             const cy = weightSum > 0 ? sumY / weightSum : top + bh / 2;
 
             const dist = Math.hypot(cx - targetPt.x, cy - targetPt.y);
             const sizeDev = Math.abs(bw - expectedAnchorPx) + Math.abs(bh - expectedAnchorPx);
-            const score = dist + sizeDev * 1.5 + (luma * 0.3);
+            const score = dist + sizeDev * 1.5 + (luma * 0.2) - (solidRatio * 45);
 
             if (score < minScore) {
               minScore = score;
@@ -870,6 +906,8 @@ export function sampleLocalBackground(
 
 /**
  * Tek bir baloncuk için iç çekirdek doluluk oranını (Fill Ratio) ve koyuluk skorunu hesaplar.
+ * Silik / açık renk kurşun kalem işaretlemelerini yüksek hassasiyetle tespit ederken,
+ * boş/işaretlenmemiş baloncuklardaki basılı harflerin (A, B, C, D, E) yanlış pozitif üretmesini engeller.
  */
 export function evaluateBubbleFill(
   imgBytes: Uint8ClampedArray,
@@ -880,27 +918,38 @@ export function evaluateBubbleFill(
   bubbleRadiusPx: number = 13.0,
   bgDarkness: number = 15
 ): BubbleMetricResult {
-  const sampleRadius = Math.max(3, Math.round(bubbleRadiusPx * 0.65));
+  // Baloncuğun merkez çekirdeğini (yarıçapın %55'i) analiz ediyoruz
+  const sampleRadius = Math.max(3, Math.round(bubbleRadiusPx * 0.55));
   let bestScore = -1;
   let bestMean = 0;
   let bestRatio = 0;
   let bestX = cx;
   let bestY = cy;
 
-  const effectiveSampleRadius = Math.max(2, Math.round(sampleRadius * 0.85));
-  const effectiveR2 = effectiveSampleRadius * effectiveSampleRadius;
+  const effectiveR2 = sampleRadius * sampleRadius;
 
-  for (let oy = -1; oy <= 1; oy += 1) {
-    for (let ox = -1; ox <= 1; ox += 1) {
+  // Dinamik eşikler: Kağıt beyazlığı / gölge seviyesine adapte olur
+  const darkThresh = Math.max(14.0, bgDarkness * 0.22);
+  const heavyThresh = Math.max(32.0, bgDarkness * 0.45);
+
+  // Hizalama ve baskı toleransı için küçük merkez kaydırma araması (maks ~2 piksel)
+  const maxOffset = Math.max(1, Math.min(3, Math.round(bubbleRadiusPx * 0.20)));
+
+  for (let oy = -maxOffset; oy <= maxOffset; oy += 1) {
+    for (let ox = -maxOffset; ox <= maxOffset; ox += 1) {
+      const distFromCenter = Math.hypot(ox, oy);
+      if (distFromCenter > maxOffset) continue;
+
       const curX = cx + ox;
       const curY = cy + oy;
 
       let totalDark = 0;
       let darkCount = 0;
+      let heavyCount = 0;
       let totalSamples = 0;
 
-      for (let dy = -effectiveSampleRadius; dy <= effectiveSampleRadius; dy++) {
-        for (let dx = -effectiveSampleRadius; dx <= effectiveSampleRadius; dx++) {
+      for (let dy = -sampleRadius; dy <= sampleRadius; dy++) {
+        for (let dx = -sampleRadius; dx <= sampleRadius; dx++) {
           const distSq = dx * dx + dy * dy;
           if (distSq <= effectiveR2) {
             const px = Math.floor(curX + dx);
@@ -911,12 +960,15 @@ export function evaluateBubbleFill(
               const darkness = 255 - whiteness;
               const relDark = Math.max(0, darkness - bgDarkness);
 
-              const centerWeight = 1.0 - (Math.sqrt(distSq) / (effectiveSampleRadius + 0.5)) * 0.40;
+              const centerWeight = 1.0 - (Math.sqrt(distSq) / (sampleRadius + 0.5)) * 0.30;
               totalDark += relDark * centerWeight;
               totalSamples++;
 
-              if (relDark > 28) {
+              if (relDark >= darkThresh) {
                 darkCount++;
+              }
+              if (relDark >= heavyThresh) {
+                heavyCount++;
               }
             }
           }
@@ -925,7 +977,25 @@ export function evaluateBubbleFill(
 
       const meanDark = totalSamples > 0 ? totalDark / totalSamples : 0;
       const fillRatio = totalSamples > 0 ? darkCount / totalSamples : 0;
-      const score = meanDark * (0.35 + 0.65 * fillRatio);
+      const heavyRatio = totalSamples > 0 ? heavyCount / totalSamples : 0;
+
+      // GLİF / BASILI HARF FİLTRESİ:
+      // Boş baloncuktaki basılı harf (A, B, C, D, E) glifi çekirdeğin en fazla %15-20'sini kaplar
+      // ve sadece ince çizgilerden oluşur. Kurşun kalem karalaması ise disk alanının %25-90'ını kaplar.
+      let rawScore = 0;
+      if (fillRatio >= 0.26 && meanDark >= 9.0) {
+        // Gerçek kurşun kalem işaretlemesi (açık/orta/koyu)
+        const coverageMultiplier = 0.35 + 0.65 * Math.min(1.0, (fillRatio - 0.20) * 1.8);
+        rawScore = (meanDark * coverageMultiplier) + (heavyRatio * 18.0);
+      } else if (fillRatio >= 0.22 && meanDark >= 14.0 && heavyRatio >= 0.08) {
+        // Silik ancak belirgin kurşun kalem noktası
+        rawScore = meanDark * 0.50 + heavyRatio * 10.0;
+      } else {
+        // Boş baloncuk (basılı harf veya kağıt dokusu gürültüsü) -> skoru radikal şekilde düşür
+        rawScore = meanDark * 0.06 * Math.min(1.0, fillRatio * 2.5);
+      }
+
+      const score = rawScore * (1.0 - (distFromCenter / (maxOffset + 1)) * 0.10);
 
       if (score > bestScore) {
         bestScore = score;
@@ -937,7 +1007,10 @@ export function evaluateBubbleFill(
     }
   }
 
-  const isMarked = (bestRatio >= 0.18 && bestMean >= 25 && bestScore >= 20) || (bestRatio >= 0.28 && bestScore >= 18);
+  // Bağımsız baloncuk işaretli olma eşiği
+  const isMarked = (bestRatio >= 0.26 && bestMean >= 10.0 && bestScore >= 7.0) ||
+                   (bestRatio >= 0.22 && bestScore >= 12.0) ||
+                   (bestScore >= 18.0);
 
   return {
     meanDarkness: bestMean,
@@ -951,7 +1024,8 @@ export function evaluateBubbleFill(
 
 /**
  * Bir soruya ait tüm şıkların (A, B, C, D, E) baloncuklarını analiz ederek işaretlenen cevabı belirler.
- * Göreli Sinyal/Gürültü Oranı (SNR) ve Kontrast Karşılaştırması ile %100 Doğruluk Sağlar.
+ * Göreli Sinyal/Gürültü Oranı (SNR) ve Kontrast Karşılaştırması ile silik işaretlenmiş
+ * optik formları doğru okurken boş bırakılmış soruları kusursuz şekilde boş olarak algılar.
  */
 export function evaluateQuestionAnswer(
   bubbles: { option: string; x: number; y: number }[],
@@ -970,8 +1044,22 @@ export function evaluateQuestionAnswer(
     return { answer: "", markedPoint: null, scores: [], isDoubleMarked: false };
   }
 
-  const firstMapped = applyHomography(bubbles[0].x - 6, bubbles[0].y, H);
-  const bgDarkness = sampleLocalBackground(imgBytes, w, h, firstMapped.x, firstMapped.y, 8);
+  // Soru satırının etrafındaki kağıt beyazlığı (soru numarası veya cetvel çizgisine basmamak için dikeyde ±2.8mm)
+  const bgSamples: number[] = [];
+  const firstBubble = bubbles[0];
+  const lastBubble = bubbles[bubbles.length - 1];
+
+  const pTop1 = applyHomography(firstBubble.x, firstBubble.y - 2.8, H);
+  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pTop1.x, pTop1.y, 3));
+  const pBot1 = applyHomography(firstBubble.x, firstBubble.y + 2.8, H);
+  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pBot1.x, pBot1.y, 3));
+
+  const pTop2 = applyHomography(lastBubble.x, lastBubble.y - 2.8, H);
+  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pTop2.x, pTop2.y, 3));
+  const pBot2 = applyHomography(lastBubble.x, lastBubble.y + 2.8, H);
+  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pBot2.x, pBot2.y, 3));
+
+  const bgDarkness = Math.min(...bgSamples);
 
   const bubbleMetrics = bubbles.map(b => {
     const mapped = applyHomography(b.x, b.y, H);
@@ -993,14 +1081,27 @@ export function evaluateQuestionAnswer(
 
   const otherScores = sorted.slice(1);
   const avgOthersScore = otherScores.length > 0 ? otherScores.reduce((sum, s) => sum + s.score, 0) / otherScores.length : 0;
-  const avgOthersRatio = otherScores.length > 0 ? otherScores.reduce((sum, s) => sum + s.ratio, 0) / otherScores.length : 0;
 
-  const isDistinctMark = best.isMarked && (
-    best.score >= avgOthersScore + 10 ||
-    best.ratio >= Math.max(0.18, avgOthersRatio * 1.8) ||
-    best.score >= 32
+  const scoreDiff = best.score - avgOthersScore;
+  const scoreRatio = (best.score + 0.1) / (avgOthersScore + 0.1);
+
+  // KESİN BOŞ SORU GÜVENCESİ & HASSAS KURŞUN KALEM TESPİTİ:
+  // 1. İşaretlenmiş şıkkın skoru ve doluluğu, boş baloncuk basılı harf sınırını kesinlikle geçmelidir.
+  const meetsAbsoluteMarkThreshold = (
+    (best.score >= 6.5 && best.mean >= 9.5 && best.ratio >= 0.24) ||
+    (best.score >= 14.0)
   );
 
+  // 2. Diğer boş şıklara göre açık bir tepe/kontrast farkı oluşturmalıdır.
+  const meetsContrastThreshold = (
+    (scoreDiff >= 4.5 && scoreRatio >= 2.0) ||
+    (scoreDiff >= 7.0) ||
+    (best.score >= 20.0)
+  );
+
+  const isDistinctMark = meetsAbsoluteMarkThreshold && meetsContrastThreshold;
+
+  // Boş bırakılmış soru
   if (!best || !isDistinctMark) {
     return {
       answer: "",
@@ -1010,13 +1111,24 @@ export function evaluateQuestionAnswer(
     };
   }
 
-  if (second && second.isMarked && second.ratio >= 0.20 && (best.score - second.score) < 14) {
-    return {
-      answer: "",
-      markedPoint: { x: best.x, y: best.y },
-      scores: bubbleMetrics,
-      isDoubleMarked: true
-    };
+  // Çift İşaretleme ve Silgi Kalıntısı Analizi:
+  const isSecondMarked = second && (
+    (second.score >= 7.0 && second.ratio >= 0.24 && second.mean >= 9.0) ||
+    (second.isMarked)
+  );
+
+  if (isSecondMarked) {
+    // Silgi ayrımı: Öğrenci bir şıkkı silip diğerini daha koyu işaretlediyse (en az 2.2 kat fark veya >= 14 puan fark)
+    const isErasureOfSecond = (best.score >= 2.2 * second.score) || (best.score - second.score >= 14.0);
+    if (!isErasureOfSecond) {
+      // Gerçekten iki şık birden karalanmış -> Çift işaretleme (geçersiz)
+      return {
+        answer: "",
+        markedPoint: { x: best.x, y: best.y },
+        scores: bubbleMetrics,
+        isDoubleMarked: true
+      };
+    }
   }
 
   return {

@@ -1002,9 +1002,24 @@ export function ResultsView() {
   const [activeMainTab, setActiveMainTab] = useState<'results' | 'analysis'>('results');
 
   // Active selected exam
-  const [selectedExamId, setSelectedExamId] = useState<string>(
-    state.exams.length > 0 ? String(state.exams[0].id) : ""
-  );
+  const [selectedExamId, setSelectedExamId] = useState<string>(() => {
+    try {
+      const savedId = sessionStorage.getItem('active_exam_id');
+      if (savedId && state.exams.some(e => String(e.id) === String(savedId))) {
+        return String(savedId);
+      }
+    } catch (e) {}
+    return state.exams.length > 0 ? String(state.exams[0].id) : "";
+  });
+
+  useEffect(() => {
+    try {
+      const savedId = sessionStorage.getItem('active_exam_id');
+      if (savedId && state.exams.some(e => String(e.id) === String(savedId))) {
+        setSelectedExamId(String(savedId));
+      }
+    } catch (e) {}
+  }, [state.exams]);
 
   const exam: Exam = state.exams.find(e => String(e.id) === String(selectedExamId)) || state.exams[0] || {
     id: "1",

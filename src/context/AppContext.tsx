@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { Student, Exam, ExamResult, BudgetData, ExamHall, SeatingPlanItem, CloudBackupRecord, FullBackupData, FullBackupSummary, AppNotification, ExamKeys } from '../types';
 import { generateId, recalculateLeagueForStudents } from '../lib/utils';
-import { generateExamOmrMap } from '../lib/omrEngine';
+import { generateExamOmrMap, initialExam, HAZIRBULUNUSLUK_STUDENTS, HAZIRBULUNUSLUK_ANSWER_KEYS_A, normalizeTurkish } from '../lib/omrEngine';
 import { db, firebaseConfig, auth, doc, getDoc, setDoc, onSnapshot, collection, getDocs, deleteDoc, query, disableNetwork, enableNetwork, User } from '../lib/firebase';
 import { 
   subscribeToNotifications, 
@@ -65,8 +65,8 @@ interface AppContextType {
 }
 
 const defaultState: AppState = {
-  students: [],
-  exams: [],
+  students: HAZIRBULUNUSLUK_STUDENTS,
+  exams: [{ ...initialExam, omrMap: generateExamOmrMap(initialExam) }],
   results: [],
   budget: { incomes: [], expenses: [], debts: [] },
   examHalls: [],
@@ -186,9 +186,31 @@ const loadInitialState = (): AppState => {
         }
         return e;
       });
+      let finalExams = safeExams;
+      if (finalExams.length === 0) {
+        finalExams = [{ ...initialExam, omrMap: generateExamOmrMap(initialExam) }];
+      } else {
+        const hazirExam = finalExams.find((e: Exam) => normalizeTurkish(e.name).includes('hazirbulunus') || String(e.id) === '1');
+        if (hazirExam) {
+          if (!hazirExam.keys?.A || hazirExam.keys.A.length < 90 || hazirExam.keys.A.every((k: string) => !k)) {
+            hazirExam.keys = { ...hazirExam.keys, A: HAZIRBULUNUSLUK_ANSWER_KEYS_A };
+          }
+          if (!hazirExam.studentList || hazirExam.studentList.length < HAZIRBULUNUSLUK_STUDENTS.length) {
+            hazirExam.studentList = HAZIRBULUNUSLUK_STUDENTS;
+          }
+        }
+      }
+
+      let finalStudents: Student[] = parsed.students || [];
+      HAZIRBULUNUSLUK_STUDENTS.forEach(hs => {
+        if (!finalStudents.some((s: Student) => String(s.no) === String(hs.no) || Number(s.no) === Number(hs.no))) {
+          finalStudents.push(hs);
+        }
+      });
+
       return {
-        students: parsed.students || [],
-        exams: safeExams,
+        students: finalStudents,
+        exams: finalExams,
         results: parsed.results || [],
         budget: parsed.budget || { incomes: [], expenses: [], debts: [] },
         examHalls: parsed.examHalls || [],

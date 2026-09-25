@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import jsQR from 'jsqr';
 import QRCode from 'qrcode';
 import { Exam, Anchors, Point, LaserMark, Student, ExamResult, OmrStudent } from '../types';
-import { DEFAULT_OMR, OMR_SPECS, OPTS_4, OPTS_5, getHomography, applyHomography, getQuestionsLayout, calculateScore, formatClassSec, createUnifiedExamResult, getBookletBubblePositions, getQrCodeBox, warpPerspectiveToCanvas, evaluateQuestionAnswer, evaluateBubbleFill, sampleLocalBackground, detectOmrAnchors } from '../lib/omrEngine';
+import { DEFAULT_OMR, OMR_SPECS, OPTS_4, OPTS_5, getHomography, applyHomography, getQuestionsLayout, calculateScore, formatClassSec, createUnifiedExamResult, getBookletBubblePositions, getQrCodeBox, warpPerspectiveToCanvas, evaluateQuestionAnswer, evaluateBubbleFill, sampleLocalBackground, detectOmrAnchors, HAZIRBULUNUSLUK_STUDENTS, HAZIRBULUNUSLUK_ANSWER_KEYS_A, normalizeTurkish } from '../lib/omrEngine';
 import { useAppContext } from '../context/AppContext';
 import { generateId } from '../lib/utils';
 import {
@@ -402,68 +402,227 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
     setDraggingNode(null);
   };
 
-  // Homografi Düzeltmeli Milimetrik QR Tarayıcı
+  /**
+   * Fotokopi, düşük kontrast, toner lekesi ve perspektif kaymalarına karşı
+   * çok aşamalı (Multi-Stage Adaptive + Otsu + Contrast Stretch) QR kod çözücü motoru.
+   */
+  const decodeQRWithAllEnhancements = (
+    imgData: Uint8ClampedArray,
+    width: number,
+    height: number
+  ): string | null => {
+    // 1. Doğrudan deneme (standart ve ters renkler)
+    let code = decodeQR(imgData, width, height, { inversionAttempts: "dontInvert" });
+    if (code && code.data) return code.data;
+
+    code = decodeQR(imgData, width, height, { inversionAttempts: "invertFirst" });
+    if (code && code.data) return code.data;
+
+    const totalPixels = width * height;
+    const lumas = new Uint8Array(totalPixels);
+    let minL = 255;
+    let maxL = 0;
+
+    for (let i = 0, j = 0; i < imgData.length; i += 4, j++) {
+      const l = Math.round(0.299 * imgData[i] + 0.587 * imgData[i + 1] + 0.114 * imgData[i + 2]);
+      lumas[j] = l;
+      if (l < minL) minL = l;
+      if (l > maxL) maxL = l;
+    }
+
+    // 2. Fotokopi Kontrast Germe (Min-Max Normalization):
+    // Fotokopilerde kağıt saf beyaz değil gridir (180-210), toner de soluktur (50-90).
+    // Germe işlemi ile en koyu piksel tam 0, en açık piksel tam 255 yapılır.
+    const diff = maxL - minL;
+    if (diff > 25) {
+      const stretched = new Uint8ClampedArray(imgData.length);
+      const scale = 255 / diff;
+      for (let i = 0, j = 0; i < imgData.length; i += 4, j++) {
+        const nl = Math.min(255, Math.max(0, Math.round((lumas[j] - minL) * scale)));
+        stretched[i] = nl;
+        stretched[i + 1] = nl;
+        stretched[i + 2] = nl;
+        stretched[i + 3] = 255;
+      }
+      code = decodeQR(stretched, width, height, { inversionAttempts: "dontInvert" });
+      if (code && code.data) return code.data;
+
+      code = decodeQR(stretched, width, height, { inversionAttempts: "invertFirst" });
+      if (code && code.data) return code.data;
+    }
+
+    // 3. Otsu Optimal Eşikleme (Otsu's Global Thresholding)
+    // Bimodal dağılımda (arka plan kağıdı vs QR toner noktaları) en kusursuz ayrım noktası
+    const hist = new Uint32Array(256);
+    for (let j = 0; j < totalPixels; j++) {
+      hist[lumas[j]]++;
+    }
+
+    let sum = 0;
+    for (let t = 0; t < 256; t++) sum += t * hist[t];
+
+    let sumB = 0;
+    let wB = 0;
+    let wF = 0;
+    let varMax = 0;
+    let otsuThreshold = 128;
+
+    for (let t = 0; t < 256; t++) {
+      wB += hist[t];
+      if (wB === 0) continue;
+      wF = totalPixels - wB;
+      if (wF === 0) break;
+
+      sumB += t * hist[t];
+      const mB = sumB / wB;
+      const mF = (sum - sumB) / wF;
+
+      const varBetween = wB * wF * (mB - mF) * (mB - mF);
+      if (varBetween > varMax) {
+        varMax = varBetween;
+        otsuThreshold = t;
+      }
+    }
+
+    // Otsu eşikli binarizasyon
+    const binarized = new Uint8ClampedArray(imgData.length);
+    for (let i = 0, j = 0; i < imgData.length; i += 4, j++) {
+      const v = lumas[j] > otsuThreshold ? 255 : 0;
+      binarized[i] = v;
+      binarized[i + 1] = v;
+      binarized[i + 2] = v;
+      binarized[i + 3] = 255;
+    }
+    code = decodeQR(binarized, width, height, { inversionAttempts: "dontInvert" });
+    if (code && code.data) return code.data;
+
+    code = decodeQR(binarized, width, height, { inversionAttempts: "invertFirst" });
+    if (code && code.data) return code.data;
+
+    // Otsu etrafındaki toleranslı eşikler (-20, +20, -35, +35)
+    for (const delta of [-20, 20, -35, 35]) {
+      const t = Math.min(240, Math.max(15, otsuThreshold + delta));
+      for (let i = 0, j = 0; i < imgData.length; i += 4, j++) {
+        const v = lumas[j] > t ? 255 : 0;
+        binarized[i] = v;
+        binarized[i + 1] = v;
+        binarized[i + 2] = v;
+        binarized[i + 3] = 255;
+      }
+      code = decodeQR(binarized, width, height, { inversionAttempts: "dontInvert" });
+      if (code && code.data) return code.data;
+    }
+
+    // 4. Adaptif Lokal Pencereleme (Lokal Işık/Toner Dalgalanmalarına Karşı)
+    const blockSize = Math.max(9, Math.floor(width / 20) | 1);
+    const halfBlock = Math.floor(blockSize / 2);
+    const integral = new Float64Array((width + 1) * (height + 1));
+    for (let y = 0; y < height; y++) {
+      let rowSum = 0;
+      for (let x = 0; x < width; x++) {
+        rowSum += lumas[y * width + x];
+        integral[(y + 1) * (width + 1) + (x + 1)] = integral[y * (width + 1) + (x + 1)] + rowSum;
+      }
+    }
+
+    const adaptiveBin = new Uint8ClampedArray(imgData.length);
+    for (let y = 0; y < height; y++) {
+      const y0 = Math.max(0, y - halfBlock);
+      const y1 = Math.min(height, y + halfBlock + 1);
+      for (let x = 0; x < width; x++) {
+        const x0 = Math.max(0, x - halfBlock);
+        const x1 = Math.min(width, x + halfBlock + 1);
+        const count = (x1 - x0) * (y1 - y0);
+        const sumRegion = integral[y1 * (width + 1) + x1] - integral[y0 * (width + 1) + x1] - integral[y1 * (width + 1) + x0] + integral[y0 * (width + 1) + x0];
+        const mean = sumRegion / count;
+        const v = lumas[y * width + x] > (mean - 7) ? 255 : 0;
+        const idx = (y * width + x) * 4;
+        adaptiveBin[idx] = v;
+        adaptiveBin[idx + 1] = v;
+        adaptiveBin[idx + 2] = v;
+        adaptiveBin[idx + 3] = 255;
+      }
+    }
+    code = decodeQR(adaptiveBin, width, height, { inversionAttempts: "dontInvert" });
+    if (code && code.data) return code.data;
+
+    // 5. Geniş Eşik Taraması (Klasik sağlam tarama)
+    for (const t of [75, 95, 115, 135, 155, 175, 195]) {
+      for (let i = 0, j = 0; i < imgData.length; i += 4, j++) {
+        const v = lumas[j] > t ? 255 : 0;
+        binarized[i] = v;
+        binarized[i + 1] = v;
+        binarized[i + 2] = v;
+        binarized[i + 3] = 255;
+      }
+      code = decodeQR(binarized, width, height, { inversionAttempts: "dontInvert" });
+      if (code && code.data) return code.data;
+    }
+
+    return null;
+  };
+
+  // Homografi Düzeltmeli Milimetrik QR Tarayıcı (Fotokopi ve Perspektif Dayanımlı)
   const scanQRWithHomography = (ctx: CanvasRenderingContext2D, H: number[], omrToUse = OMR_SPECS): string | null => {
     try {
-      const qrCanvas = document.createElement('canvas');
-      qrCanvas.width = 240;
-      qrCanvas.height = 240;
-      const qctx = qrCanvas.getContext('2d');
-      if (!qctx) return null;
-
-      // QR kutusu A4 milimetrik koordinatları (getQrCodeBox ile merkezi motor)
       const qrBox = getQrCodeBox(omrToUse);
-      const qrMargin = 1.5; // Perspektif toleransı için 1.5mm marj
-      const qrW_mm = qrBox.w + (qrMargin * 2);
-      const qrH_mm = qrBox.h + (qrMargin * 2);
-      const qrX_mm = qrBox.x - qrMargin;
-      const qrY_mm = qrBox.y - qrMargin;
-
-      const qImgData = qctx.createImageData(240, 240);
-      const qBytes = qImgData.data;
       const srcW = ctx.canvas.width;
       const srcH = ctx.canvas.height;
       const srcData = ctx.getImageData(0, 0, srcW, srcH).data;
 
-      for (let y = 0; y < 240; y++) {
-        const y_mm = qrY_mm + (y / 240) * qrH_mm;
-        const rowOffset = y * 240 * 4;
-        for (let x = 0; x < 240; x++) {
-          const x_mm = qrX_mm + (x / 240) * qrW_mm;
-          const pt = applyHomography(x_mm, y_mm, H);
-          const px = Math.round(pt.x);
-          const py = Math.round(pt.y);
-          const dIdx = rowOffset + (x * 4);
-          if (px >= 0 && px < srcW && py >= 0 && py < srcH) {
-            const sIdx = (py * srcW + px) * 4;
-            qBytes[dIdx] = srcData[sIdx];
-            qBytes[dIdx + 1] = srcData[sIdx + 1];
-            qBytes[dIdx + 2] = srcData[sIdx + 2];
-            qBytes[dIdx + 3] = 255;
-          } else {
-            qBytes[dIdx] = 255;
-            qBytes[dIdx + 1] = 255;
-            qBytes[dIdx + 2] = 255;
-            qBytes[dIdx + 3] = 255;
+      // Fotokopi toleransı: Farklı marj (quiet zone) ve merkez kaydırma denemeleri
+      const marginConfigs = [
+        { margin: 4.5, dx: 0, dy: 0, dim: 440 },
+        { margin: 2.5, dx: 0, dy: 0, dim: 400 },
+        { margin: 6.0, dx: 0, dy: 0, dim: 440 },
+        { margin: 4.5, dx: -1.5, dy: 0, dim: 400 },
+        { margin: 4.5, dx: 1.5, dy: 0, dim: 400 },
+        { margin: 4.5, dx: 0, dy: -1.5, dim: 400 },
+        { margin: 4.5, dx: 0, dy: 1.5, dim: 400 }
+      ];
+
+      for (const cfg of marginConfigs) {
+        const qrW_mm = qrBox.w + (cfg.margin * 2);
+        const qrH_mm = qrBox.h + (cfg.margin * 2);
+        const qrX_mm = qrBox.x - cfg.margin + cfg.dx;
+        const qrY_mm = qrBox.y - cfg.margin + cfg.dy;
+        const dim = cfg.dim;
+
+        const qrCanvas = document.createElement('canvas');
+        qrCanvas.width = dim;
+        qrCanvas.height = dim;
+        const qctx = qrCanvas.getContext('2d');
+        if (!qctx) continue;
+
+        const qImgData = qctx.createImageData(dim, dim);
+        const qBytes = qImgData.data;
+
+        for (let y = 0; y < dim; y++) {
+          const y_mm = qrY_mm + (y / dim) * qrH_mm;
+          const rowOffset = y * dim * 4;
+          for (let x = 0; x < dim; x++) {
+            const x_mm = qrX_mm + (x / dim) * qrW_mm;
+            const pt = applyHomography(x_mm, y_mm, H);
+            const px = Math.round(pt.x);
+            const py = Math.round(pt.y);
+            const dIdx = rowOffset + (x * 4);
+            if (px >= 0 && px < srcW && py >= 0 && py < srcH) {
+              const sIdx = (py * srcW + px) * 4;
+              qBytes[dIdx] = srcData[sIdx];
+              qBytes[dIdx + 1] = srcData[sIdx + 1];
+              qBytes[dIdx + 2] = srcData[sIdx + 2];
+              qBytes[dIdx + 3] = 255;
+            } else {
+              qBytes[dIdx] = 255;
+              qBytes[dIdx + 1] = 255;
+              qBytes[dIdx + 2] = 255;
+              qBytes[dIdx + 3] = 255;
+            }
           }
         }
-      }
 
-      let code = decodeQR(qBytes, 240, 240, { inversionAttempts: "dontInvert" });
-      if (code && code.data) return code.data;
-
-      code = decodeQR(qBytes, 240, 240, { inversionAttempts: "invertFirst" });
-      if (code && code.data) return code.data;
-
-      for (const t of [128, 160, 95, 185]) {
-        const binarized = new Uint8ClampedArray(qBytes);
-        for (let i = 0; i < binarized.length; i += 4) {
-          const luma = 0.299 * binarized[i] + 0.587 * binarized[i + 1] + 0.114 * binarized[i + 2];
-          const v = luma > t ? 255 : 0;
-          binarized[i] = binarized[i + 1] = binarized[i + 2] = v;
-        }
-        code = decodeQR(binarized, 240, 240, { inversionAttempts: "dontInvert" });
-        if (code && code.data) return code.data;
+        const res = decodeQRWithAllEnhancements(qBytes, dim, dim);
+        if (res) return res;
       }
     } catch (e) {
       console.warn("Homografi QR tarama hatası:", e);
@@ -472,7 +631,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
   };
 
   // Optik Formdaki Kodlanmış Öğrenci No, Adı Soyadı ve Kitapçık Baloncuklarını Okuma
-  const scanInfoFields = (ctx: CanvasRenderingContext2D, H: number[], omrToUse = OMR_SPECS) => {
+  const scanInfoFields = (ctx: CanvasRenderingContext2D, H: number[], omrToUse = OMR_SPECS, isPreprinted = false) => {
     try {
       const imgBytes = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height).data;
       const w = ctx.canvas.width;
@@ -484,87 +643,112 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
       let bubbledName = '';
       let bubbledBk = '';
 
-      // Öğrenci Numarası sütunları (5 hane, 0-9 rakamları)
-      const noField = omrToUse.info.fields.find(f => f.id === 'no');
-      if (noField) {
-        for (let c = 0; c < noField.cols; c++) {
-          const colCenterX_mm = noField.startX + (c * omrToUse.info.colW) + (omrToUse.info.colW / 2);
-          const topMapped = applyHomography(colCenterX_mm, omrToUse.info.startY - 3, H);
-          const colBgDarkness = sampleLocalBackground(imgBytes, w, h, topMapped.x, topMapped.y, 6);
+      // Ön-baskılı (özelleştirilmiş MEB/Hazırbulunuşluk) formlarda öğrenci adı ve numarası kodlanmaz,
+      // sadece kitapçık türü (A, B, C, D) baloncukları bulunur. Metin alanlarının taranıp hayalet
+      // isim ve numara üretmesi engellenir.
+      if (!isPreprinted) {
+        // Öğrenci Numarası sütunları (5 hane, 0-9 rakamları)
+        const noField = omrToUse.info.fields.find(f => f.id === 'no');
+        if (noField) {
+          for (let c = 0; c < noField.cols; c++) {
+            const colCenterX_mm = noField.startX + (c * omrToUse.info.colW) + (omrToUse.info.colW / 2);
+            const topMapped = applyHomography(colCenterX_mm, omrToUse.info.startY - 3, H);
+            const colBgDarkness = sampleLocalBackground(imgBytes, w, h, topMapped.x, topMapped.y, 6);
 
-          let bestScore = -1;
-          let bestItem = '';
-          let bestRatio = 0;
+            const colScores: { item: string; score: number; ratio: number; mean: number }[] = [];
 
-          for (let r = 0; r < noField.items.length; r++) {
-            const y_mm = omrToUse.info.startY + (r * omrToUse.info.rowH);
-            const mapped = applyHomography(colCenterX_mm, y_mm, H);
-            const metric = evaluateBubbleFill(imgBytes, w, h, mapped.x, mapped.y, infoRadiusPx, colBgDarkness);
-            if (metric.score > bestScore) {
-              bestScore = metric.score;
-              bestRatio = metric.fillRatio;
-              bestItem = noField.items[r];
+            for (let r = 0; r < noField.items.length; r++) {
+              const y_mm = omrToUse.info.startY + (r * omrToUse.info.rowH);
+              const mapped = applyHomography(colCenterX_mm, y_mm, H);
+              const metric = evaluateBubbleFill(imgBytes, w, h, mapped.x, mapped.y, infoRadiusPx, colBgDarkness);
+              colScores.push({ item: noField.items[r], score: metric.score, ratio: metric.fillRatio, mean: metric.meanDarkness });
+            }
+
+            colScores.sort((a, b) => b.score - a.score);
+            const best = colScores[0];
+            const others = colScores.slice(1);
+            const avgOthers = others.length > 0 ? others.reduce((s, x) => s + x.score, 0) / others.length : 0;
+
+            const isMarkedCol = best && (
+              (best.score >= 22.0 && best.mean >= 40.0 && best.ratio >= 0.40 && (best.score - avgOthers >= 12.0)) ||
+              (best.score >= 35.0)
+            );
+
+            if (isMarkedCol) {
+              bubbledNo += best.item;
             }
           }
-          if (bestScore >= 35 && bestRatio >= 0.28) {
-            bubbledNo += bestItem;
+        }
+
+        // Öğrenci Adı Soyadı baloncukları (20 sütun alfabe)
+        const nameField = omrToUse.info.fields.find(f => f.id === 'name');
+        if (nameField) {
+          let markedColsCount = 0;
+          for (let c = 0; c < nameField.cols; c++) {
+            const colCenterX_mm = nameField.startX + (c * omrToUse.info.colW) + (omrToUse.info.colW / 2);
+            const topMapped = applyHomography(colCenterX_mm, omrToUse.info.startY - 3, H);
+            const colBgDarkness = sampleLocalBackground(imgBytes, w, h, topMapped.x, topMapped.y, 6);
+
+            const colScores: { item: string; score: number; ratio: number; mean: number }[] = [];
+
+            for (let r = 0; r < nameField.items.length; r++) {
+              const y_mm = omrToUse.info.startY + (r * omrToUse.info.rowH);
+              const mapped = applyHomography(colCenterX_mm, y_mm, H);
+              const metric = evaluateBubbleFill(imgBytes, w, h, mapped.x, mapped.y, infoRadiusPx, colBgDarkness);
+              colScores.push({ item: nameField.items[r], score: metric.score, ratio: metric.fillRatio, mean: metric.meanDarkness });
+            }
+
+            colScores.sort((a, b) => b.score - a.score);
+            const best = colScores[0];
+            const others = colScores.slice(1);
+            const avgOthers = others.length > 0 ? others.reduce((s, x) => s + x.score, 0) / others.length : 0;
+
+            const isMarkedCol = best && (
+              (best.score >= 22.0 && best.mean >= 40.0 && best.ratio >= 0.40 && (best.score - avgOthers >= 12.0)) ||
+              (best.score >= 35.0)
+            );
+
+            if (isMarkedCol) {
+              bubbledName += best.item;
+              markedColsCount++;
+            } else {
+              bubbledName += ' ';
+            }
+          }
+          if (markedColsCount < 3) {
+            bubbledName = '';
           }
         }
       }
 
-      // Öğrenci Adı Soyadı baloncukları (20 sütun alfabe)
-      const nameField = omrToUse.info.fields.find(f => f.id === 'name');
-      if (nameField) {
-        for (let c = 0; c < nameField.cols; c++) {
-          const colCenterX_mm = nameField.startX + (c * omrToUse.info.colW) + (omrToUse.info.colW / 2);
-          const topMapped = applyHomography(colCenterX_mm, omrToUse.info.startY - 3, H);
-          const colBgDarkness = sampleLocalBackground(imgBytes, w, h, topMapped.x, topMapped.y, 6);
-
-          let bestScore = -1;
-          let bestItem = '';
-          let bestRatio = 0;
-
-          for (let r = 0; r < nameField.items.length; r++) {
-            const y_mm = omrToUse.info.startY + (r * omrToUse.info.rowH);
-            const mapped = applyHomography(colCenterX_mm, y_mm, H);
-            const metric = evaluateBubbleFill(imgBytes, w, h, mapped.x, mapped.y, infoRadiusPx, colBgDarkness);
-            if (metric.score > bestScore) {
-              bestScore = metric.score;
-              bestRatio = metric.fillRatio;
-              bestItem = nameField.items[r];
-            }
-          }
-          if (bestScore >= 35 && bestRatio >= 0.28) {
-            bubbledName += bestItem;
-          } else {
-            bubbledName += ' ';
-          }
-        }
-      }
-
-      // Kitapçık Türü alanı
+      // Kitapçık Türü alanı (A, B, C, D)
       const bkField = omrToUse.info.fields.find(f => f.id === 'bk');
       if (bkField) {
         const colCenterX_mm = bkField.startX + (omrToUse.info.colW / 2);
         const topMapped = applyHomography(colCenterX_mm, omrToUse.info.startY - 3, H);
         const colBgDarkness = sampleLocalBackground(imgBytes, w, h, topMapped.x, topMapped.y, 6);
 
-        let bestScore = -1;
-        let bestItem = '';
-        let bestRatio = 0;
+        const colScores: { item: string; score: number; ratio: number; mean: number }[] = [];
 
         for (let r = 0; r < bkField.items.length; r++) {
           const y_mm = omrToUse.info.startY + (r * omrToUse.info.rowH);
           const mapped = applyHomography(colCenterX_mm, y_mm, H);
           const metric = evaluateBubbleFill(imgBytes, w, h, mapped.x, mapped.y, infoRadiusPx, colBgDarkness);
-          if (metric.score > bestScore) {
-            bestScore = metric.score;
-            bestRatio = metric.fillRatio;
-            bestItem = bkField.items[r];
-          }
+          colScores.push({ item: bkField.items[r], score: metric.score, ratio: metric.fillRatio, mean: metric.meanDarkness });
         }
-        if (bestScore >= 35 && bestRatio >= 0.28) {
-          bubbledBk = bestItem;
+
+        colScores.sort((a, b) => b.score - a.score);
+        const best = colScores[0];
+        const others = colScores.slice(1);
+        const avgOthers = others.length > 0 ? others.reduce((s, x) => s + x.score, 0) / others.length : 0;
+
+        const isMarkedCol = best && (
+          (best.score >= 10.0 && best.mean >= 15.0 && best.ratio >= 0.22 && (best.score - avgOthers >= 5.0)) ||
+          (best.score >= 20.0)
+        );
+
+        if (isMarkedCol) {
+          bubbledBk = best.item;
         }
       }
 
@@ -579,32 +763,39 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
   };
 
   const scanQRRobustly = (ctx: CanvasRenderingContext2D, w: number, h: number): string | null => {
-    let code = decodeQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "dontInvert" });
-    if (code && code.data) return code.data;
+    try {
+      // 1. Sağ üst çeyrek alanında farklı kırpma bölgeleri
+      const crops = [
+        { x: Math.floor(w * 0.48), y: 0, w: Math.floor(w * 0.52), h: Math.floor(h * 0.36) },
+        // Tarayıcı siyah kenar boşluğunu atlayan iç pencere
+        { x: Math.floor(w * 0.56), y: Math.floor(h * 0.02), w: Math.floor(w * 0.42), h: Math.floor(h * 0.30) },
+        // Daha odaklı sağ üst kutu
+        { x: Math.floor(w * 0.62), y: Math.floor(h * 0.04), w: Math.floor(w * 0.36), h: Math.floor(h * 0.25) }
+      ];
 
-    // Sağ üst köşe QR alanı (w: %45, h: %35)
-    const qrW = Math.floor(w * 0.45);
-    const qrH = Math.floor(h * 0.35);
-    const qrX = w - qrW;
-    const qrY = 0;
-    const qrImgData = ctx.getImageData(qrX, qrY, qrW, qrH);
+      for (const crop of crops) {
+        const qrImgData = ctx.getImageData(crop.x, crop.y, crop.w, crop.h);
+        const directRes = decodeQRWithAllEnhancements(qrImgData.data, crop.w, crop.h);
+        if (directRes) return directRes;
 
-    code = decodeQR(qrImgData.data, qrW, qrH, { inversionAttempts: "dontInvert" });
-    if (code && code.data) return code.data;
-
-    code = decodeQR(qrImgData.data, qrW, qrH, { inversionAttempts: "invertFirst" });
-    if (code && code.data) return code.data;
-
-    const thresholds = [128, 160, 95, 185];
-    for (const t of thresholds) {
-      const binarized = new Uint8ClampedArray(qrImgData.data);
-      for (let i = 0; i < binarized.length; i += 4) {
-        const luma = 0.299 * binarized[i] + 0.587 * binarized[i + 1] + 0.114 * binarized[i + 2];
-        const v = luma > t ? 255 : 0;
-        binarized[i] = binarized[i + 1] = binarized[i + 2] = v;
+        // jsQR için ideal ölçeklendirme (500px genişliğe küçültme)
+        if (crop.w > 480) {
+          const targetW = 480;
+          const targetH = Math.round(crop.h * (480 / crop.w));
+          const scaleCvs = document.createElement('canvas');
+          scaleCvs.width = targetW;
+          scaleCvs.height = targetH;
+          const sctx = scaleCvs.getContext('2d');
+          if (sctx) {
+            sctx.drawImage(ctx.canvas, crop.x, crop.y, crop.w, crop.h, 0, 0, targetW, targetH);
+            const scaledData = sctx.getImageData(0, 0, targetW, targetH);
+            const scaledRes = decodeQRWithAllEnhancements(scaledData.data, targetW, targetH);
+            if (scaledRes) return scaledRes;
+          }
+        }
       }
-      code = decodeQR(binarized, qrW, qrH, { inversionAttempts: "dontInvert" });
-      if (code && code.data) return code.data;
+    } catch (e) {
+      console.warn("Robust QR tarama hatası:", e);
     }
     return null;
   };
@@ -1077,12 +1268,22 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
     const qrStudentNo = qrDataObj?.N;
 
     if (qrExamId) {
-      const foundExam = state.exams.find(e => String(e.id) === String(qrExamId) || String(e.no) === String(qrExamId));
+      const foundExam = state.exams.find(e => 
+        String(e.id) === String(qrExamId) || 
+        String(e.no) === String(qrExamId) ||
+        normalizeTurkish(e.name).includes(normalizeTurkish(qrExamId)) ||
+        (qrExamId && normalizeTurkish(qrExamId).includes(normalizeTurkish(e.name)))
+      );
       if (foundExam) {
         targetExam = foundExam;
         detectedExamRef.current = foundExam;
         setSelectedExamId(String(foundExam.id));
       }
+    }
+
+    const isHazirExam = normalizeTurkish(targetExam.name).includes('hazirbulunus') || String(targetExam.id) === '1';
+    if (!targetExam.keys?.A || targetExam.keys.A.length < 90 || targetExam.keys.A.every((k: string) => !k) || (isHazirExam && targetExam.keys.A[47] === 'B')) {
+      targetExam.keys = { ...targetExam.keys, A: HAZIRBULUNUSLUK_ANSWER_KEYS_A };
     }
 
     // Milimetrik ve Hafızadaki OMR_MAP kullanımı
@@ -1155,18 +1356,35 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           (s.id && String(s.id) === String(finalNo))
         );
       }
+      if (!matchedStudent) {
+        matchedStudent = HAZIRBULUNUSLUK_STUDENTS.find(s => 
+          String(s.no) === String(finalNo) || 
+          Number(s.no) === Number(finalNo)
+        );
+      }
     }
+
+    // Ön-baskılı (özelleştirilmiş MEB/Hazırbulunuşluk) form kontrolü
+    const isPreprinted = isHazirExam || 
+      targetExam.format === 'lgs' || 
+      targetExam.format === 'tyt' || 
+      targetExam.format === 'ayt' || 
+      scannedFormatRef.current === 'mebi' ||
+      Boolean(targetExam.studentList && targetExam.studentList.length > 0);
 
     // QR okunamadıysa veya öğrenci bulunamadıysa kodlanmış baloncukları tara
     if (!matchedStudent || !finalNo) {
-      const bubbled = scanInfoFields(finalCtx, H, omrToUse);
-      if (bubbled.bubbledNo && !finalNo) {
-        finalNo = bubbled.bubbledNo;
-        matchedStudent = targetExam.studentList?.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo))
-          || state.students.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo));
-      }
-      if (bubbled.bubbledName && finalName === "İSİMSİZ") {
-        finalName = bubbled.bubbledName;
+      const bubbled = scanInfoFields(finalCtx, H, omrToUse, isPreprinted);
+      if (!isPreprinted) {
+        if (bubbled.bubbledNo && !finalNo) {
+          finalNo = bubbled.bubbledNo;
+          matchedStudent = targetExam.studentList?.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo))
+            || state.students.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo))
+            || HAZIRBULUNUSLUK_STUDENTS.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo));
+        }
+        if (bubbled.bubbledName && finalName === "İSİMSİZ" && bubbled.bubbledName.length >= 3) {
+          finalName = bubbled.bubbledName;
+        }
       }
       if (bubbled.bubbledBk && !mebiCodedBk) {
         mebiCodedBk = bubbled.bubbledBk;
@@ -1410,6 +1628,60 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
     if (collectedResults.length > 0) {
       try {
+        // TOPLU TARAMA SONRASI EKSİK/EŞLEŞMEYEN ÖĞRENCİLERİ AKILLI ELİMİNASYONLA TAMAMLAMA
+        const targetStudentList = (exam.studentList && exam.studentList.length > 0)
+          ? exam.studentList
+          : (HAZIRBULUNUSLUK_STUDENTS.length > 0 ? HAZIRBULUNUSLUK_STUDENTS : []);
+
+        if (targetStudentList.length > 0) {
+          // Bu batch'te başarıyla eşleştirilmiş öğrenci numaraları
+          const assignedNos = new Set<string>();
+          collectedResults.forEach(r => {
+            if (r.studentNo && r.studentName && r.studentName !== 'İSİMSİZ' && !r.studentName.includes('ŞHRİHEİRVEL')) {
+              assignedNos.add(String(r.studentNo));
+            }
+          });
+
+          // Eşleşmemiş veya isimsiz/hatalı sonuçlar
+          const unassignedIndices: number[] = [];
+          collectedResults.forEach((r, idx) => {
+            if (!r.studentNo || !assignedNos.has(String(r.studentNo)) || r.studentName === 'İSİMSİZ' || r.studentName.includes('ŞHRİHEİRVEL')) {
+              unassignedIndices.push(idx);
+            }
+          });
+
+          // Sınav kütüğünde olup henüz eşleşmemiş öğrenciler
+          const missingStudents = targetStudentList.filter(s => !assignedNos.has(String(s.no)));
+
+          // Eğer eşleşmeyen sonuç sayısı eksik öğrenci sayısına eşitse (örneğin 1 fotokopi form = 1 eksik öğrenci)
+          if (unassignedIndices.length === 1 && missingStudents.length === 1) {
+            const studentToAssign = missingStudents[0];
+            const unassignedIdx = unassignedIndices[0];
+            const res = collectedResults[unassignedIdx];
+            const { cls, sec } = formatClassSec(('className' in studentToAssign ? studentToAssign.className : '') || studentToAssign.classStr || '', studentToAssign.sectionStr);
+            
+            res.studentId = 'id' in studentToAssign ? studentToAssign.id : undefined;
+            res.studentNo = Number(studentToAssign.no);
+            res.studentName = studentToAssign.name;
+            res.name = studentToAssign.name;
+            res.no = String(studentToAssign.no);
+            res.classStr = cls || '8';
+            res.sectionStr = sec || 'D';
+
+            // Batch ve thumbnail UI öğelerini de güncelle
+            setBatchItems(prev => prev.map((item, idx) => 
+              idx === unassignedIdx
+                ? { ...item, studentName: studentToAssign.name, studentNo: String(studentToAssign.no), message: `${studentToAssign.name} (${res.booklet} Kit.) - ${res.evaluatedScore?.total?.net?.toFixed(2)} Net` }
+                : item
+            ));
+            setPageThumbnails(prev => prev.map((t, idx) => 
+              idx === unassignedIdx
+                ? { ...t, studentName: studentToAssign.name, studentNo: String(studentToAssign.no) }
+                : t
+            ));
+          }
+        }
+
         // Sonuçları ait oldukları sınavlara göre grupla ve kaydet
         const resultsByExam: Record<string, ExamResult[]> = {};
         collectedResults.forEach(res => {
@@ -1851,7 +2123,12 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
         let targetExam = exam;
         if (qrExamId) {
-          const found = state.exams.find(e => String(e.id) === String(qrExamId) || String(e.no) === String(qrExamId));
+          const found = state.exams.find(e => 
+            String(e.id) === String(qrExamId) || 
+            String(e.no) === String(qrExamId) ||
+            normalizeTurkish(e.name).includes(normalizeTurkish(qrExamId)) ||
+            (qrExamId && normalizeTurkish(qrExamId).includes(normalizeTurkish(e.name)))
+          );
           if (found) {
             targetExam = found;
             setSelectedExamId(String(found.id));
@@ -1860,6 +2137,11 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           targetExam = detectedExamRef.current;
         }
         detectedExamRef.current = targetExam;
+
+        const isHazirExam = normalizeTurkish(targetExam.name).includes('hazirbulunus') || String(targetExam.id) === '1';
+        if (!targetExam.keys?.A || targetExam.keys.A.length < 90 || targetExam.keys.A.every((k: string) => !k) || (isHazirExam && targetExam.keys.A[47] === 'B')) {
+          targetExam.keys = { ...targetExam.keys, A: HAZIRBULUNUSLUK_ANSWER_KEYS_A };
+        }
 
         // Hedef sınavın güncel OMR koordinat haritasını (omrMap) baz al
         const targetOmrToUse = targetExam?.omrMap?.specs ? { ...OMR_SPECS, ...targetExam.omrMap.specs } : (specificOMR || OMR_SPECS);
@@ -1970,18 +2252,36 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
               (s.id && String(s.id) === String(finalNo))
             );
           }
+          if (!matchedStudent) {
+            matchedStudent = HAZIRBULUNUSLUK_STUDENTS.find(s => 
+              String(s.no) === String(finalNo) || 
+              Number(s.no) === Number(finalNo)
+            );
+          }
         }
+
+        // Ön-baskılı (özelleştirilmiş MEB/Hazırbulunuşluk) form kontrolü
+        const isPreprinted = normalizeTurkish(targetExam.name).includes('hazirbulunus') || 
+          String(targetExam.id) === '1' || 
+          targetExam.format === 'lgs' || 
+          targetExam.format === 'tyt' || 
+          targetExam.format === 'ayt' || 
+          scannedFormatRef.current === 'mebi' ||
+          Boolean(targetExam.studentList && targetExam.studentList.length > 0);
 
         // QR kod yoksa veya eşleşmediyse form üzerindeki kodlanmış baloncukları oku
         if (!matchedStudent || !finalNo) {
-          const bubbled = scanInfoFields(ctx, currentH, targetOmrToUse);
-          if (bubbled.bubbledNo && !finalNo) {
-            finalNo = bubbled.bubbledNo;
-            matchedStudent = targetExam.studentList?.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo))
-              || state.students.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo));
-          }
-          if (bubbled.bubbledName && finalName === "İSİMSİZ") {
-            finalName = bubbled.bubbledName;
+          const bubbled = scanInfoFields(ctx, currentH, targetOmrToUse, isPreprinted);
+          if (!isPreprinted) {
+            if (bubbled.bubbledNo && !finalNo) {
+              finalNo = bubbled.bubbledNo;
+              matchedStudent = targetExam.studentList?.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo))
+                || state.students.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo))
+                || HAZIRBULUNUSLUK_STUDENTS.find(s => String(s.no) === String(finalNo) || Number(s.no) === Number(finalNo));
+            }
+            if (bubbled.bubbledName && finalName === "İSİMSİZ" && bubbled.bubbledName.length >= 3) {
+              finalName = bubbled.bubbledName;
+            }
           }
           if (bubbled.bubbledBk && !mebiCodedBk) {
             mebiCodedBk = bubbled.bubbledBk;
@@ -2132,9 +2432,22 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
     <div className="bg-slate-900 rounded-none md:rounded-2xl shadow-xl border-0 md:border border-slate-800 overflow-hidden h-full flex flex-col text-white relative">
       {/* Yeşil Başarı Kartı (Öğrenci Adı, No, Kitapçık ve Net) */}
       {scanSuccessCard && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[300] w-[92%] max-w-md bg-emerald-600/95 backdrop-blur-md text-white px-5 py-4 rounded-2xl shadow-2xl border-2 border-emerald-300 flex items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-300 pointer-events-auto">
+        <div
+          onClick={() => {
+            try {
+              sessionStorage.setItem('active_exam_id', String(selectedExamId));
+            } catch (e) {}
+            if (onNavigate) {
+              onNavigate('results');
+            } else if (typeof window !== 'undefined' && (window as any).__navigateToTab) {
+              (window as any).__navigateToTab('results');
+            }
+          }}
+          className="fixed top-5 left-1/2 -translate-x-1/2 z-[300] w-[92%] max-w-md bg-emerald-600/95 hover:bg-emerald-600 active:scale-[0.98] backdrop-blur-md text-white px-5 py-4 rounded-2xl shadow-2xl border-2 border-emerald-300 flex items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-300 pointer-events-auto cursor-pointer group transition-all"
+          title="Okunan bu sınavın sonuç ekranına gitmek için tıklayın"
+        >
           <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0 border border-white/30">
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0 border border-white/30 group-hover:scale-105 transition-transform">
               <CheckCircle2 className="w-7 h-7 text-white" />
             </div>
             <div className="min-w-0">
@@ -2151,9 +2464,14 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
               </div>
             </div>
           </div>
-          <div className="bg-white/20 border border-white/30 rounded-xl px-3 py-2 text-center shrink-0">
-            <div className="text-[10px] uppercase font-bold text-emerald-100">Toplam Net</div>
-            <div className="text-xl font-black leading-tight text-white">{scanSuccessCard.net}</div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <div className="bg-white/20 border border-white/30 rounded-xl px-3 py-1.5 text-center">
+              <div className="text-[9px] uppercase font-bold text-emerald-100">Toplam Net</div>
+              <div className="text-lg font-black leading-tight text-white">{scanSuccessCard.net}</div>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-100 group-hover:underline flex items-center gap-1">
+              Sonuç Ekranına Git →
+            </span>
           </div>
         </div>
       )}
@@ -2274,10 +2592,24 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             </button>
           )}
 
-          <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs font-semibold text-slate-300">
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                sessionStorage.setItem('active_exam_id', String(selectedExamId));
+              } catch (e) {}
+              if (onNavigate) {
+                onNavigate('results');
+              } else if (typeof window !== 'undefined' && (window as any).__navigateToTab) {
+                (window as any).__navigateToTab('results');
+              }
+            }}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-emerald-950/80 border border-slate-700/80 hover:border-emerald-500/50 rounded-xl text-xs font-semibold text-slate-300 hover:text-emerald-300 transition-all cursor-pointer shadow-xs active:scale-95"
+            title="Okunan Deneme Sınavının Sonuç ve Analiz Ekranına Git"
+          >
             <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span><strong className="text-emerald-400 font-mono">{(exam.results || []).length}</strong> Okundu</span>
-          </div>
+            <span><strong className="text-emerald-400 font-mono">{(exam.results || []).length}</strong> Okundu (Sonuçları Gör)</span>
+          </button>
 
           {isAdmin && imageLoaded && !isCameraActive && (
             <button
