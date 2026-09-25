@@ -437,285 +437,80 @@ export const BudgetView = () => {
   const isAnyStudentDebtsSelected = selectedStudentDebtKeys.length > 0;
 
   return (
-    <div className="space-y-3 sm:space-y-5 flex flex-col h-full font-sans text-brand-ink">
-      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-3 sm:gap-4">
-        <div className="w-full sm:w-auto">
-          <div className="flex items-center justify-between sm:justify-start gap-2.5">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 text-emerald-700 flex items-center justify-center shrink-0 font-bold shadow-2xs">
-                <Coins className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
-              </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl md:text-3xl font-serif text-brand-ink font-bold tracking-tight leading-tight">
-                  Bütçe Takibi
-                </h2>
-                <p className="hidden sm:block text-brand-ink/60 text-xs mt-0.5">
-                  Sınav ve yayın bazlı gruplanmış gelir, harcama, borç takibi ve finansal özet
-                </p>
-              </div>
+    <div className="space-y-4 sm:space-y-6 flex flex-col h-full font-sans text-brand-ink">
+      {/* Clean Optimized Header */}
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-brand-border/80 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-emerald-500/15 text-emerald-700 flex items-center justify-center shrink-0 font-bold shadow-2xs">
+            <Coins className="w-5 h-5 sm:w-6 sm:h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl sm:text-2xl font-serif text-brand-ink font-bold tracking-tight">
+                Bütçe Takibi
+              </h2>
+              <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border shadow-2xs ${
+                remaining >= 0 
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200/80' 
+                  : 'bg-rose-50 text-rose-800 border-rose-200/80'
+              }`}>
+                Net: ₺{(totalIncome - totalExpense).toLocaleString('tr-TR')}
+              </span>
             </div>
-            <span className={`sm:hidden text-xs font-bold px-2.5 py-1 rounded-full border shadow-2xs ${
-              remaining >= 0 
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200/80' 
-                : 'bg-rose-50 text-rose-800 border-rose-200/80'
-            }`}>
-              Net: ₺{(totalIncome - totalExpense).toLocaleString('tr-TR')}
-            </span>
+            <p className="text-brand-ink/60 text-xs mt-0.5">
+              Sınav ve yayın bazlı gelir, gider, borç takibi ve finansal kütük yönetimi
+            </p>
           </div>
         </div>
 
-        {/* Mobile Quick Toggles & Active Segmented Control */}
-        <div className="sm:hidden flex items-center justify-between w-full gap-2 pt-0.5">
+        {/* View Segmented Tabs */}
+        <div className="flex items-center bg-[#F5F4F0] p-1 rounded-xl border border-brand-border/70 gap-1 shadow-2xs w-full sm:w-auto overflow-x-auto">
           <button
             type="button"
-            onClick={() => setIsMobileStatsOpen(!isMobileStatsOpen)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs active:scale-95 ${
-              isMobileStatsOpen 
-                ? 'bg-brand-ink text-white border-brand-ink' 
-                : 'bg-white text-brand-ink border-brand-border/80 hover:bg-[#FAF9F6]'
-            }`}
-          >
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>Finansal Özet</span>
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isMobileStatsOpen ? 'rotate-180' : ''}`} />
-          </button>
-
-          <div className="flex items-center bg-[#F5F4F0] p-1 rounded-xl border border-brand-border/70 gap-1 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setMobileBudgetTab('all')}
-              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all active:scale-95 ${
-                mobileBudgetTab === 'all'
-                  ? 'bg-white text-brand-ink shadow-2xs'
-                  : 'text-brand-ink/60 hover:text-brand-ink'
-              }`}
-            >
-              Tümü
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileBudgetTab('incomes')}
-              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all active:scale-95 ${
-                mobileBudgetTab === 'incomes'
-                  ? 'bg-emerald-600 text-white shadow-2xs'
-                  : 'text-emerald-700 hover:text-emerald-900'
-              }`}
-            >
-              Gelir
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileBudgetTab('expenses')}
-              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all active:scale-95 ${
-                mobileBudgetTab === 'expenses'
-                  ? 'bg-rose-600 text-white shadow-2xs'
-                  : 'text-rose-700 hover:text-rose-900'
-              }`}
-            >
-              Gider
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileBudgetTab('debts')}
-              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all active:scale-95 ${
-                mobileBudgetTab === 'debts'
-                  ? 'bg-amber-600 text-white shadow-2xs'
-                  : 'text-amber-700 hover:text-amber-900'
-              }`}
-            >
-              Borç
-            </button>
-          </div>
-        </div>
-        
-        {/* Top Summary Cards (Collapsible on mobile, always visible on desktop) */}
-        <div className={`${isMobileStatsOpen ? 'grid' : 'hidden'} sm:grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 w-full xl:w-auto shrink-0`}>
-          <button 
-            type="button"
-            onClick={() => setMobileBudgetTab(prev => prev === 'incomes' ? 'all' : 'incomes')}
-            className={`p-2.5 sm:p-3.5 rounded-2xl border flex flex-col justify-between text-left transition-all duration-200 cursor-pointer active:scale-[0.98] shadow-2xs ${
-              mobileBudgetTab === 'incomes'
-                ? 'bg-emerald-500/10 border-emerald-400 ring-2 ring-emerald-500/25'
-                : 'bg-white hover:bg-emerald-50/30 border-brand-border/70 hover:border-emerald-300'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-1">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <ArrowDownLeft className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                </div>
-                <span className="text-[10px] sm:text-[11px] font-bold text-emerald-950/70 uppercase tracking-wider truncate">
-                  Toplam Gelir
-                </span>
-              </div>
-              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full font-bold shrink-0 ${
-                mobileBudgetTab === 'incomes' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-800'
-              }`}>
-                {mobileBudgetTab === 'incomes' ? 'Aktif' : `${incomes.length}`}
-              </span>
-            </div>
-            <span className="text-base sm:text-xl font-bold font-sans tracking-tight text-emerald-700 mt-1.5 sm:mt-2">
-              ₺{totalIncome.toLocaleString('tr-TR')}
-            </span>
-          </button>
-          
-          <button 
-            type="button"
-            onClick={() => setMobileBudgetTab(prev => prev === 'expenses' ? 'all' : 'expenses')}
-            className={`p-2.5 sm:p-3.5 rounded-2xl border flex flex-col justify-between text-left transition-all duration-200 cursor-pointer active:scale-[0.98] shadow-2xs ${
-              mobileBudgetTab === 'expenses'
-                ? 'bg-rose-500/10 border-rose-400 ring-2 ring-rose-500/25'
-                : 'bg-white hover:bg-rose-50/30 border-brand-border/70 hover:border-rose-300'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-1">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
-                  <ArrowUpRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                </div>
-                <span className="text-[10px] sm:text-[11px] font-bold text-rose-950/70 uppercase tracking-wider truncate">
-                  Toplam Gider
-                </span>
-              </div>
-              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full font-bold shrink-0 ${
-                mobileBudgetTab === 'expenses' ? 'bg-rose-600 text-white' : 'bg-rose-100 text-rose-800'
-              }`}>
-                {mobileBudgetTab === 'expenses' ? 'Aktif' : `${expenses.length}`}
-              </span>
-            </div>
-            <span className="text-base sm:text-xl font-bold font-sans tracking-tight text-rose-700 mt-1.5 sm:mt-2">
-              ₺{totalExpense.toLocaleString('tr-TR')}
-            </span>
-          </button>
-
-          <button 
-            type="button"
-            onClick={() => setMobileBudgetTab(prev => prev === 'debts' ? 'all' : 'debts')}
-            className={`p-2.5 sm:p-3.5 rounded-2xl border flex flex-col justify-between text-left transition-all duration-200 cursor-pointer active:scale-[0.98] shadow-2xs ${
-              mobileBudgetTab === 'debts'
-                ? 'bg-amber-500/10 border-amber-400 ring-2 ring-amber-500/25'
-                : 'bg-white hover:bg-amber-50/30 border-brand-border/70 hover:border-amber-300'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-1">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                </div>
-                <span className="text-[10px] sm:text-[11px] font-bold text-amber-950/70 uppercase tracking-wider truncate">
-                  Bekleyen Borç
-                </span>
-              </div>
-              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full font-bold shrink-0 ${
-                mobileBudgetTab === 'debts' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800'
-              }`}>
-                {mobileBudgetTab === 'debts' ? 'Aktif' : `${debts.length + studentDebts.length}`}
-              </span>
-            </div>
-            <span className="text-base sm:text-xl font-bold font-sans tracking-tight text-amber-700 mt-1.5 sm:mt-2">
-              ₺{totalDebt.toLocaleString('tr-TR')}
-            </span>
-          </button>
-
-          <button 
-            type="button"
             onClick={() => setMobileBudgetTab('all')}
-            className={`p-2.5 sm:p-3.5 rounded-2xl border flex flex-col justify-between text-left transition-all duration-200 cursor-pointer active:scale-[0.98] shadow-2xs ${
-              remaining >= 0 
-                ? 'bg-[#151618] text-white border-[#151618] hover:bg-[#222428]' 
-                : 'bg-rose-900 text-white border-rose-900 hover:bg-rose-950'
-            } ${mobileBudgetTab === 'all' ? 'ring-2 ring-brand-accent' : ''}`}
+            className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer ${
+              mobileBudgetTab === 'all'
+                ? 'bg-white text-brand-ink shadow-2xs'
+                : 'text-brand-ink/60 hover:text-brand-ink'
+            }`}
           >
-            <div className="flex items-center justify-between gap-1">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center shrink-0 ${
-                  remaining >= 0 ? 'bg-white/10 text-emerald-400' : 'bg-white/10 text-rose-300'
-                }`}>
-                  <Wallet className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                </div>
-                <span className="text-[10px] sm:text-[11px] font-bold text-white/80 uppercase tracking-wider truncate">
-                  Net Durum
-                </span>
-              </div>
-              <span className="text-[9px] sm:text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded-full font-bold shrink-0">
-                {mobileBudgetTab === 'all' ? 'Tümü' : 'Görünüm'}
-              </span>
-            </div>
-            <span className={`text-base sm:text-xl font-bold font-sans tracking-tight mt-1.5 sm:mt-2 ${
-              remaining >= 0 ? 'text-emerald-300' : 'text-rose-200'
-            }`}>
-              ₺{remaining.toLocaleString('tr-TR')}
-            </span>
+            Tümü (Tam Görünüm)
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileBudgetTab('incomes')}
+            className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
+              mobileBudgetTab === 'incomes'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-emerald-700 hover:text-emerald-900'
+            }`}
+          >
+            <span>Gelir (₺{totalIncome.toLocaleString('tr-TR')})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileBudgetTab('expenses')}
+            className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
+              mobileBudgetTab === 'expenses'
+                ? 'bg-rose-600 text-white shadow-2xs'
+                : 'text-rose-700 hover:text-rose-900'
+            }`}
+          >
+            <span>Gider (₺{totalExpense.toLocaleString('tr-TR')})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileBudgetTab('debts')}
+            className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
+              mobileBudgetTab === 'debts'
+                ? 'bg-amber-600 text-white shadow-2xs'
+                : 'text-amber-700 hover:text-amber-900'
+            }`}
+          >
+            <span>Borç (₺{totalDebt.toLocaleString('tr-TR')})</span>
           </button>
         </div>
       </header>
-
-      {/* Desktop/Tablet Tab Switcher for Tablets/Laptops */}
-      <div className="hidden sm:flex lg:hidden bg-[#F5F4F0] p-1.5 rounded-2xl border border-brand-border/70 gap-1.5 shrink-0 shadow-2xs">
-        <button
-          type="button"
-          onClick={() => setMobileBudgetTab('all')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-            mobileBudgetTab === 'all'
-              ? 'bg-white text-brand-ink shadow-xs'
-              : 'text-brand-ink/60 hover:text-brand-ink hover:bg-white/50'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          <span>Tümü (Tam Görünüm)</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileBudgetTab('incomes')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-            mobileBudgetTab === 'incomes'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'text-emerald-800 hover:text-emerald-950 hover:bg-emerald-50'
-          }`}
-        >
-          <ArrowDownLeft className="w-3.5 h-3.5" />
-          <span>Gelirler</span>
-          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-            mobileBudgetTab === 'incomes' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
-          }`}>
-            {incomes.length}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileBudgetTab('expenses')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-            mobileBudgetTab === 'expenses'
-              ? 'bg-rose-600 text-white shadow-xs'
-              : 'text-rose-800 hover:text-rose-950 hover:bg-rose-50'
-          }`}
-        >
-          <ArrowUpRight className="w-3.5 h-3.5" />
-          <span>Giderler</span>
-          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-            mobileBudgetTab === 'expenses' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-800'
-          }`}>
-            {expenses.length}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileBudgetTab('debts')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-            mobileBudgetTab === 'debts'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-amber-800 hover:text-amber-950 hover:bg-amber-50'
-          }`}
-        >
-          <AlertTriangle className="w-3.5 h-3.5" />
-          <span>Borçlar</span>
-          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-            mobileBudgetTab === 'debts' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
-          }`}>
-            {debts.length + studentDebts.length}
-          </span>
-        </button>
-      </div>
 
       <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 lg:p-6 shadow-xs border border-brand-border/70 flex-1 overflow-hidden flex flex-col">
         <div className="overflow-auto flex-1 pb-6 pr-0.5">

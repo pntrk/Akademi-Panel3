@@ -356,53 +356,6 @@ export const LeagueView = () => {
             </button>
           </div>
         </div>
-
-        {/* Quick Stats Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4 pt-4 border-t border-brand-border/60">
-          <div className="bg-[#FAF9F6] p-2.5 sm:p-3 rounded-xl border border-brand-border/60 flex items-center gap-2.5">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-              <Users className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-brand-ink/50 uppercase tracking-wider">Aktif Kadro</p>
-              <p className="text-xs sm:text-sm font-bold text-brand-ink">{baseStudents.length} Öğrenci</p>
-            </div>
-          </div>
-
-          <div className="bg-[#FAF9F6] p-2.5 sm:p-3 rounded-xl border border-brand-border/60 flex items-center gap-2.5">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
-              <Crown className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-brand-ink/50 uppercase tracking-wider">Lider Takım</p>
-              <p className="text-xs sm:text-sm font-bold text-amber-950 truncate">{championTeam || 'Eşitlik'}</p>
-            </div>
-          </div>
-
-          <div className="bg-[#FAF9F6] p-2.5 sm:p-3 rounded-xl border border-brand-border/60 flex items-center gap-2.5">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-              <Star className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-brand-ink/50 uppercase tracking-wider">Arena 1.si</p>
-              <p className="text-xs sm:text-sm font-bold text-emerald-950 truncate">
-                {top3Students[0]?.name || 'Henüz Yok'}
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-[#FAF9F6] p-2.5 sm:p-3 rounded-xl border border-brand-border/60 flex items-center gap-2.5">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center shrink-0">
-              <Calendar className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-brand-ink/50 uppercase tracking-wider">Hesaplama</p>
-              <p className="text-xs sm:text-sm font-bold text-blue-950 truncate">
-                {selectedMonth === 'all' ? 'Tüm Zamanlar' : selectedMonth}
-              </p>
-            </div>
-          </div>
-        </div>
       </header>
 
       {activeView === 'rules' ? (
