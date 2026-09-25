@@ -1,4 +1,4 @@
-import { db, auth, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, limit } from './firebase';
+import { db, auth, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, limit, checkIsQuotaExceededToday } from './firebase';
 import { AppNotification } from '../types';
 import { generateId } from './utils';
 
@@ -172,7 +172,9 @@ export const publishCloudNotification = async (
   saveLocalNotification(fullNotification);
 
   try {
-    await setDoc(doc(db, 'notifications', notifId), fullNotification);
+    if (!checkIsQuotaExceededToday()) {
+      await setDoc(doc(db, 'notifications', notifId), fullNotification);
+    }
     return { success: true, id: notifId };
   } catch (error: any) {
     // If cloud sync encounters a temporary permission or network hitch, gracefully preserve it locally
@@ -185,7 +187,9 @@ export const publishCloudNotification = async (
 export const removeCloudNotification = async (id: string): Promise<boolean> => {
   removeLocalNotification(id);
   try {
-    await deleteDoc(doc(db, 'notifications', id));
+    if (!checkIsQuotaExceededToday()) {
+      await deleteDoc(doc(db, 'notifications', id));
+    }
     return true;
   } catch (e) {
     console.warn('Bildirim buluttan silinemedi (yerel listeden kaldırıldı):', e);

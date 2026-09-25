@@ -96,7 +96,7 @@ if (checkIsQuotaExceededToday()) {
   disableNetwork(db).catch(() => {});
 }
 
-// Global safety net: detect quota exhaustion from unhandled promises or runtime errors
+// Global safety net: detect quota exhaustion from console, unhandled promises or runtime errors
 if (typeof window !== 'undefined') {
   const checkErrorForQuota = (err: any) => {
     const errStr = String(err?.message || err?.reason?.message || err?.reason || err || '');
@@ -110,15 +110,52 @@ if (typeof window !== 'undefined') {
       errStr.includes('Quota limit exceeded')
     ) {
       markQuotaExceededToday();
+      return true;
     }
+    return false;
+  };
+
+  // Intercept console.error to silence repetitive backoff retry spam from Firestore SDK
+  const originalConsoleError = console.error;
+  console.error = (...args: any[]) => {
+    const combined = args.map(a => (typeof a === 'object' ? String(a?.message || a?.reason || JSON.stringify(a)) : String(a))).join(' ');
+    if (
+      combined.includes('resource-exhausted') ||
+      combined.includes('Quota limit exceeded') ||
+      combined.includes('Free daily write units') ||
+      combined.includes('Using maximum backoff delay')
+    ) {
+      markQuotaExceededToday();
+      return; // Suppress backoff spam
+    }
+    originalConsoleError.apply(console, args);
+  };
+
+  const originalConsoleWarn = console.warn;
+  console.warn = (...args: any[]) => {
+    const combined = args.map(a => (typeof a === 'object' ? String(a?.message || a?.reason || JSON.stringify(a)) : String(a))).join(' ');
+    if (
+      combined.includes('resource-exhausted') ||
+      combined.includes('Quota limit exceeded') ||
+      combined.includes('Free daily write units') ||
+      combined.includes('Using maximum backoff delay')
+    ) {
+      markQuotaExceededToday();
+      return;
+    }
+    originalConsoleWarn.apply(console, args);
   };
 
   window.addEventListener('unhandledrejection', (event) => {
-    checkErrorForQuota(event.reason);
+    if (checkErrorForQuota(event.reason)) {
+      event.preventDefault();
+    }
   });
 
   window.addEventListener('error', (event) => {
-    checkErrorForQuota(event.error);
+    if (checkErrorForQuota(event.error)) {
+      event.preventDefault();
+    }
   });
 }
 

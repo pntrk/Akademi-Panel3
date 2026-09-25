@@ -641,10 +641,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
         setSyncStatus('synced');
         setSyncErrorMessage(null);
-        if (isQuotaExceededRef.current) {
-          clearQuotaExceeded();
-          isQuotaExceededRef.current = false;
-        }
       } else {
         const userEmail = (user.email || '').trim().toLowerCase();
         if (userEmail === 'kirklareliataturkortaokulu@gmail.com' || userEmail === 'bahadirkumcu@gmail.com') {
@@ -809,42 +805,26 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         console.warn('Storage snapshot notice:', stErr);
       }
 
-      // 2. Dual Cloud Snapshot: Write to snapshots/akademi_data and schools/main
-      let firestoreSuccess = false;
-      try {
-        const mainDocRef = doc(db, 'schools', 'main');
-        const snapDocRef = doc(db, 'snapshots', 'akademi_data');
-
-        const writeOps = Promise.allSettled([
-          setDoc(mainDocRef, cleanState),
-          setDoc(snapDocRef, {
-            filename: 'akademi_data.json',
-            version: cleanState.version,
-            lastPublishedAt: cleanState.lastPublishedAt,
-            lastPublishedBy: cleanState.lastPublishedBy,
-            data: cleanState
-          })
-        ]);
-
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Bulut zaman aşımı')), 3000)
-        );
-
-        const results = await Promise.race([writeOps, timeoutPromise]) as PromiseSettledResult<any>[];
-        if (results && results.some(r => r.status === 'fulfilled')) {
-          firestoreSuccess = true;
-        }
-      } catch (fsErr: any) {
-        const errStr = String(fsErr?.message || fsErr || '');
-        if (
-          errStr.includes('Quota exceeded') || 
-          errStr.includes('resource-exhausted') || 
-          fsErr?.code === 'resource-exhausted' ||
-          errStr.includes('Free daily write units') || 
-          errStr.includes('Quota limit exceeded')
-        ) {
-          markQuotaExceededToday();
-          isQuotaExceededRef.current = true;
+      // 2. Auxiliary Cloud Snapshot: Firestore document write ONLY if quota is not exceeded
+      if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
+        try {
+          const mainDocRef = doc(db, 'schools', 'main');
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Bulut zaman aşımı')), 2500)
+          );
+          await Promise.race([setDoc(mainDocRef, cleanState), timeoutPromise]);
+        } catch (fsErr: any) {
+          const errStr = String(fsErr?.message || fsErr || '');
+          if (
+            errStr.includes('Quota exceeded') || 
+            errStr.includes('resource-exhausted') || 
+            fsErr?.code === 'resource-exhausted' ||
+            errStr.includes('Free daily write units') || 
+            errStr.includes('Quota limit exceeded')
+          ) {
+            markQuotaExceededToday();
+            isQuotaExceededRef.current = true;
+          }
         }
       }
 
@@ -1100,7 +1080,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
     await updateUsers(currentAdmins, currentTeachers);
 
-    if (firebaseConfig.projectId) {
+    if (firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
       try {
         await setDoc(doc(db, 'access_requests', clean), {
           email: clean,
@@ -1631,11 +1611,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           console.warn('Could not write backup to Cloud Storage:', e);
         }
 
-        try {
-          const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
-          await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
-        } catch (e) {
-          console.warn('Could not write backup to Firestore:', e);
+        if (!checkIsQuotaExceededToday()) {
+          try {
+            const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
+            await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
+          } catch (e) {
+            console.warn('Could not write backup to Firestore:', e);
+          }
         }
       }
 
@@ -1700,11 +1682,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           console.warn('Could not write backup to Cloud Storage:', e);
         }
 
-        try {
-          const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
-          await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
-        } catch (e) {
-          console.warn('Could not write backup to Firestore:', e);
+        if (!checkIsQuotaExceededToday()) {
+          try {
+            const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
+            await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
+          } catch (e) {
+            console.warn('Could not write backup to Firestore:', e);
+          }
         }
       }
 
