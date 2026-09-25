@@ -133,7 +133,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     restoreBackup, 
     syncStatus, 
     syncErrorMessage, 
+    pendingSyncCount,
+    lastSyncedAt,
     saveNow, 
+    retrySync,
     cloudBackups,
     notifications,
     unreadNotificationsCount,
@@ -407,13 +410,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     <Cloud className="w-4 h-4 text-sky-400 shrink-0" />
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-white truncate">
-                        {syncStatus === 'synced' && "Sistem Eşitlendi"}
-                        {syncStatus === 'saving' && "Kaydediliyor..."}
-                        {syncStatus === 'quota_exceeded' && "Yerel Koruma Aktif"}
+                        {pendingSyncCount > 0 && `Tamponda: ${pendingSyncCount} İşlem`}
+                        {pendingSyncCount === 0 && syncStatus === 'synced' && "Bulut Senkronize"}
+                        {pendingSyncCount === 0 && syncStatus === 'saving' && "Kaydediliyor..."}
+                        {syncStatus === 'quota_exceeded' && "⚡ Yerel Koruma Aktif"}
                         {(syncStatus === 'offline' || syncStatus === 'error') && "Yerel Koruma"}
                       </p>
                       <p className="text-[10px] text-white/50 truncate">
-                        {saveFeedback || "Veriler yerel hafızada korunuyor"}
+                        {pendingSyncCount > 0 ? "Akıllı tamponda bekliyor..." : (saveFeedback || (lastSyncedAt ? `Son eşitlenme: ${lastSyncedAt}` : "Veriler yerel hafızada %100 güvende"))}
                       </p>
                     </div>
                   </div>
@@ -425,7 +429,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     }}
                     className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-bold shrink-0 transition-colors"
                   >
-                    Şimdi Kaydet
+                    {pendingSyncCount > 0 ? "Şimdi Gönder" : "Şimdi Kaydet"}
                   </button>
                 </div>
 
@@ -688,27 +692,30 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
               title="Bulut Senkronizasyon Durumu & Ayarları (Tıklayarak Yönet)"
             >
               <span className="flex items-center gap-2 truncate mr-1">
-                {syncStatus === 'synced' && (
+                {pendingSyncCount > 0 ? (
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                ) : syncStatus === 'synced' ? (
                   <span className="relative flex h-2 w-2 shrink-0">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                )}
-                {syncStatus === 'saving' && (
+                ) : syncStatus === 'saving' ? (
                   <span className="animate-spin rounded-full h-2.5 w-2.5 border-2 border-sky-400 border-t-transparent shrink-0"></span>
-                )}
-                {syncStatus === 'quota_exceeded' && (
+                ) : syncStatus === 'quota_exceeded' ? (
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400 shrink-0"></span>
-                )}
-                {(syncStatus === 'offline' || syncStatus === 'error') && (
+                ) : (
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-400 shrink-0"></span>
                 )}
                 <span className="truncate">
-                  {syncStatus === 'synced' && "Bulut Senkronize"}
-                  {syncStatus === 'saving' && "Kaydediliyor..."}
-                  {syncStatus === 'quota_exceeded' && "Yerel Koruma"}
-                  {syncStatus === 'offline' && "Çevrimdışı Mod"}
-                  {syncStatus === 'error' && "Yerel Koruma"}
+                  {pendingSyncCount > 0 ? `Tamponda: ${pendingSyncCount}` : (
+                    syncStatus === 'synced' ? (lastSyncedAt ? `Eşitlendi (${lastSyncedAt})` : "Bulut Senkronize") :
+                    syncStatus === 'saving' ? "Kaydediliyor..." :
+                    syncStatus === 'quota_exceeded' ? "⚡ Yerel Koruma" :
+                    syncStatus === 'offline' ? "Çevrimdışı Mod" : "Yerel Koruma"
+                  )}
                 </span>
               </span>
               <button
@@ -717,9 +724,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   handleManualSave();
                 }}
                 className="text-[0.65rem] text-white/80 hover:text-white hover:underline cursor-pointer font-bold shrink-0 ml-1"
-                title="Manuel Kaydet"
+                title={pendingSyncCount > 0 ? "Tampondaki verileri hemen buluta aktar" : "Manuel Kaydet"}
               >
-                Kaydet
+                {pendingSyncCount > 0 ? "Şimdi Gönder" : "Kaydet"}
               </button>
             </div>
           )}
@@ -901,11 +908,29 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     </span>
                   </p>
                   <p className="text-amber-800/90 dark:text-amber-300/80 leading-relaxed text-[11px]">
-                    Tüm sınav, soru, öğrenci ve analiz verileriniz tarayıcınızın güvenli yerel hafızasında saklanmaktadır; tüm işlemleri kesintisiz kullanabilirsiniz. Kota her gün Pasifik saatiyle gece yarısı otomatik sıfırlanır.
+                    Tüm sınav okumalarınız, öğrenci ve kütük verileriniz bu cihazda kesintisiz olarak saklanmaktadır; optik tarama ve diğer tüm özellikleri güvenle kullanmaya devam edebilirsiniz.
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+              <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+                <button
+                  onClick={handleBackup}
+                  className="px-2.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-amber-900 dark:text-amber-100 font-bold text-xs flex items-center gap-1.5 transition-colors border border-amber-500/30 cursor-pointer"
+                  title="Tüm kütüğü ve sınavları JSON olarak hemen indir"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Yedek İndir (JSON)</span>
+                </button>
+                <button
+                  onClick={async () => {
+                    await retrySync();
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-100 font-bold text-xs flex items-center gap-1.5 transition-colors border border-amber-500/40 cursor-pointer"
+                  title="Firebase kotasının sıfırlanıp sıfırlanmadığını kontrol et"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span>Yeniden Sına</span>
+                </button>
                 <a
                   href={FIRESTORE_UPGRADE_URL}
                   target="_blank"

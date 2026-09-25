@@ -23,6 +23,16 @@ import {
   disableNetwork,
   enableNetwork
 } from 'firebase/firestore';
+import { 
+  getStorage, 
+  ref, 
+  uploadString, 
+  getDownloadURL, 
+  deleteObject, 
+  listAll, 
+  getBytes,
+  type FirebaseStorage
+} from 'firebase/storage';
 import rawFirebaseConfig from '../../firebase-applet-config.json';
 
 export const firebaseConfig = rawFirebaseConfig;
@@ -33,10 +43,19 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 // Initialize Firestore with custom database ID from config
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
+// Initialize Firebase Storage
+export const storage: FirebaseStorage = getStorage(app);
+try {
+  // Prevent SDK from retrying for 10 minutes when bucket is unreachable/uncreated
+  storage.maxUploadRetryTime = 2500;
+  storage.maxOperationRetryTime = 2500;
+} catch (e) {}
+
 // Initialize Firebase Auth
 export const auth = getAuth(app);
 
 export const FIRESTORE_UPGRADE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/databases/${firebaseConfig.firestoreDatabaseId}/data?openUpgradeDialog=true`;
+export const FIREBASE_STORAGE_ACTIVATE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/storage`;
 
 export const getTodayDateStr = () => new Date().toISOString().slice(0, 10);
 
@@ -55,6 +74,9 @@ export const markQuotaExceededToday = () => {
     localStorage.setItem('firestore_quota_exceeded_date', getTodayDateStr());
     localStorage.setItem('firestore_quota_exceeded_project', firebaseConfig.projectId);
     disableNetwork(db).catch(() => {});
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('firestore-quota-exceeded'));
+    }
   } catch (e) {}
 };
 
@@ -63,6 +85,9 @@ export const clearQuotaExceeded = () => {
     localStorage.removeItem('firestore_quota_exceeded_date');
     localStorage.removeItem('firestore_quota_exceeded_project');
     enableNetwork(db).catch(() => {});
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('firestore-quota-cleared'));
+    }
   } catch (e) {}
 };
 
@@ -81,7 +106,8 @@ if (typeof window !== 'undefined') {
       err?.code === 'resource-exhausted' ||
       err?.reason?.code === 'resource-exhausted' ||
       errStr.includes('Free daily write units') ||
-      errStr.includes('Free daily read units')
+      errStr.includes('Free daily read units') ||
+      errStr.includes('Quota limit exceeded')
     ) {
       markQuotaExceededToday();
     }
@@ -106,7 +132,14 @@ async function testConnection() {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error: any) {
     const errStr = String(error?.message || error || '');
-    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || error?.code === 'resource-exhausted' || errStr.includes('Free daily write units')) {
+    if (
+      errStr.includes('Quota exceeded') || 
+      errStr.includes('resource-exhausted') || 
+      error?.code === 'resource-exhausted' || 
+      errStr.includes('Free daily write units') ||
+      errStr.includes('Free daily read units') ||
+      errStr.includes('Quota limit exceeded')
+    ) {
       markQuotaExceededToday();
     } else if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Please check your Firebase configuration.');
@@ -205,6 +238,114 @@ export const createSyntheticUser = (email: string, displayName?: string): User =
   } as unknown as User;
 };
 
+// Firebase Cloud Storage Snapshot Engine (akademi_data.json)
+export const CLOUD_STORAGE_SNAPSHOT_PATH = 'snapshots/akademi_data.json';
+
+export const uploadSnapshotToStorage = async (data: any): Promise<{ success: boolean; url?: string; error?: string; nativeStorage?: boolean }> => {
+  const jsonStr = typeof data === 'string' ? data : JSON.stringify(data);
+  try {
+    localStorage.setItem('akademi_data_snapshot_cache', jsonStr);
+    localStorage.setItem('akademi_data_snapshot_version', String(data?.version || 1));
+    localStorage.setItem('akademi_data_snapshot_time', new Date().toISOString());
+  } catch (e) {}
+
+  if (!firebaseConfig.storageBucket) {
+    return { success: false, error: 'Firebase Storage bucket yapılandırılmamış' };
+  }
+
+  try {
+    const storageRef = ref(storage, CLOUD_STORAGE_SNAPSHOT_PATH);
+    const uploadPromise = uploadString(storageRef, jsonStr, 'raw', {
+      contentType: 'application/json',
+      customMetadata: {
+        updatedAt: new Date().toISOString(),
+        version: String(data?.version || 1),
+        updatedBy: auth.currentUser?.email || 'admin'
+      }
+    }).then(async () => {
+      const downloadUrl = await getDownloadURL(storageRef).catch(() => undefined);
+      return { success: true, url: downloadUrl, nativeStorage: true };
+    });
+
+    const timeoutPromise = new Promise<{ success: boolean; url?: string; error?: string; nativeStorage?: boolean }>((resolve) =>
+      setTimeout(() => resolve({ success: false, error: 'Storage upload timeout' }), 2500)
+    );
+
+    const result = await Promise.race([uploadPromise, timeoutPromise]);
+    return result;
+  } catch (error: any) {
+    console.warn('Firebase Storage upload notice:', error);
+    return { success: false, error: error?.message || String(error) };
+  }
+};
+
+export const fetchSnapshotFromStorage = async (): Promise<{ data: any; lastModified?: string } | null> => {
+  if (!firebaseConfig.storageBucket) return null;
+  try {
+    const storageRef = ref(storage, CLOUD_STORAGE_SNAPSHOT_PATH);
+    const fetchPromise = (async () => {
+      try {
+        const bytes = await getBytes(storageRef, 50 * 1024 * 1024);
+        const jsonStr = new TextDecoder().decode(bytes);
+        const parsed = JSON.parse(jsonStr);
+        return { data: parsed };
+      } catch (e: any) {
+        if (e?.code === 'storage/object-not-found') {
+          return null;
+        }
+        const downloadUrl = await getDownloadURL(storageRef);
+        const resp = await fetch(`${downloadUrl}&t=${Date.now()}`);
+        if (resp.ok) {
+          const parsed = await resp.json();
+          return { data: parsed, lastModified: resp.headers.get('last-modified') || undefined };
+        }
+        return null;
+      }
+    })();
+
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 2500)
+    );
+
+    return await Promise.race([fetchPromise, timeoutPromise]);
+  } catch (error: any) {
+    if (error?.code === 'storage/object-not-found') {
+      return null;
+    }
+    console.warn('Firebase Storage download notice:', error);
+    return null;
+  }
+};
+
+export const uploadBackupToStorage = async (backupId: string, backupRecord: any): Promise<{ success: boolean; url?: string; error?: string }> => {
+  if (!firebaseConfig.storageBucket) {
+    return { success: false, error: 'Firebase Storage bucket yapılandırılmamış' };
+  }
+  try {
+    const storageRef = ref(storage, `backups/${backupId}.json`);
+    const uploadPromise = uploadString(storageRef, JSON.stringify(backupRecord), 'raw', {
+      contentType: 'application/json',
+      customMetadata: {
+        backupId,
+        createdAt: backupRecord.createdAt || new Date().toISOString(),
+        createdByName: backupRecord.createdByName || 'Yönetici'
+      }
+    }).then(async () => {
+      const downloadUrl = await getDownloadURL(storageRef).catch(() => undefined);
+      return { success: true, url: downloadUrl };
+    });
+
+    const timeoutPromise = new Promise<{ success: boolean; error: string }>((resolve) =>
+      setTimeout(() => resolve({ success: false, error: 'Backup storage timeout' }), 2500)
+    );
+
+    return await Promise.race([uploadPromise, timeoutPromise]);
+  } catch (error: any) {
+    console.warn('Storage backup upload error:', error);
+    return { success: false, error: error?.message || String(error) };
+  }
+};
+
 export type { User };
 export { 
   doc, 
@@ -222,5 +363,11 @@ export {
   onAuthStateChanged, 
   signInWithPopup, 
   signOut, 
-  GoogleAuthProvider 
+  GoogleAuthProvider,
+  ref,
+  uploadString,
+  getDownloadURL,
+  deleteObject,
+  listAll,
+  getBytes
 };

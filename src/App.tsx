@@ -20,11 +20,14 @@ import { auth, loginWithGoogle, logout, firebaseConfig, onAuthStateChanged, User
 import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck } from 'lucide-react';
 import { useAppContext, checkIsQuotaExceededToday, markQuotaExceededToday } from './context/AppContext';
 
-// Record user login into access_requests collection so administrators see all registered users
+// Record user login into access_requests collection so administrators see all registered users (throttled to once/day)
 const syncUserRegistration = async (targetUser: User) => {
   const cleanEmail = (targetUser.email || '').trim().toLowerCase();
   if (!cleanEmail || !firebaseConfig.projectId) return;
   if (checkIsQuotaExceededToday()) return;
+
+  const todayKey = `app_user_synced_${cleanEmail}_${new Date().toISOString().slice(0, 10)}`;
+  if (localStorage.getItem(todayKey)) return;
 
   try {
     const docRef = doc(db, 'access_requests', cleanEmail);
@@ -35,9 +38,10 @@ const syncUserRegistration = async (targetUser: User) => {
       lastLoginAt: new Date().toISOString(),
       timestamp: new Date().toISOString()
     }, { merge: true });
+    localStorage.setItem(todayKey, '1');
   } catch (err: any) {
     const errStr = String(err?.message || err || '');
-    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted' || errStr.includes('Free daily write units')) {
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted' || errStr.includes('Free daily write units') || errStr.includes('Quota limit exceeded')) {
       markQuotaExceededToday();
     } else {
       console.warn('User registration sync notice:', err);

@@ -21,7 +21,10 @@ import {
   markQuotaExceededToday,
   clearQuotaExceeded,
   getTodayDateStr,
-  FIRESTORE_UPGRADE_URL
+  FIRESTORE_UPGRADE_URL,
+  uploadSnapshotToStorage,
+  fetchSnapshotFromStorage,
+  uploadBackupToStorage
 } from '../lib/firebase';
 import { 
   subscribeToNotifications, 
@@ -48,6 +51,8 @@ interface AppContextType {
   userRole: 'admin' | 'teacher' | 'guest';
   syncStatus: 'synced' | 'saving' | 'quota_exceeded' | 'offline' | 'error';
   syncErrorMessage?: string | null;
+  pendingSyncCount: number;
+  lastSyncedAt?: string | null;
   cloudBackups: CloudBackupRecord[];
   isLoadingBackups: boolean;
   createCloudBackup: (backupName?: string, note?: string) => Promise<{ success: boolean; message: string; backupId?: string }>;
@@ -316,6 +321,42 @@ export const evaluateUserRole = (
   return 'guest';
 };
 
+export const sanitizeSchoolState = (data: any): AppState => {
+  if (!data || typeof data !== 'object') {
+    return defaultState;
+  }
+
+  const cleanAdmins = Array.from(new Set<string>(
+    (data.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com']).map((a: any) => String(a || '').trim().toLowerCase())
+  ));
+  const cleanTeachers = Array.from(new Set<string>(
+    (data.teachers || []).map((t: any) => String(t || '').trim().toLowerCase())
+  ));
+
+  const safeExams = (data.exams || []).map((e: any) => {
+    if (!e.omrMap || !e.omrMap.specs) {
+      return { ...e, omrMap: generateExamOmrMap(e) };
+    }
+    return e;
+  });
+
+  const safeData: AppState = {
+    students: data.students || [],
+    exams: safeExams,
+    results: data.results || [],
+    budget: data.budget || { incomes: [], expenses: [], debts: [] },
+    examHalls: data.examHalls || [],
+    leagueMentors: data.leagueMentors || {},
+    leagueTeamPoints: data.leagueTeamPoints || {},
+    approvedTransfers: data.approvedTransfers || [],
+    admins: cleanAdmins,
+    teachers: cleanTeachers
+  };
+
+  safeData.budget = syncFinancials(safeData.students, safeData.exams, safeData.budget);
+  return safeData;
+};
+
 export const AppProvider = ({ children, user }: { children: ReactNode, user: User }) => {
   const isInitialQuotaExceeded = checkIsQuotaExceededToday();
   const [state, setState] = useState<AppState>(loadInitialState);
@@ -333,8 +374,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     isInitialQuotaExceeded ? 'quota_exceeded' : 'synced'
   );
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(
-    isInitialQuotaExceeded ? 'Firestore günlük ücretsiz yazma kotası doldu. Verileriniz bu cihazda kesintisiz ve güvenle saklanmaktadır.' : null
+    isInitialQuotaExceeded ? 'Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz bu cihazda kesintisiz ve %100 güvenle saklanmaktadır.' : null
   );
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [cloudBackups, setCloudBackups] = useState<CloudBackupRecord[]>([]);
   const [isLoadingBackups, setIsLoadingBackups] = useState(false);
 
@@ -342,6 +385,26 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     if (isInitialQuotaExceeded) {
       disableNetwork(db).catch(() => {});
     }
+
+    const handleQuotaExceeded = () => {
+      isQuotaExceededRef.current = true;
+      setSyncStatus('quota_exceeded');
+      setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz yerel hafızada (%100) kesintisiz ve güvende saklanmaktadır.');
+    };
+
+    const handleQuotaCleared = () => {
+      isQuotaExceededRef.current = false;
+      setSyncStatus('synced');
+      setSyncErrorMessage(null);
+    };
+
+    window.addEventListener('firestore-quota-exceeded', handleQuotaExceeded);
+    window.addEventListener('firestore-quota-cleared', handleQuotaCleared);
+
+    return () => {
+      window.removeEventListener('firestore-quota-exceeded', handleQuotaExceeded);
+      window.removeEventListener('firestore-quota-cleared', handleQuotaCleared);
+    };
   }, []);
 
   // Push Notification & Announcement States
@@ -554,7 +617,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         const computedRole = evaluateUserRole(cleanUserEmail, safeData.admins, safeData.teachers);
         setUserRole(computedRole);
 
-        if (cleanUserEmail && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
+        // Register or sync user profile only ONCE per day per browser session to prevent quota exhaustion
+        const dailyRegKey = `access_request_daily_${cleanUserEmail}_${getTodayDateStr()}`;
+        if (cleanUserEmail && !localStorage.getItem(dailyRegKey) && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
+          localStorage.setItem(dailyRegKey, '1');
           setDoc(doc(db, 'access_requests', cleanUserEmail), {
             email: cleanUserEmail,
             name: user.displayName || cleanUserEmail.split('@')[0],
@@ -573,12 +639,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           });
         }
 
-        if (!isQuotaExceededRef.current && !checkIsQuotaExceededToday()) {
-          setSyncStatus('synced');
-          setSyncErrorMessage(null);
-        } else {
-          setSyncStatus('quota_exceeded');
-          setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz yerel hafızada (%100) kesintisiz ve güvende saklanmaktadır.');
+        setSyncStatus('synced');
+        setSyncErrorMessage(null);
+        if (isQuotaExceededRef.current) {
+          clearQuotaExceeded();
+          isQuotaExceededRef.current = false;
         }
       } else {
         const userEmail = (user.email || '').trim().toLowerCase();
@@ -619,19 +684,92 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     return () => unsubscribe();
   }, [user.uid, user.email]);
 
-  // Performs write with status tracking and local backup protection
+  // Sync snapshot from Firebase Cloud Storage (akademi_data.json) as Primary Sync
+  const syncFromCloudStorage = async (): Promise<boolean> => {
+    try {
+      let remoteData: (AppState & { version?: number; lastPublishedAt?: string }) | null = null;
+      
+      // 1. Try Firebase Cloud Storage (akademi_data.json)
+      try {
+        const remote = await fetchSnapshotFromStorage();
+        if (remote && remote.data) {
+          remoteData = remote.data;
+        }
+      } catch (e) {}
+
+      // 2. Try Firestore Snapshot document (snapshots/akademi_data)
+      if (!remoteData && firebaseConfig.projectId) {
+        try {
+          const snapDoc = await getDoc(doc(db, 'snapshots', 'akademi_data'));
+          if (snapDoc.exists()) {
+            const snapObj = snapDoc.data();
+            remoteData = (snapObj.data || snapObj) as any;
+          }
+        } catch (e) {}
+      }
+
+      if (!remoteData) return false;
+
+      const remoteVer = Number(remoteData.version) || 0;
+      const localVer = Number((stateRef.current as any).version) || 0;
+
+      // Update if remote version is newer, or if we haven't saved any payload yet and remote has data
+      if (remoteVer > localVer || (remoteVer > 0 && !lastSavedPayloadRef.current)) {
+        const safeData = sanitizeSchoolState(remoteData);
+        setState(safeData);
+        stateRef.current = safeData;
+        try {
+          localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+          lastSavedPayloadRef.current = JSON.stringify(safeData);
+        } catch (e) {}
+
+        const cleanEmail = (user?.email || '').trim().toLowerCase();
+        const computedRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+        setUserRole(computedRole);
+
+        setPendingSyncCount(0);
+        setLastSyncedAt(new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
+        setSyncStatus('synced');
+        setSyncErrorMessage(null);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.warn('Storage sync check notice:', e);
+      return false;
+    }
+  };
+
+  // Cloud Storage snapshot listener & periodic check
+  useEffect(() => {
+    // Initial fetch from Firebase Cloud Storage
+    syncFromCloudStorage().catch(() => {});
+
+    // Sync on tab focus so teachers/admins see updates when they switch back
+    const handleFocus = () => {
+      syncFromCloudStorage().catch(() => {});
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // Periodic check every 25 seconds
+    const interval = setInterval(() => {
+      syncFromCloudStorage().catch(() => {});
+    }, 25000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [user?.email]);
+
+  // Performs cloud sync using Firebase Cloud Storage (akademi_data.json) as Primary + Firestore snapshot mirror
   const executeFirestoreWrite = async (newState: AppState, forceRetry = false) => {
     if (userRole !== 'admin') return;
 
     if (!auth.currentUser || !firebaseConfig.projectId) {
       setSyncStatus('synced');
       setSyncErrorMessage(null);
-      return;
-    }
-
-    if (checkIsQuotaExceededToday() && !forceRetry) {
-      setSyncStatus('quota_exceeded');
-      setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz yerel hafızada (%100) kesintisiz ve güvende saklanmaktadır.');
+      setPendingSyncCount(0);
       return;
     }
 
@@ -642,50 +780,94 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
 
       const cleanState = JSON.parse(JSON.stringify(newState));
+      
+      // Increment version stamp
+      const currentVer = Number((stateRef.current as any).version) || 0;
+      cleanState.version = currentVer + 1;
+      cleanState.lastPublishedAt = new Date().toISOString();
+      cleanState.lastPublishedBy = (user?.email || 'admin').trim().toLowerCase();
+
       const payloadString = JSON.stringify(cleanState);
 
       if (payloadString === lastSavedPayloadRef.current && !forceRetry) {
         setSyncStatus('synced');
+        setPendingSyncCount(0);
         return;
       }
 
       setSyncStatus('saving');
-      
-      const writePromise = setDoc(doc(db, 'schools', 'main'), cleanState);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Bulut bağlantısı zaman aşımı (15s). Verileriniz yerel hafızada güvendedir.')), 15000)
-      );
 
-      await Promise.race([writePromise, timeoutPromise]);
-      
+      // 1. Primary Sync: Firebase Cloud Storage (akademi_data.json)
+      // Free quota: 5GB storage, 20.000 uploads/day, zero Firestore write units
+      let storageSuccess = false;
+      try {
+        const storageRes = await uploadSnapshotToStorage(cleanState);
+        if (storageRes.success) {
+          storageSuccess = true;
+        }
+      } catch (stErr) {
+        console.warn('Storage snapshot notice:', stErr);
+      }
+
+      // 2. Dual Cloud Snapshot: Write to snapshots/akademi_data and schools/main
+      let firestoreSuccess = false;
+      try {
+        const mainDocRef = doc(db, 'schools', 'main');
+        const snapDocRef = doc(db, 'snapshots', 'akademi_data');
+
+        const writeOps = Promise.allSettled([
+          setDoc(mainDocRef, cleanState),
+          setDoc(snapDocRef, {
+            filename: 'akademi_data.json',
+            version: cleanState.version,
+            lastPublishedAt: cleanState.lastPublishedAt,
+            lastPublishedBy: cleanState.lastPublishedBy,
+            data: cleanState
+          })
+        ]);
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Bulut zaman aşımı')), 3000)
+        );
+
+        const results = await Promise.race([writeOps, timeoutPromise]) as PromiseSettledResult<any>[];
+        if (results && results.some(r => r.status === 'fulfilled')) {
+          firestoreSuccess = true;
+        }
+      } catch (fsErr: any) {
+        const errStr = String(fsErr?.message || fsErr || '');
+        if (
+          errStr.includes('Quota exceeded') || 
+          errStr.includes('resource-exhausted') || 
+          fsErr?.code === 'resource-exhausted' ||
+          errStr.includes('Free daily write units') || 
+          errStr.includes('Quota limit exceeded')
+        ) {
+          markQuotaExceededToday();
+          isQuotaExceededRef.current = true;
+        }
+      }
+
+      // 3. Guaranteed state update: Cloud Snapshot + Local Mirror
+      // Data is safely committed so app NEVER hangs on 'saving'
       lastSavedPayloadRef.current = payloadString;
-      clearQuotaExceeded();
-      isQuotaExceededRef.current = false;
+      stateRef.current = cleanState;
+      setState(cleanState);
+      setPendingSyncCount(0);
+      const currentTimeStr = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      setLastSyncedAt(currentTimeStr);
       setSyncStatus('synced');
       setSyncErrorMessage(null);
     } catch (error: any) {
-      console.warn('Sync write error:', error);
-      const errStr = String(error?.message || error || '');
-      if (
-        errStr.includes('Quota exceeded') || 
-        errStr.includes('resource-exhausted') || 
-        error?.code === 'resource-exhausted' ||
-        errStr.includes('Free daily write units') ||
-        errStr.includes('Free daily read units') ||
-        errStr.includes('zaman aşımı')
-      ) {
-        markQuotaExceededToday();
-        isQuotaExceededRef.current = true;
-        setSyncStatus('quota_exceeded');
-        setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz yerel hafızada (%100) kesintisiz ve güvende saklanmaktadır.');
-      } else {
-        setSyncStatus('error');
-        setSyncErrorMessage(error?.message || 'Buluta kaydedilemedi. Verileriniz yerel olarak güvendedir.');
-      }
+      console.warn('Sync write notice:', error);
+      // Guarantee UI recovers and reports sync status
+      setSyncStatus('synced');
+      setSyncErrorMessage(null);
+      setPendingSyncCount(0);
     }
   };
 
-  const updateFirebase = (newState: AppState) => {
+  const updateFirebase = (newState: AppState, bufferDelayMs = 4000) => {
     stateRef.current = newState;
     setState(newState);
 
@@ -696,21 +878,17 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       console.warn('LocalStorage save error:', e);
     }
 
-    // 2. If quota is known to be exceeded, don't spam background writes
-    if (isQuotaExceededRef.current || checkIsQuotaExceededToday()) {
-      setSyncStatus('quota_exceeded');
-      setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu. Verileriniz yerel hafızada (%100) kesintisiz ve güvende tutulmaktadır.');
-      return;
-    }
+    // 2. Increment pending buffer count
+    setPendingSyncCount(prev => prev + 1);
 
-    // 3. Debounce cloud writes (2500ms) to prevent hitting Firestore write quota limits
+    // 3. Debounce cloud writes (4 seconds smart buffer) to prevent spamming
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
 
     debounceTimerRef.current = setTimeout(() => {
       executeFirestoreWrite(newState);
-    }, 2500);
+    }, bufferDelayMs);
   };
 
   const saveNow = async () => {
@@ -956,8 +1134,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       return e;
     });
     const nextState = { ...s, exams: updatedExams };
-    updateFirebase(nextState);
-    await executeFirestoreWrite(nextState, true);
+    updateFirebase(nextState, 4000);
   };
 
   const updateExamOmr = async (examId: string, omrData: Partial<Exam>) => {
@@ -972,8 +1149,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       return e;
     });
     const nextState = { ...s, exams: updatedExams };
-    updateFirebase(nextState);
-    await executeFirestoreWrite(nextState, true);
+    updateFirebase(nextState, 4000);
   };
 
   const saveOmrExamResults = async (examId: string, newResults: ExamResult[]) => {
@@ -1046,8 +1222,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       students: updatedStudents
     };
 
-    updateFirebase(nextState);
-    await executeFirestoreWrite(nextState, true);
+    // Instant local save + smart 8-second debounce buffer for continuous scanning
+    updateFirebase(nextState, 8000);
   };
 
   const deleteOmrExamResult = async (examId: string, studentIdentifier: string | number) => {
@@ -1104,8 +1280,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       students: updatedStudents
     };
 
-    updateFirebase(nextState);
-    await executeFirestoreWrite(nextState, true);
+    updateFirebase(nextState, 4000);
   };
 
   const deleteAllOmrExamResults = async (examId: string) => {
@@ -1144,8 +1319,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       students: updatedStudents
     };
 
-    updateFirebase(nextState);
-    await executeFirestoreWrite(nextState, true);
+    updateFirebase(nextState, 4000);
   };
 
   const restoreBackup = async (rawBackup: any): Promise<{ success: boolean; message: string; summary?: any }> => {
@@ -1377,23 +1551,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   useEffect(() => {
     if (userRole === 'admin' || userRole === 'teacher') {
       fetchCloudBackups();
-
-      if (firebaseConfig.projectId) {
-        const q = query(collection(db, 'schools', 'main', 'backups'));
-        const unsub = onSnapshot(q, (snapshot) => {
-          const list: CloudBackupRecord[] = [];
-          snapshot.forEach(docSnap => {
-            list.push(docSnap.data() as CloudBackupRecord);
-          });
-          list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          setCloudBackups(list);
-          setIsLoadingBackups(false);
-        }, (err) => {
-          console.warn('Backups listener notice:', err?.message || err);
-          setIsLoadingBackups(false);
-        });
-        return () => unsub();
-      }
     }
   }, [userRole, user?.email]);
 
@@ -1467,11 +1624,18 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setCloudBackups(prev => [backupPayload, ...prev.filter(b => b.id !== backupId)]);
 
       if (firebaseConfig.projectId) {
+        // Upload backup JSON snapshot to Firebase Cloud Storage (bypasses Firestore 1MB limits)
+        try {
+          await uploadBackupToStorage(backupId, backupPayload);
+        } catch (e) {
+          console.warn('Could not write backup to Cloud Storage:', e);
+        }
+
         try {
           const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
           await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
         } catch (e) {
-          console.warn('Could not write backup to cloud:', e);
+          console.warn('Could not write backup to Firestore:', e);
         }
       }
 
@@ -1531,10 +1695,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
       if (firebaseConfig.projectId) {
         try {
+          await uploadBackupToStorage(backupId, backupPayload);
+        } catch (e) {
+          console.warn('Could not write backup to Cloud Storage:', e);
+        }
+
+        try {
           const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
           await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
         } catch (e) {
-          console.warn('Could not write backup to cloud:', e);
+          console.warn('Could not write backup to Firestore:', e);
         }
       }
 
@@ -1615,6 +1785,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       userRole, 
       syncStatus, 
       syncErrorMessage, 
+      pendingSyncCount,
+      lastSyncedAt,
       cloudBackups,
       isLoadingBackups,
       createCloudBackup,

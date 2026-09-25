@@ -75,7 +75,7 @@ interface ScanViewProps {
 }
 
 export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNavigate }: ScanViewProps) {
-  const { state, userRole, saveOmrExamResults } = useAppContext();
+  const { state, userRole, saveOmrExamResults, saveNow, pendingSyncCount, syncStatus } = useAppContext();
   const isAdmin = userRole === 'admin';
 
   // Kurum İçi Deneme Sınavları (Optik form baskısı ve OMR haritası olan sınavlar)
@@ -2392,6 +2392,8 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           setBatchFiles([]);
           batchFilesRef.current = [];
           batchIndexRef.current = -1;
+          // Flush pending buffer when batch scanning completes
+          saveNow().catch(() => {});
         }
       } catch (err: any) {
         if (batchIndexRef.current >= 0) {
@@ -2572,6 +2574,28 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {pendingSyncCount > 0 && (
+            <button
+              type="button"
+              onClick={() => saveNow().catch(() => {})}
+              className="flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition-all border border-amber-500/40 cursor-pointer shadow-xs animate-pulse"
+              title="Tampondaki formları hemen buluta aktarmak için tıklayın"
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span>{pendingSyncCount} Form Tamponda (Şimdi Eşitle)</span>
+            </button>
+          )}
+
+          {syncStatus === 'quota_exceeded' && pendingSyncCount === 0 && (
+            <div 
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 bg-amber-500/15 text-amber-300 rounded-xl text-xs font-bold border border-amber-500/30"
+              title="Firestore kotası doldu; taramalarınız cihazınızda kesintisiz ve %100 güvende saklanmaktadır."
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span>⚡ Yerel Mod (%100 Korunuyor)</span>
+            </div>
+          )}
+
           {isAdmin && (
             <button
               type="button"
