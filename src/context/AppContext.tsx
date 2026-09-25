@@ -2,7 +2,27 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useRe
 import { Student, Exam, ExamResult, BudgetData, ExamHall, SeatingPlanItem, CloudBackupRecord, FullBackupData, FullBackupSummary, AppNotification, ExamKeys } from '../types';
 import { generateId, recalculateLeagueForStudents } from '../lib/utils';
 import { generateExamOmrMap, initialExam, HAZIRBULUNUSLUK_STUDENTS, HAZIRBULUNUSLUK_ANSWER_KEYS_A, normalizeTurkish } from '../lib/omrEngine';
-import { db, firebaseConfig, auth, doc, getDoc, setDoc, onSnapshot, collection, getDocs, deleteDoc, query, disableNetwork, enableNetwork, User } from '../lib/firebase';
+import { 
+  db, 
+  firebaseConfig, 
+  auth, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  onSnapshot, 
+  collection, 
+  getDocs, 
+  deleteDoc, 
+  query, 
+  disableNetwork, 
+  enableNetwork, 
+  User,
+  checkIsQuotaExceededToday,
+  markQuotaExceededToday,
+  clearQuotaExceeded,
+  getTodayDateStr,
+  FIRESTORE_UPGRADE_URL
+} from '../lib/firebase';
 import { 
   subscribeToNotifications, 
   displayBrowserNotification, 
@@ -227,32 +247,12 @@ const loadInitialState = (): AppState => {
   return defaultState;
 };
 
-export const getTodayDateStr = () => new Date().toISOString().slice(0, 10);
-
-export const checkIsQuotaExceededToday = () => {
-  try {
-    const savedDate = localStorage.getItem('firestore_quota_exceeded_date');
-    const savedProject = localStorage.getItem('firestore_quota_exceeded_project');
-    return savedDate === getTodayDateStr() && savedProject === firebaseConfig.projectId;
-  } catch (e) {
-    return false;
-  }
-};
-
-export const markQuotaExceededToday = () => {
-  try {
-    localStorage.setItem('firestore_quota_exceeded_date', getTodayDateStr());
-    localStorage.setItem('firestore_quota_exceeded_project', firebaseConfig.projectId);
-    disableNetwork(db).catch(() => {});
-  } catch (e) {}
-};
-
-export const clearQuotaExceeded = () => {
-  try {
-    localStorage.removeItem('firestore_quota_exceeded_date');
-    localStorage.removeItem('firestore_quota_exceeded_project');
-    enableNetwork(db).catch(() => {});
-  } catch (e) {}
+export { 
+  getTodayDateStr, 
+  checkIsQuotaExceededToday, 
+  markQuotaExceededToday, 
+  clearQuotaExceeded, 
+  FIRESTORE_UPGRADE_URL 
 };
 
 export const getCachedAuthorizedRole = (cleanEmail: string): 'admin' | 'teacher' | null => {
@@ -398,6 +398,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   const checkAndRefreshRole = async (): Promise<'admin' | 'teacher' | 'guest'> => {
     try {
       const cleanEmail = (user?.email || '').trim().toLowerCase();
+
+      // If quota is exceeded, resolve role locally without hitting Firestore
+      if (checkIsQuotaExceededToday() || isQuotaExceededRef.current) {
+        const localRole = evaluateUserRole(cleanEmail, stateRef.current.admins, stateRef.current.teachers);
+        setUserRole(localRole);
+        return localRole;
+      }
 
       // Check access_requests collection directly for explicit user approvals
       if (cleanEmail && firebaseConfig.projectId) {
@@ -558,7 +565,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             timestamp: new Date().toISOString()
           }, { merge: true }).catch((err: any) => {
             const errStr = String(err?.message || err || '');
-            if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted') {
+            if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted' || errStr.includes('Free daily')) {
               markQuotaExceededToday();
               isQuotaExceededRef.current = true;
               setSyncStatus('quota_exceeded');
@@ -566,15 +573,18 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           });
         }
 
-        if (!isQuotaExceededRef.current) {
+        if (!isQuotaExceededRef.current && !checkIsQuotaExceededToday()) {
           setSyncStatus('synced');
           setSyncErrorMessage(null);
+        } else {
+          setSyncStatus('quota_exceeded');
+          setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz yerel hafızada (%100) kesintisiz ve güvende saklanmaktadır.');
         }
       } else {
         const userEmail = (user.email || '').trim().toLowerCase();
         if (userEmail === 'kirklareliataturkortaokulu@gmail.com' || userEmail === 'bahadirkumcu@gmail.com') {
           setUserRole('admin');
-          if (!isQuotaExceededRef.current) {
+          if (!isQuotaExceededRef.current && !checkIsQuotaExceededToday()) {
             setDoc(docRef, stateRef.current).catch((err) => {
               console.warn('Initial doc save error:', err);
             });
@@ -584,8 +594,21 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setLoading(false);
     }, (error: any) => {
       console.warn('Snapshot listener notice:', error);
-      setSyncStatus('offline');
-      setSyncErrorMessage(error?.message || 'Veriler yerel hafızada korunmaktadır.');
+      const errStr = String(error?.message || error || '');
+      if (
+        errStr.includes('Quota exceeded') || 
+        errStr.includes('resource-exhausted') || 
+        error?.code === 'resource-exhausted' || 
+        errStr.includes('Free daily')
+      ) {
+        markQuotaExceededToday();
+        isQuotaExceededRef.current = true;
+        setSyncStatus('quota_exceeded');
+        setSyncErrorMessage('Firestore günlük ücretsiz işlem kotası doldu (Spark Plan). Verileriniz yerel hafızada korunmaktadır.');
+      } else {
+        setSyncStatus('offline');
+        setSyncErrorMessage(error?.message || 'Veriler yerel hafızada korunmaktadır.');
+      }
 
       const cleanUserEmail = (user.email || '').trim().toLowerCase();
       const fallbackRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
@@ -603,6 +626,12 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     if (!auth.currentUser || !firebaseConfig.projectId) {
       setSyncStatus('synced');
       setSyncErrorMessage(null);
+      return;
+    }
+
+    if (checkIsQuotaExceededToday() && !forceRetry) {
+      setSyncStatus('quota_exceeded');
+      setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz yerel hafızada (%100) kesintisiz ve güvende saklanmaktadır.');
       return;
     }
 
@@ -637,11 +666,18 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     } catch (error: any) {
       console.warn('Sync write error:', error);
       const errStr = String(error?.message || error || '');
-      if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || error?.code === 'resource-exhausted') {
+      if (
+        errStr.includes('Quota exceeded') || 
+        errStr.includes('resource-exhausted') || 
+        error?.code === 'resource-exhausted' ||
+        errStr.includes('Free daily write units') ||
+        errStr.includes('Free daily read units') ||
+        errStr.includes('zaman aşımı')
+      ) {
         markQuotaExceededToday();
         isQuotaExceededRef.current = true;
         setSyncStatus('quota_exceeded');
-        setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu. Verileriniz yerel hafızada (%100) kesintisiz ve güvende tutulmaktadır.');
+        setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz yerel hafızada (%100) kesintisiz ve güvende saklanmaktadır.');
       } else {
         setSyncStatus('error');
         setSyncErrorMessage(error?.message || 'Buluta kaydedilemedi. Verileriniz yerel olarak güvendedir.');

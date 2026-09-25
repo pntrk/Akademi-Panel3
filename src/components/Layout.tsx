@@ -5,7 +5,7 @@ import {
   LogOut, Shield, Download, Globe, HardDriveDownload, Cloud, 
   Bell, Camera, Printer, TrendingUp, HelpCircle, ChevronRight, 
   Sparkles, Zap, CheckCircle2, User as UserIcon, RefreshCw,
-  Sliders, AlertCircle
+  Sliders, AlertCircle, AlertTriangle, ExternalLink
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAppContext } from '../context/AppContext';
@@ -16,7 +16,7 @@ import { AppHubModal } from './AppHubModal';
 import { ProfileSettingsModal } from './ProfileSettingsModal';
 import { NotificationModal } from './NotificationModal';
 import { InstructionModal } from './InstructionModal';
-import { auth, onAuthStateChanged, User } from '../lib/firebase';
+import { auth, onAuthStateChanged, User, FIRESTORE_UPGRADE_URL } from '../lib/firebase';
 import { FullBackupData } from '../types';
 
 interface LayoutProps {
@@ -151,6 +151,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(propUser || auth.currentUser);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [isQuotaBannerDismissed, setIsQuotaBannerDismissed] = useState(false);
   const mobileNavRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -885,6 +886,46 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
           className="flex-1 flex flex-col p-2 sm:p-4 md:p-6 lg:p-8 w-full max-w-7xl mx-auto h-full font-sans antialiased overflow-x-hidden"
           style={{ fontFamily: 'Inter, sans-serif' }}
         >
+          {/* Quota Exceeded Notification Banner */}
+          {syncStatus === 'quota_exceeded' && !isQuotaBannerDismissed && (
+            <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div className="text-xs space-y-0.5 min-w-0">
+                  <p className="font-bold flex items-center gap-1.5 flex-wrap">
+                    <span>Firestore Günlük Yazma Kotası Doldu (Spark Plan)</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                      Yerel Koruma %100 Aktif
+                    </span>
+                  </p>
+                  <p className="text-amber-800/90 dark:text-amber-300/80 leading-relaxed text-[11px]">
+                    Tüm sınav, soru, öğrenci ve analiz verileriniz tarayıcınızın güvenli yerel hafızasında saklanmaktadır; tüm işlemleri kesintisiz kullanabilirsiniz. Kota her gün Pasifik saatiyle gece yarısı otomatik sıfırlanır.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <a
+                  href={FIRESTORE_UPGRADE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                >
+                  <span>Kotayı İncele</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  onClick={() => setIsQuotaBannerDismissed(true)}
+                  className="p-1.5 text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200 rounded-lg hover:bg-amber-500/10 cursor-pointer transition-colors"
+                  title="Kapat"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {children}
         </div>
       </main>

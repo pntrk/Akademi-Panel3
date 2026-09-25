@@ -37,7 +37,7 @@ const syncUserRegistration = async (targetUser: User) => {
     }, { merge: true });
   } catch (err: any) {
     const errStr = String(err?.message || err || '');
-    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted') {
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted' || errStr.includes('Free daily write units')) {
       markQuotaExceededToday();
     } else {
       console.warn('User registration sync notice:', err);
@@ -53,12 +53,13 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [isCheckingRole, setIsCheckingRole] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Auto-refresh role every 4 seconds if in guest mode
+  // Auto-refresh role if in guest mode, unless quota is exceeded
   useEffect(() => {
     if (userRole === 'guest') {
+      if (checkIsQuotaExceededToday()) return;
       const interval = setInterval(() => {
         checkAndRefreshRole().catch(() => {});
-      }, 4000);
+      }, 6000);
       return () => clearInterval(interval);
     }
   }, [userRole, checkAndRefreshRole]);
