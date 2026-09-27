@@ -861,12 +861,31 @@ export function detectOmrAnchors(
     } else if (!tl && tr && bl && br) {
       finalTL = { x: tr.x - (br.x - bl.x), y: bl.y - (br.y - tr.y) };
     }
+  } else if (foundCount === 2) {
+    // 2-Çapa Hibrit Rekonstrüksiyonu (Mobilde 2 çapa veya Karekod + Alt Çapa tespit edildiğinde)
+    if (tl && br) {
+      finalTR = { x: br.x, y: tl.y };
+      finalBL = { x: tl.x, y: br.y };
+    } else if (tr && bl) {
+      finalTL = { x: bl.x, y: tr.y };
+      finalBR = { x: tr.x, y: bl.y };
+    } else if (bl && br) {
+      const bottomW = br.x - bl.x;
+      const aspectH = bottomW * (277 / 190);
+      finalTL = { x: bl.x, y: bl.y - aspectH };
+      finalTR = { x: br.x, y: br.y - aspectH };
+    } else if (tl && tr) {
+      const topW = tr.x - tl.x;
+      const aspectH = topW * (277 / 190);
+      finalBL = { x: tl.x, y: tl.y + aspectH };
+      finalBR = { x: tr.x, y: tr.y + aspectH };
+    }
   }
 
-  let lockFailed = foundCount < 3;
+  let lockFailed = foundCount < 2;
   if (!lockFailed) {
-    if (finalTR.x - finalTL.x < w * 0.48 || finalBR.x - finalBL.x < w * 0.48) lockFailed = true;
-    if (finalBL.y - finalTL.y < h * 0.48 || finalBR.y - finalTR.y < h * 0.48) lockFailed = true;
+    if (finalTR.x - finalTL.x < w * 0.40 || finalBR.x - finalBL.x < w * 0.40) lockFailed = true;
+    if (finalBL.y - finalTL.y < h * 0.40 || finalBR.y - finalTR.y < h * 0.40) lockFailed = true;
   }
 
   return {

@@ -914,16 +914,18 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           const center = getAvgLumaInRegion(210, 297, 10);
 
           const isStableAnchor = (val: number) => val < 130 && (center - val) > 45;
+          const stableCount = (isStableAnchor(tl) ? 1 : 0) + (isStableAnchor(tr) ? 1 : 0) + (isStableAnchor(bl) ? 1 : 0) + (isStableAnchor(br) ? 1 : 0);
+          const hasMinAnchors = stableCount >= 3 || (stableCount >= 2 && (scannedQrRef.current !== null || (isStableAnchor(bl) && isStableAnchor(br))));
 
-          if (center > 120 && isStableAnchor(tl) && isStableAnchor(tr) && isStableAnchor(bl) && isStableAnchor(br)) {
+          if (center > 115 && hasMinAnchors) {
             lockCounter.current += 1;
             setLockLevel(lockCounter.current);
 
-            if (lockCounter.current === 3) {
-              setStatus("Hedef algılandı, mercek odaklanıyor... ⏳");
-            } else if (lockCounter.current === 8) {
-              setStatus("Geometrik analiz yapılıyor, sabit tutun... 🔒");
-            } else if (lockCounter.current >= 15) {
+            if (lockCounter.current === 2) {
+              setStatus(scannedQrRef.current ? "🎯 Karekod & Çapa algılandı... ⏳" : "Hedef algılandı, odaklanıyor... ⏳");
+            } else if (lockCounter.current === 6) {
+              setStatus("Geometrik analiz kilitlendi, sabit tutun... 🔒");
+            } else if (lockCounter.current >= 12) {
               clearInterval(captureInterval);
               performCapture(video, guide);
             }
@@ -931,7 +933,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             if (lockCounter.current > 0) {
               lockCounter.current = 0;
               setLockLevel(0);
-              if (!scannedQrRef.current) setStatus("Siyah kareleri pencerelere yerleştirin.");
+              if (!scannedQrRef.current) setStatus("Formun karekodunu ve çapa karelerini çerçeveye getirin.");
             }
           }
         } catch (e) {}
@@ -3364,6 +3366,30 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 }}
               >
                 <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_10px_#34d399] animate-scanlaser pointer-events-none" />
+
+                {/* QR Kod Hedef Bölgesi (Formun Sağ Üstündeki Karekod Alanı) */}
+                <div
+                  className={`absolute border-2 border-dashed rounded-lg flex items-center justify-center transition-all ${
+                    scannedQrRef.current
+                      ? 'border-cyan-400 bg-cyan-400/25 shadow-[0_0_15px_rgba(34,211,238,0.6)]'
+                      : lockLevel >= 3
+                      ? 'border-amber-400/80 bg-amber-400/10'
+                      : 'border-cyan-500/60 bg-cyan-500/10'
+                  }`}
+                  style={{
+                    left: '85.8%',
+                    top: '15.2%',
+                    width: '18%',
+                    height: '11.5%',
+                    transform: 'translate(-50%, -50%)'
+                  }}
+                >
+                  <span className={`text-[8.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded ${
+                    scannedQrRef.current ? 'bg-cyan-400 text-slate-950 font-bold' : 'text-cyan-300 bg-slate-950/80'
+                  }`}>
+                    {scannedQrRef.current ? 'KAREKOD ✅' : 'KAREKOD'}
+                  </span>
+                </div>
 
                 {anchorTargets.map((pos, i) => (
                   <div
