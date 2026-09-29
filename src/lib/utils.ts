@@ -138,6 +138,57 @@ export function formatDateShort(dateStr: string | null | undefined): string {
   return dateStr.trim();
 }
 
+/**
+ * 1. Dönem: Eylül (8) - Ocak (0) ayları arası
+ * 2. Dönem: Şubat (1) - Haziran (5) ayları arası
+ */
+export function getExamTerm(exam: { date?: string; name?: string }): 1 | 2 | null {
+  if (exam.date) {
+    const d = parseDateObj(exam.date);
+    if (d) {
+      const m = d.getMonth();
+      // 1. Dönem: Eylül(8), Ekim(9), Kasım(10), Aralık(11), Ocak(0)
+      if (m === 8 || m === 9 || m === 10 || m === 11 || m === 0) {
+        return 1;
+      }
+      // 2. Dönem: Şubat(1), Mart(2), Nisan(3), Mayıs(4), Haziran(5)
+      if (m >= 1 && m <= 5) {
+        return 2;
+      }
+    }
+  }
+
+  // Fallback checks on exam name or date raw string
+  const str = `${exam.name || ''} ${exam.date || ''}`.toLowerCase();
+  if (
+    str.includes('1. dönem') || str.includes('1.dönem') || str.includes('1. donem') ||
+    str.includes('1.donem') || str.includes('i. dönem') || str.includes('i.donem') ||
+    str.includes('eylül') || str.includes('eylul') || str.includes('ekim') ||
+    str.includes('kasım') || str.includes('kasim') || str.includes('aralık') ||
+    str.includes('aralik') || str.includes('ocak')
+  ) {
+    return 1;
+  }
+  if (
+    str.includes('2. dönem') || str.includes('2.dönem') || str.includes('2. donem') ||
+    str.includes('2.donem') || str.includes('ii. dönem') || str.includes('ii.donem') ||
+    str.includes('şubat') || str.includes('subat') || str.includes('mart') ||
+    str.includes('nisan') || str.includes('mayıs') || str.includes('mayis') ||
+    str.includes('haziran')
+  ) {
+    return 2;
+  }
+  return null;
+}
+
+export function isExamInTerm1(exam: { date?: string; name?: string }): boolean {
+  return getExamTerm(exam) === 1;
+}
+
+export function isExamInTerm2(exam: { date?: string; name?: string }): boolean {
+  return getExamTerm(exam) === 2;
+}
+
 export const calculateAtaLigPoints = (examScore: number, previousAverage: number, lessonsDetails: any, historyExams: any[] = [], team: string = '') => {
   let earnedLP = 0;
   const earnedBadges: string[] = [];

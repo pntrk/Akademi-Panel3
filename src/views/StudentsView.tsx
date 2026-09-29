@@ -1,7 +1,7 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Student, BudgetIncome } from '../types';
-import { exportToExcel, importFromExcel, generateId, normalizeForSearch, formatDateLong } from '../lib/utils';
+import { exportToExcel, importFromExcel, generateId, normalizeForSearch, formatDateLong, getExamTerm, isExamInTerm1, isExamInTerm2 } from '../lib/utils';
 import { 
   Upload, Download, Edit2, Plus, Trash2, X, CheckSquare, Square, 
   Search, Calendar, DollarSign, Users, Award, Sparkles, BookOpen, 
@@ -1522,43 +1522,84 @@ export const StudentsView = () => {
             {/* Modal Form */}
             <div className="p-6 space-y-4">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
                   <label className="block text-xs font-bold text-[#5a5a40] uppercase tracking-wider">Deneme Sınavı Seçimi</label>
                   {state.exams.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (selectedBulkExamIds.length === state.exams.length) {
-                          setSelectedBulkExamIds([]);
-                        } else {
-                          setSelectedBulkExamIds(state.exams.map(e => e.id));
-                        }
-                      }}
-                      className="text-[10px] font-bold text-[#5a5a40] bg-[#e6e2d3]/50 hover:bg-[#e6e2d3] px-2 py-0.5 rounded transition-colors"
-                    >
-                      {selectedBulkExamIds.length === state.exams.length ? 'Tümünü Kaldır' : 'Tümüne Katıl'}
-                    </button>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const t1Ids = state.exams.filter(isExamInTerm1).map(e => e.id);
+                          setSelectedBulkExamIds(t1Ids);
+                        }}
+                        className="text-[10px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-2 py-0.5 rounded transition-all cursor-pointer"
+                        title="1. Dönem (Eylül - Ocak) sınavlarını otomatik seç"
+                      >
+                        1. Dönem ({state.exams.filter(isExamInTerm1).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const t2Ids = state.exams.filter(isExamInTerm2).map(e => e.id);
+                          setSelectedBulkExamIds(t2Ids);
+                        }}
+                        className="text-[10px] font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200/80 px-2 py-0.5 rounded transition-all cursor-pointer"
+                        title="2. Dönem (Şubat - Haziran) sınavlarını otomatik seç"
+                      >
+                        2. Dönem ({state.exams.filter(isExamInTerm2).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedBulkExamIds.length === state.exams.length) {
+                            setSelectedBulkExamIds([]);
+                          } else {
+                            setSelectedBulkExamIds(state.exams.map(e => e.id));
+                          }
+                        }}
+                        className="text-[10px] font-bold text-[#5a5a40] bg-[#e6e2d3]/50 hover:bg-[#e6e2d3] px-2 py-0.5 rounded transition-colors cursor-pointer"
+                      >
+                        {selectedBulkExamIds.length === state.exams.length ? 'Temizle' : 'Tümü'}
+                      </button>
+                    </div>
                   )}
                 </div>
                 {state.exams.length > 0 ? (
                   <div className="space-y-2 max-h-40 overflow-y-auto bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3">
-                    {state.exams.map(exam => (
-                      <label key={exam.id} className="flex items-center space-x-3 hover:bg-[#f5f5f0] p-1.5 rounded cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedBulkExamIds.includes(exam.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedBulkExamIds([...selectedBulkExamIds, exam.id]);
-                            } else {
-                              setSelectedBulkExamIds(selectedBulkExamIds.filter(id => id !== exam.id));
-                            }
-                          }}
-                          className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40]"
-                        />
-                        <span className="text-sm font-semibold text-[#5a5a40]">{exam.name} {exam.date ? `(${formatDateLong(exam.date)})` : ''}</span>
-                      </label>
-                    ))}
+                    {state.exams.map(exam => {
+                      const term = getExamTerm(exam);
+                      return (
+                        <label key={exam.id} className="flex items-center space-x-3 hover:bg-[#f5f5f0] p-1.5 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedBulkExamIds.includes(exam.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedBulkExamIds([...selectedBulkExamIds, exam.id]);
+                              } else {
+                                setSelectedBulkExamIds(selectedBulkExamIds.filter(id => id !== exam.id));
+                              }
+                            }}
+                            className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40]"
+                          />
+                          <div className="flex items-center justify-between gap-1 flex-1 min-w-0">
+                            <span className="text-sm font-semibold text-[#5a5a40] truncate">
+                              {exam.name} {exam.date ? `(${formatDateLong(exam.date)})` : ''}
+                            </span>
+                            {term === 1 && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200/60 shrink-0">
+                                1. Dönem
+                              </span>
+                            )}
+                            {term === 2 && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-50 text-sky-800 border border-sky-200/60 shrink-0">
+                                2. Dönem
+                              </span>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-800 flex items-start space-x-2">
@@ -2284,11 +2325,21 @@ export const StudentsView = () => {
                     );
                   }
 
-                  const allAvailableSelected = selectedDetailExamIds.length === availableExamsForReg.length;
+                  const allAvailableSelected = availableExamsForReg.length > 0 && selectedDetailExamIds.length === availableExamsForReg.length;
+                  const term1AvailableExams = availableExamsForReg.filter(isExamInTerm1);
+                  const term2AvailableExams = availableExamsForReg.filter(isExamInTerm2);
+
+                  const isTerm1Selected = term1AvailableExams.length > 0 && 
+                    term1AvailableExams.every(e => selectedDetailExamIds.includes(e.id)) &&
+                    (selectedDetailExamIds.length === term1AvailableExams.length || !term2AvailableExams.some(e => selectedDetailExamIds.includes(e.id)));
+
+                  const isTerm2Selected = term2AvailableExams.length > 0 && 
+                    term2AvailableExams.every(e => selectedDetailExamIds.includes(e.id)) &&
+                    (selectedDetailExamIds.length === term2AvailableExams.length || !term1AvailableExams.some(e => selectedDetailExamIds.includes(e.id)));
 
                   return (
                     <div className="p-4 sm:p-5 bg-[#fcfbf7] border border-[#e6e2d3] rounded-2xl space-y-4">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2.5">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-lg bg-[#5a5a40]/10 flex items-center justify-center text-[#5a5a40]">
                             <Plus className="w-4 h-4" />
@@ -2297,35 +2348,88 @@ export const StudentsView = () => {
                             <h5 className="text-xs font-bold text-[#5a5a40] uppercase tracking-wider">
                               Yeni Sınav Kaydı Ekle (Toplu veya Tekli)
                             </h5>
-                            <p className="text-[11px] text-[#737265]">Kayıt edilecek sınavları seçip ücret ve ödeme durumunu belirleyin.</p>
+                            <p className="text-[11px] text-[#737265]">Kayıt edilecek sınavları dönem butonlarıyla otomatik seçebilir veya tek tek işaretleyebilirsiniz.</p>
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (allAvailableSelected) {
-                              setSelectedDetailExamIds([]);
-                            } else {
-                              setSelectedDetailExamIds(availableExamsForReg.map(e => e.id));
-                            }
-                          }}
-                          className="text-xs font-bold text-[#5a5a40] hover:text-[#2d2c25] bg-white hover:bg-[#eae7db] border border-[#e6e2d3] px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs"
-                        >
-                          {allAvailableSelected ? 'Tüm Seçimi Temizle' : 'Tümünü Seç'}
-                        </button>
+                        {/* Period (Dönem) Filters & Auto-Selection Buttons */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* 1. Dönem Button (Eylül - Ocak) */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const t1Ids = term1AvailableExams.map(e => e.id);
+                              setSelectedDetailExamIds(t1Ids);
+                            }}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                              isTerm1Selected
+                                ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                                : 'bg-white hover:bg-amber-50 text-amber-900 border-amber-300 shadow-2xs'
+                            }`}
+                            title="1. Dönem (Eylül ile Ocak ayları arası) sınavlarını otomatik seç"
+                          >
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>1. Dönem</span>
+                            <span className="text-[10px] opacity-80 hidden md:inline">(Eyl - Oca)</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                              isTerm1Selected ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {term1AvailableExams.length}
+                            </span>
+                          </button>
+
+                          {/* 2. Dönem Button (Şubat - Haziran) */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const t2Ids = term2AvailableExams.map(e => e.id);
+                              setSelectedDetailExamIds(t2Ids);
+                            }}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                              isTerm2Selected
+                                ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
+                                : 'bg-white hover:bg-sky-50 text-sky-900 border-sky-300 shadow-2xs'
+                            }`}
+                            title="2. Dönem (Şubat ile Haziran ayları arası) sınavlarını otomatik seç"
+                          >
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>2. Dönem</span>
+                            <span className="text-[10px] opacity-80 hidden md:inline">(Şub - Haz)</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                              isTerm2Selected ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'
+                            }`}>
+                              {term2AvailableExams.length}
+                            </span>
+                          </button>
+
+                          {/* All / Clear Selection */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (allAvailableSelected) {
+                                setSelectedDetailExamIds([]);
+                              } else {
+                                setSelectedDetailExamIds(availableExamsForReg.map(e => e.id));
+                              }
+                            }}
+                            className="text-xs font-bold text-[#5a5a40] hover:text-[#2d2c25] bg-white hover:bg-[#eae7db] border border-[#e6e2d3] px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                          >
+                            {allAvailableSelected ? 'Temizle' : 'Tümü'}
+                          </button>
+                        </div>
                       </div>
 
                       {/* Exams Selection Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 bg-white border border-[#e6e2d3] rounded-xl">
                         {availableExamsForReg.map(ex => {
                           const isChecked = selectedDetailExamIds.includes(ex.id);
+                          const term = getExamTerm(ex);
                           return (
                             <label 
                               key={ex.id} 
                               className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
                                 isChecked 
-                                  ? 'bg-[#5a5a40]/5 border-[#5a5a40]/40' 
+                                  ? 'bg-[#5a5a40]/5 border-[#5a5a40]/40 ring-1 ring-[#5a5a40]/20' 
                                   : 'hover:bg-[#fcfbf7] border-transparent'
                               }`}
                             >
@@ -2341,8 +2445,20 @@ export const StudentsView = () => {
                                 }}
                                 className="mt-0.5 rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40] w-4 h-4 cursor-pointer"
                               />
-                              <div className="min-w-0">
-                                <span className="block text-xs font-bold text-[#2d2c25] truncate">{ex.name}</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="block text-xs font-bold text-[#2d2c25] truncate">{ex.name}</span>
+                                  {term === 1 && (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200/60 shrink-0">
+                                      1. Dönem
+                                    </span>
+                                  )}
+                                  {term === 2 && (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-50 text-sky-800 border border-sky-200/60 shrink-0">
+                                      2. Dönem
+                                    </span>
+                                  )}
+                                </div>
                                 {ex.date && (
                                   <span className="block text-[10px] text-[#737265] mt-0.5">
                                     {formatDateLong(ex.date)}
