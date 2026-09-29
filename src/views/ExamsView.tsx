@@ -1820,84 +1820,86 @@ export const ExamsView = () => {
     }).length;
   }, [state.students, selectedClasses]);
 
-  // Sınava katılan öğrenci sayıları, şube dağılımları ve sipariş/baskı planlama analizi
+  // Sınava katılan öğrenci sayıları ve sipariş/baskı planlama analizi
   const examParticipantStats = useMemo(() => {
-    const activeGrades = selectedClasses.length > 0
-      ? selectedClasses
-      : (editingExam?.participatingClasses && editingExam.participatingClasses.length > 0)
-        ? editingExam.participatingClasses
-        : [];
+    const gradesSet = new Set<string>();
+    selectedClasses.forEach(c => gradesSet.add(c));
+    if (editingExam?.participatingClasses) {
+      editingExam.participatingClasses.forEach(c => gradesSet.add(c));
+    }
+    if (editingExam?.id) {
+      state.students.forEach(s => {
+        if (s.examRegistrations?.some(r => String(r.examId) === String(editingExam.id))) {
+          const match = s.className ? s.className.trim().match(/^(\d+)/) : null;
+          gradesSet.add(match ? match[1] : 'Diğer');
+        }
+      });
+    }
+
+    const candidateGrades = gradesSet.size > 0 ? Array.from(gradesSet) : availableGradeLevels;
+
+    // Sınıf seviyelerini küçükten büyüğe sırala (5, 6, 7, 8, ... Diğer)
+    const sortedGrades = candidateGrades.sort((a, b) => {
+      if (a === 'Diğer') return 1;
+      if (b === 'Diğer') return -1;
+      const numA = parseInt(a, 10);
+      const numB = parseInt(b, 10);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      return a.localeCompare(b, 'tr', { numeric: true });
+    });
 
     const totalHallCapacity = selectedHalls.reduce((sum, hId) => {
       const h = state.examHalls.find(hall => hall.id === hId);
       return sum + (h?.capacity || 0);
     }, 0);
 
-    const gradeBreakdown = activeGrades.map(lvl => {
-      const studentsInGrade = state.students.filter(s => {
-        const match = s.className ? s.className.trim().match(/^(\d+)/) : null;
-        const studentLvl = match ? match[1] : 'Diğer';
-        return studentLvl === lvl;
-      });
-
-      const branchMap: Record<string, number> = {};
-      studentsInGrade.forEach(s => {
-        const cls = s.className?.trim() || (lvl === 'Diğer' ? 'Diğer' : `${lvl}-Şube`);
-        branchMap[cls] = (branchMap[cls] || 0) + 1;
-      });
-
-      const branchList = Object.entries(branchMap)
-        .map(([branchName, count]) => ({ branchName, count }))
-        .sort((a, b) => a.branchName.localeCompare(b.branchName, 'tr'));
-
-      const registeredInGrade = editingExam?.id
-        ? studentsInGrade.filter(s => s.examRegistrations?.some(r => r.examId === editingExam.id))
+    const gradeBreakdown = sortedGrades.map(lvl => {
+      // Sadece öğrenciler bölümünden bu sınava katılımı kaydedilmiş öğrencilerin sayısı
+      const registeredStudentsInGrade = editingExam?.id
+        ? state.students.filter(s => {
+            const match = s.className ? s.className.trim().match(/^(\d+)/) : null;
+            const studentLvl = match ? match[1] : 'Diğer';
+            if (studentLvl !== lvl) return false;
+            return s.examRegistrations?.some(r => String(r.examId) === String(editingExam.id));
+          })
         : [];
 
-      const count = studentsInGrade.length;
-      const registeredCount = registeredInGrade.length;
+      const registeredCount = registeredStudentsInGrade.length;
       const currentOrderQty = examGradeOrderQuantities[lvl] || 0;
-      const recommendedQty = registeredCount > 0 ? registeredCount : count;
+      const recommendedQty = registeredCount;
       const diff = currentOrderQty - recommendedQty;
 
       return {
         gradeLevel: lvl,
         displayLabel: lvl === 'Diğer' ? 'Diğer Kademeler' : `${lvl}. Sınıf`,
-        studentCount: count,
         registeredCount,
-        branchList,
         currentOrderQty,
         recommendedQty,
         diff
       };
     });
 
-    const totalStudents = gradeBreakdown.reduce((sum, g) => sum + g.studentCount, 0);
     const totalRegistered = gradeBreakdown.reduce((sum, g) => sum + g.registeredCount, 0);
-    const totalRecommended = gradeBreakdown.reduce((sum, g) => sum + g.recommendedQty, 0);
     const totalCurrentOrder = gradeBreakdown.reduce((sum, g) => sum + g.currentOrderQty, 0);
-    const targetParticipants = totalRecommended > 0 ? totalRecommended : totalStudents;
-    const capacityBalance = totalHallCapacity - targetParticipants;
+    const capacityBalance = totalHallCapacity - totalRegistered;
 
     return {
-      activeGrades,
       gradeBreakdown,
-      totalStudents,
       totalRegistered,
-      totalRecommended,
       totalCurrentOrder,
-      targetParticipants,
       totalHallCapacity,
       capacityBalance
     };
-  }, [selectedClasses, editingExam, state.examHalls, selectedHalls, state.students, examGradeOrderQuantities]);
+  }, [selectedClasses, editingExam, availableGradeLevels, state.examHalls, selectedHalls, state.students, examGradeOrderQuantities]);
 
   const handleApplyRecommendedOrderQuantities = (extraSparePerGrade: number = 0) => {
     if (examParticipantStats.gradeBreakdown.length === 0) return;
     const updated: Record<string, number> = { ...examGradeOrderQuantities };
     let total = 0;
     examParticipantStats.gradeBreakdown.forEach(g => {
-      const targetVal = Math.max(0, g.recommendedQty + extraSparePerGrade);
+      const targetVal = Math.max(0, g.registeredCount + extraSparePerGrade);
       updated[g.gradeLevel] = targetVal;
       total += targetVal;
     });
@@ -3182,16 +3184,16 @@ export const ExamsView = () => {
                                 Sınava Katılan Kişi Sayısı & Sipariş Dağılımı
                               </h5>
                               <p className="text-[10px] text-[#737265]">
-                                Sınava dahil edilen kademelerin öğrenci sayıları ve sipariş tablosu
+                                Öğrenciler bölümünden bu sınava katılımı kaydedilmiş öğrencilerin kademe dağılımı
                               </p>
                             </div>
                           </div>
 
                           <div className="flex items-center flex-wrap gap-1.5 text-xs">
                             <div className="flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-[#e6e2d3] shadow-2xs">
-                              <span className="text-[11px] text-[#737265]">Katılımcı:</span>
+                              <span className="text-[11px] text-[#737265]">Kayıtlı Katılımcı:</span>
                               <strong className="text-xs font-bold text-indigo-700">
-                                {examParticipantStats.targetParticipants} Öğrenci
+                                {examParticipantStats.totalRegistered} Öğrenci
                               </strong>
                             </div>
 
@@ -3225,17 +3227,16 @@ export const ExamsView = () => {
                                 <thead>
                                   <tr className="bg-[#f5f5f0] text-[#5a5a40] border-b border-[#e6e2d3] font-bold text-[11px]">
                                     <th className="py-2.5 px-3">Sınıf Seviyesi</th>
-                                    <th className="py-2.5 px-3">Şube Dağılımı (Mevcutlar)</th>
-                                    <th className="py-2.5 px-3 text-center">Katılan Öğrenci</th>
+                                    <th className="py-2.5 px-3 text-center">Sınava Kayıtlı Öğrenci</th>
                                     <th className="py-2.5 px-3 text-center">Belirlenen Sipariş</th>
                                     <th className="py-2.5 px-3 text-center">Sipariş Durumu</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#f2efe9]">
                                   {examParticipantStats.gradeBreakdown.map((row) => {
-                                    const isComplete = row.currentOrderQty === row.recommendedQty && row.recommendedQty > 0;
-                                    const hasExcess = row.currentOrderQty > row.recommendedQty;
-                                    const isMissing = row.currentOrderQty < row.recommendedQty;
+                                    const isComplete = row.currentOrderQty === row.registeredCount && row.registeredCount > 0;
+                                    const hasExcess = row.currentOrderQty > row.registeredCount;
+                                    const isMissing = row.currentOrderQty < row.registeredCount;
 
                                     return (
                                       <tr key={row.gradeLevel} className="hover:bg-[#fcfbf7] transition-colors">
@@ -3247,37 +3248,15 @@ export const ExamsView = () => {
                                           </div>
                                         </td>
 
-                                        {/* Şube Dağılımı */}
-                                        <td className="py-2.5 px-3">
-                                          <div className="flex flex-wrap gap-1 max-w-[280px]">
-                                            {row.branchList.length > 0 ? (
-                                              row.branchList.map(b => (
-                                                <span 
-                                                  key={b.branchName}
-                                                  className="inline-flex items-center gap-1 text-[10px] bg-[#f5f5f0] text-[#43423b] px-1.5 py-0.5 rounded-md border border-[#e6e2d3]"
-                                                  title={`${b.branchName} Şubesi: ${b.count} Öğrenci`}
-                                                >
-                                                  <strong>{b.branchName}:</strong> {b.count}
-                                                </span>
-                                              ))
-                                            ) : (
-                                              <span className="text-[10px] text-[#8e8d82] italic">Şube kaydı yok</span>
-                                            )}
-                                          </div>
-                                        </td>
-
-                                        {/* Katılan Öğrenci Sayısı */}
+                                        {/* Sınava Kayıtlı Öğrenci Sayısı */}
                                         <td className="py-2.5 px-3 text-center">
-                                          <div className="inline-flex flex-col items-center">
-                                            <span className="font-extrabold text-xs text-[#2d2c25] bg-indigo-50/70 border border-indigo-100 text-indigo-900 px-2.5 py-0.5 rounded-lg">
-                                              {row.recommendedQty} Öğrenci
-                                            </span>
-                                            {row.registeredCount > 0 && row.registeredCount !== row.studentCount && (
-                                              <span className="text-[9px] text-[#8e8d82] mt-0.5">
-                                                (Mevcut: {row.studentCount})
-                                              </span>
-                                            )}
-                                          </div>
+                                          <span className={`inline-flex items-center justify-center font-extrabold text-xs px-2.5 py-0.5 rounded-lg border ${
+                                            row.registeredCount > 0
+                                              ? 'bg-indigo-50/80 border-indigo-200 text-indigo-950'
+                                              : 'bg-[#f5f5f0] border-[#e6e2d3] text-[#8e8d82]'
+                                          }`}>
+                                            {row.registeredCount} Öğrenci
+                                          </span>
                                         </td>
 
                                         {/* Belirlenen Sipariş Adedi (Hızlı Giriş) */}
@@ -3297,7 +3276,11 @@ export const ExamsView = () => {
 
                                         {/* Durum / Karşılama */}
                                         <td className="py-2.5 px-3 text-center">
-                                          {row.currentOrderQty === 0 ? (
+                                          {row.currentOrderQty === 0 && row.registeredCount === 0 ? (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#f5f5f0] text-[#737265] border border-[#e6e2d3]">
+                                              Kayıt Yok
+                                            </span>
+                                          ) : row.currentOrderQty === 0 ? (
                                             <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
                                               <AlertCircle className="w-3 h-3 text-amber-600" />
                                               Sipariş Girilmedi
@@ -3326,14 +3309,11 @@ export const ExamsView = () => {
                                   {/* Toplam Satırı */}
                                   <tr className="bg-[#fcfbf7] font-bold border-t-2 border-[#e6e2d3] text-xs">
                                     <td className="py-2.5 px-3 text-[#2d2c25]">
-                                      TOPLAM
-                                    </td>
-                                    <td className="py-2.5 px-3 text-[#737265] text-[11px]">
-                                      {examParticipantStats.gradeBreakdown.length} Kademe Seçili
+                                      TOPLAM ({examParticipantStats.gradeBreakdown.length} Kademe)
                                     </td>
                                     <td className="py-2.5 px-3 text-center">
                                       <span className="text-xs font-black text-indigo-900 bg-indigo-100/70 px-2.5 py-0.5 rounded-md border border-indigo-200">
-                                        {examParticipantStats.targetParticipants} Öğrenci
+                                        {examParticipantStats.totalRegistered} Öğrenci
                                       </span>
                                     </td>
                                     <td className="py-2.5 px-3 text-center">
@@ -3342,13 +3322,13 @@ export const ExamsView = () => {
                                       </span>
                                     </td>
                                     <td className="py-2.5 px-3 text-center">
-                                      {examParticipantStats.totalCurrentOrder === examParticipantStats.targetParticipants && examParticipantStats.targetParticipants > 0 ? (
+                                      {examParticipantStats.totalCurrentOrder === examParticipantStats.totalRegistered && examParticipantStats.totalRegistered > 0 ? (
                                         <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                                           Tam Eşitlendi
                                         </span>
-                                      ) : examParticipantStats.totalCurrentOrder > examParticipantStats.targetParticipants ? (
+                                      ) : examParticipantStats.totalCurrentOrder > examParticipantStats.totalRegistered ? (
                                         <span className="text-[10px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                          +{examParticipantStats.totalCurrentOrder - examParticipantStats.targetParticipants} Yedek
+                                          +{examParticipantStats.totalCurrentOrder - examParticipantStats.totalRegistered} Yedek
                                         </span>
                                       ) : examParticipantStats.totalCurrentOrder === 0 ? (
                                         <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
@@ -3356,7 +3336,7 @@ export const ExamsView = () => {
                                         </span>
                                       ) : (
                                         <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                          {examParticipantStats.targetParticipants - examParticipantStats.totalCurrentOrder} Eksik
+                                          {examParticipantStats.totalRegistered - examParticipantStats.totalCurrentOrder} Eksik
                                         </span>
                                       )}
                                     </td>
@@ -3369,7 +3349,7 @@ export const ExamsView = () => {
                             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                               <p className="text-[11px] text-[#737265] italic flex items-center gap-1">
                                 <Sparkles className="w-3.5 h-3.5 text-[#5a5a40]" />
-                                Sipariş adetlerini katılımcı sayısına göre tek tıkla otomatik doldurabilirsiniz:
+                                Sipariş adetlerini sınava kayıtlı öğrenci sayısına göre tek tıkla otomatik doldurabilirsiniz:
                               </p>
                               
                               <div className="flex items-center gap-2">
@@ -3377,10 +3357,10 @@ export const ExamsView = () => {
                                   type="button"
                                   onClick={() => handleApplyRecommendedOrderQuantities(0)}
                                   className="text-xs font-bold bg-[#5a5a40] hover:bg-[#43423b] text-white px-3 py-1.5 rounded-xl shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                                  title="Tüm sınıf seviyelerindeki sipariş adetlerini net öğrenci mevcuduna eşitler"
+                                  title="Tüm sınıf seviyelerindeki sipariş adetlerini sınava kayıtlı öğrenci mevcuduna eşitler"
                                 >
                                   <Check className="w-3.5 h-3.5 text-amber-300" />
-                                  <span>Öğrenci Sayısına Eşitle ({examParticipantStats.targetParticipants})</span>
+                                  <span>Kayıtlı Öğrenci Sayısına Eşitle ({examParticipantStats.totalRegistered})</span>
                                 </button>
 
                                 <button
@@ -3400,7 +3380,7 @@ export const ExamsView = () => {
                               Henüz sınava katılacak sınıf seviyesi seçilmedi
                             </p>
                             <p className="text-[11px] text-[#8e8d82]">
-                              Yukarıdaki "Katılacak Sınıf Seviyeleri" bölümünden kademeleri seçtiğinizde, sınıflardaki öğrenci sayıları ve sipariş tablosu anında burada listelenir.
+                              Yukarıdaki "Katılacak Sınıf Seviyeleri" bölümünden kademeleri seçtiğinizde veya öğrenciler bölümünden sınava öğrenci kaydettiğinizde sipariş tablosu burada listelenir.
                             </p>
                           </div>
                         )}
