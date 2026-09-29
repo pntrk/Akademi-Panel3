@@ -8,7 +8,7 @@ import {
   Upload, Download, Plus, Trash2, X, Calendar, DollarSign, Building, 
   Users, CheckSquare, Square, ExternalLink, Award, FileText, 
   MapPin, HelpCircle, Activity, TrendingUp, Sparkles, BookOpen, AlertCircle, Settings,
-  Search, Filter, ChevronDown, Package, Layers, DoorOpen, Printer, Edit3, Check, Bell,
+  Search, Filter, ChevronDown, ChevronRight, Package, Layers, DoorOpen, Printer, Edit3, Check, Bell,
   FileJson, RotateCcw, Type, Palette, Sliders, CheckCircle2, ZoomIn, ZoomOut, Maximize2,
   QrCode, Key, SlidersHorizontal, ArrowRight
 } from 'lucide-react';
@@ -192,6 +192,7 @@ export const ExamsView = () => {
   const [sortBy, setSortBy] = useState<'date-asc' | 'date-desc' | 'no-asc' | 'no-desc' | 'name-asc'>('date-asc');
   const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [expandedCardIds, setExpandedCardIds] = useState<string[]>([]);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [showPrintSettings, setShowPrintSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'layout' | 'typography' | 'content' | 'colors'>('layout');
@@ -2180,33 +2181,35 @@ export const ExamsView = () => {
         </div>
       </section>
 
-      {/* Filter Bar - Collapsible on Mobile, Expanded on Desktop */}
-      <section className={`${isMobileFiltersOpen ? 'flex' : 'hidden sm:flex'} bg-white p-2 sm:p-4 rounded-xl sm:rounded-2xl border border-brand-border/70 shadow-xs sm:shadow-sm flex-col gap-1.5 sm:gap-3`}>
-        <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-2.5 items-stretch sm:items-center">
+      {/* Filter Bar - Prominent & Always Visible on Mobile & Desktop */}
+      <section className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/90 shadow-xs sm:shadow-sm flex flex-col gap-2 sm:gap-3 transition-all">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5 items-stretch sm:items-center">
           {/* Search Box */}
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 sm:left-3.5 top-1/2 -translate-y-1/2 text-brand-ink/40 h-3.5 w-3.5 sm:h-4 sm:w-4 pointer-events-none" />
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 sm:left-3.5 top-1/2 -translate-y-1/2 text-indigo-600 h-4 w-4 pointer-events-none" />
             <input 
               type="text" 
               placeholder="Sınav adı, yayıncı veya tarih ile ara..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#F5F4F0] border border-transparent rounded-lg sm:rounded-xl pl-8 sm:pl-9 pr-7 sm:pr-8 py-1.5 sm:py-2 text-[11px] sm:text-sm text-brand-ink placeholder-brand-ink/40 font-medium focus:bg-white focus:border-brand-accent focus:ring-1 sm:ring-2 focus:ring-brand-accent/20 focus:outline-none transition-all"
+              className="w-full bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-xl pl-9 sm:pl-10 pr-8 sm:pr-9 py-2.5 sm:py-2 text-xs sm:text-sm text-slate-900 placeholder-slate-400 font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all shadow-2xs"
             />
             {searchQuery && (
               <button 
+                type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 sm:right-2.5 top-1/2 -translate-y-1/2 text-brand-ink/40 hover:text-brand-ink p-0.5 sm:p-1 rounded-full"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100 transition-colors"
+                aria-label="Aramayı Temizle"
               >
-                <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          {/* Grade, Publisher & Sort Filter Dropdowns */}
-          <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 items-center overflow-x-auto no-scrollbar shrink-0 py-0.5 w-full sm:w-auto">
-            {/* Grade Filter */}
-            <div className="relative shrink-0">
+          {/* Grade, Publisher & Sort Filter Dropdowns - 3 Columns Single-Row on Mobile, Flex on Desktop */}
+          <div className="grid grid-cols-3 sm:flex sm:items-center gap-1 sm:gap-2 w-full sm:w-auto">
+            {/* 1. Sınıf Seviyesi Filtresi */}
+            <div className="relative min-w-0 w-full sm:w-auto">
               <select
                 value={filterGrade}
                 onChange={(e) => {
@@ -2219,56 +2222,73 @@ export const ExamsView = () => {
                     updateSubTitleForGrades([val]);
                   }
                 }}
-                className="appearance-none pl-2.5 pr-6 sm:pl-3 sm:pr-7 py-1.5 sm:py-2 border border-brand-border/80 text-[11px] sm:text-xs bg-white rounded-lg sm:rounded-xl text-brand-ink focus:outline-none focus:border-brand-accent font-semibold min-w-[95px] sm:min-w-[120px] shadow-xs cursor-pointer"
+                className={`w-full appearance-none pl-1.5 sm:pl-3 pr-4 sm:pr-7 py-1.5 sm:py-2 border text-[10px] sm:text-xs rounded-lg sm:rounded-xl focus:outline-none focus:border-indigo-500 font-bold shadow-2xs cursor-pointer truncate transition-colors ${
+                  filterGrade !== 'Tümü'
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-900 ring-1 ring-indigo-200'
+                    : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200 hover:border-slate-300 text-slate-800'
+                }`}
+                aria-label="Sınıf Seviyesi Filtresi"
               >
-                <option value="Tümü">Tüm Sınıflar</option>
+                <option value="Tümü">Sınıflar</option>
                 {availableGradeLevels.map(lvl => (
-                  <option key={lvl} value={lvl}>{lvl === 'Diğer' ? 'Diğer Sınıflar' : `${lvl}. Sınıf`}</option>
+                  <option key={lvl} value={lvl}>{lvl === 'Diğer' ? 'Diğer' : `${lvl}. Sınıf`}</option>
                 ))}
               </select>
-              <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand-ink/40 absolute right-2 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 text-slate-400 absolute right-1 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            {/* Publisher Filter */}
-            <div className="relative shrink-0">
+            {/* 2. Yayıncı Filtresi */}
+            <div className="relative min-w-0 w-full sm:w-auto">
               <select
                 value={filterPublisher}
                 onChange={(e) => setFilterPublisher(e.target.value)}
-                className="appearance-none pl-2.5 pr-6 sm:pl-3 sm:pr-7 py-1.5 sm:py-2 border border-brand-border/80 text-[11px] sm:text-xs bg-white rounded-lg sm:rounded-xl text-brand-ink focus:outline-none focus:border-brand-accent font-semibold min-w-[105px] sm:min-w-[130px] max-w-[150px] sm:max-w-[200px] shadow-xs cursor-pointer truncate"
+                className={`w-full appearance-none pl-1.5 sm:pl-3 pr-4 sm:pr-7 py-1.5 sm:py-2 border text-[10px] sm:text-xs rounded-lg sm:rounded-xl focus:outline-none focus:border-indigo-500 font-bold sm:min-w-[125px] sm:max-w-[180px] shadow-2xs cursor-pointer truncate transition-colors ${
+                  filterPublisher !== 'Tümü'
+                    ? 'bg-sky-50 border-sky-200 text-sky-900 ring-1 ring-sky-200'
+                    : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200 hover:border-slate-300 text-slate-800'
+                }`}
+                aria-label="Yayıncı Filtresi"
                 title="Yayıncı Filtresi"
               >
-                <option value="Tümü">Tüm Yayıncılar</option>
+                <option value="Tümü">Yayıncılar</option>
                 {availablePublishers.map(pub => (
                   <option key={pub} value={pub}>{pub}</option>
                 ))}
               </select>
-              <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand-ink/40 absolute right-2 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 text-slate-400 absolute right-1 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            {/* Sort Order Selector */}
-            <div className="relative shrink-0">
+            {/* 3. Sıralama Seçeneği */}
+            <div className="relative min-w-0 w-full sm:w-auto">
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="appearance-none pl-2.5 pr-6 sm:pl-3 sm:pr-7 py-1.5 sm:py-2 border border-brand-border/80 text-[11px] sm:text-xs bg-white rounded-lg sm:rounded-xl text-brand-ink focus:outline-none focus:border-brand-accent font-semibold min-w-[125px] sm:min-w-[170px] shadow-xs cursor-pointer"
+                className={`w-full appearance-none pl-1.5 sm:pl-3 pr-4 sm:pr-7 py-1.5 sm:py-2 border text-[10px] sm:text-xs rounded-lg sm:rounded-xl focus:outline-none focus:border-indigo-500 font-bold sm:min-w-[125px] sm:max-w-[170px] shadow-2xs cursor-pointer truncate transition-colors ${
+                  sortBy !== 'date-asc'
+                    ? 'bg-amber-50 border-amber-200 text-amber-900 ring-1 ring-amber-200'
+                    : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200 hover:border-slate-300 text-slate-800'
+                }`}
+                aria-label="Sıralama Seçeneği"
                 title="Sıralama Seçeneği"
               >
-                <option value="date-asc">Tarih: En Yakın → Uzak</option>
-                <option value="date-desc">Tarih: En Uzak → Yakın</option>
-                <option value="no-asc">Sıra No: 1 → N</option>
-                <option value="no-desc">Sıra No: N → 1</option>
-                <option value="name-asc">Sınav Adı: A → Z</option>
+                <option value="date-asc">Sıralama</option>
+                <option value="date-asc">📅 Tarih (Yakın)</option>
+                <option value="date-desc">📅 Tarih (Uzak)</option>
+                <option value="no-asc">🔢 No (1→N)</option>
+                <option value="no-desc">🔢 No (N→1)</option>
+                <option value="name-asc">🔤 Adı (A→Z)</option>
               </select>
-              <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand-ink/40 absolute right-2 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 text-slate-400 absolute right-1 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
             {(searchQuery || filterGrade !== 'Tümü' || filterPublisher !== 'Tümü' || sortBy !== 'date-asc') && (
               <button 
+                type="button"
                 onClick={() => { setSearchQuery(''); setSelectedGrades(['Tümü']); updateSubTitleForGrades(['Tümü']); setFilterPublisher('Tümü'); setSortBy('date-asc'); }}
-                className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-[11px] sm:text-xs text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg sm:rounded-xl font-bold shrink-0 transition-colors shadow-xs active:scale-95 whitespace-nowrap cursor-pointer"
+                className="col-span-3 sm:col-span-1 flex items-center justify-center gap-1 px-2.5 py-1.5 text-[11px] sm:text-xs text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl font-bold transition-all shadow-2xs active:scale-95 whitespace-nowrap cursor-pointer mt-0.5 sm:mt-0"
               >
                 <X className="w-3 h-3" />
-                <span>Temizle</span>
+                <span>Filtreleri Temizle</span>
               </button>
             )}
           </div>
@@ -2406,25 +2426,54 @@ export const ExamsView = () => {
               <span className="font-bold text-brand-ink">{filteredAndSortedExams.length}</span>
               <span>sınav listelendi</span>
             </div>
-            <span className="text-[10px] text-brand-ink/50">Tıklayarak düzenleyin</span>
+            {filteredAndSortedExams.length > 0 && (
+              <button 
+                type="button"
+                onClick={() => {
+                  if (expandedCardIds.length === filteredAndSortedExams.length) {
+                    setExpandedCardIds([]);
+                  } else {
+                    setExpandedCardIds(filteredAndSortedExams.map(e => e.id));
+                  }
+                }}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 active:scale-95 transition-all cursor-pointer"
+              >
+                {expandedCardIds.length === filteredAndSortedExams.length ? 'Tümünü Kapat' : 'Tüm Şubeleri Aç'}
+              </button>
+            )}
           </div>
 
           {filteredAndSortedExams.map((exam, index) => {
             const registeredCount = state.students.filter(s => s.examRegistrations?.some(r => r.examId === exam.id)).length;
             const totalCost = (exam.publisherFee || 0) * (exam.orderQuantity || 0);
+            const isExpanded = expandedCardIds.includes(exam.id);
+
+            // Bu sınava kayıtlı öğrencilerin şubelerini topla (Örn: 8/A, 8/B, 8/C...)
+            const branchSet = new Set<string>();
+            state.students.forEach(s => {
+              if (s.examRegistrations?.some(r => r.examId === exam.id)) {
+                if (s.className) branchSet.add(s.className.trim());
+                else if (s.classStr && s.sectionStr) branchSet.add(`${s.classStr}/${s.sectionStr}`);
+              }
+            });
+            const branchesList = branchSet.size > 0 
+              ? Array.from(branchSet).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }))
+              : (exam.participatingClasses && exam.participatingClasses.length > 0 
+                  ? exam.participatingClasses.map(c => `${c}. Sınıf`) 
+                  : ['Tüm Şubeler']);
 
             return (
               <div 
                 key={exam.id} 
-                className="bg-white rounded-xl p-2.5 sm:p-3 border border-brand-border/80 hover:border-brand-border transition-all duration-200 shadow-2xs flex flex-col gap-2"
+                className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 hover:border-slate-300 transition-all duration-150 shadow-2xs flex flex-col gap-1.5 sm:gap-2"
               >
-                {/* Card Header: Compact Number Button + Exam Name + Quick Actions */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                {/* Card Header: Sınav Sıra No + Sınav Adı + Aksiyonlar */}
+                <div className="flex items-start justify-between gap-1.5 border-b border-slate-100 pb-1.5">
+                  <div className="flex items-start gap-1.5 flex-1 min-w-0">
                     <button
                       type="button"
                       onClick={() => setEditingExam(exam)}
-                      className="flex items-center justify-center min-w-[26px] h-6 px-1.5 bg-[#151618] hover:bg-brand-accent text-white rounded-md text-[11px] font-mono font-bold shrink-0 shadow-2xs mt-0.5 transition-colors cursor-pointer active:scale-95"
+                      className="flex items-center justify-center min-w-[26px] h-5.5 px-1 bg-slate-900 hover:bg-indigo-600 text-white rounded-md text-[11px] font-mono font-bold shrink-0 shadow-2xs mt-0.5 transition-colors cursor-pointer active:scale-95"
                       title={`Sınav No: #${exam.no !== undefined && exam.no > 0 ? exam.no : index + 1}`}
                     >
                       #{exam.no !== undefined && exam.no > 0 ? exam.no : index + 1}
@@ -2433,26 +2482,27 @@ export const ExamsView = () => {
                     <div className="flex flex-col flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <button 
+                          type="button"
                           onClick={() => setEditingExam(exam)}
-                          className="font-serif font-bold text-sm sm:text-base text-brand-ink text-left hover:text-brand-accent transition-all truncate leading-snug cursor-pointer"
+                          className="font-bold text-xs sm:text-sm text-slate-900 text-left hover:text-indigo-600 transition-colors truncate leading-snug cursor-pointer"
                         >
                           {exam.name || '(İsimsiz Sınav)'}
                         </button>
                         {exam.examType === 'internal' ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
                             <QrCode className="w-2.5 h-2.5 text-purple-600" />
                             Kurum İçi
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
                             <Building className="w-2.5 h-2.5 text-amber-700" />
                             Yayıncı
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs text-brand-ink/70 font-medium mt-0.5">
-                        <Calendar className="w-3.5 h-3.5 text-brand-accent shrink-0" />
-                        <span className="font-semibold text-brand-ink">{formatDateLong(exam.date) || exam.date || 'Tarih belirtilmedi'}</span>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium mt-0.5">
+                        <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
+                        <span className="font-semibold text-slate-700">{formatDateLong(exam.date) || exam.date || 'Tarih belirtilmedi'}</span>
                       </div>
                     </div>
                   </div>
@@ -2460,72 +2510,110 @@ export const ExamsView = () => {
                   {/* Quick Action Buttons */}
                   <div className="flex items-center gap-1 shrink-0">
                     <button 
+                      type="button"
                       onClick={() => setEditingExam(exam)}
-                      className="w-7 h-7 rounded-lg bg-gray-50 border border-brand-border/70 flex items-center justify-center text-brand-ink/70 hover:text-brand-accent hover:border-brand-accent transition-all active:scale-95 cursor-pointer"
+                      className="w-6.5 h-6.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-all active:scale-95 cursor-pointer"
                       title="Detayları Düzenle"
+                      aria-label="Detayları Düzenle"
                     >
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      <ExternalLink className="h-3 w-3" />
                     </button>
                     <button 
+                      type="button"
                       onClick={() => removeExam(exam.id)}
-                      className="w-7 h-7 rounded-lg bg-gray-50 border border-brand-border/70 flex items-center justify-center text-brand-ink/40 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-all active:scale-95 cursor-pointer"
+                      className="w-6.5 h-6.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-all active:scale-95 cursor-pointer"
                       title="Sınavı Sil"
+                      aria-label="Sınavı Sil"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
 
-                {/* Meta Badges */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                  {/* Publisher Badge */}
-                  <div className="bg-indigo-50/80 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold flex items-center gap-1">
-                    <Building className="w-3 h-3 opacity-70 shrink-0" />
-                    <span className="truncate max-w-[120px]">{exam.publisher || 'Yayıncı Yok'}</span>
-                  </div>
-
-                  {/* Registered Students Badge */}
-                  <div className="bg-purple-50/80 border border-purple-100 text-purple-700 px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold flex items-center gap-1">
-                    <Users className="w-3 h-3 opacity-70 shrink-0" />
-                    <span>{registeredCount} Kayıtlı</span>
-                  </div>
-
-                  {/* Order Quantity Badge */}
-                  {(exam.orderQuantity || 0) > 0 && (
-                    <div className="bg-blue-50/80 border border-blue-100 text-blue-700 px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold flex items-center gap-1">
-                      <Package className="w-3 h-3 opacity-70 shrink-0" />
-                      <span>{exam.orderQuantity} Sipariş</span>
+                {/* Meta Badges Row + Açılır Şube Butonu */}
+                <div className="flex flex-wrap items-center justify-between gap-1.5 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {/* Publisher Badge */}
+                    <div className="bg-slate-50 border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 shadow-2xs">
+                      <Building className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                      <span className="truncate max-w-[100px]">{exam.publisher || 'Yayıncı Yok'}</span>
                     </div>
-                  )}
 
-                  {/* Publisher Cost Badge */}
-                  {totalCost > 0 && (
-                    <div className="bg-amber-50/80 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold flex items-center gap-1">
-                      <DollarSign className="w-3 h-3 opacity-70 shrink-0" />
-                      <span>₺{totalCost.toLocaleString('tr-TR')}</span>
+                    {/* Registered Students Badge */}
+                    <div className="bg-purple-50 border border-purple-200 text-purple-800 px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                      <Users className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                      <span>{registeredCount} Öğr.</span>
                     </div>
-                  )}
-                </div>
 
-                {/* Participating classes & Quick edit bar */}
-                <div className="flex items-center justify-between pt-1 border-t border-brand-border/40 text-[11px]">
-                  <div className="flex items-center gap-1 text-brand-ink/60 min-w-0 flex-1 mr-2">
-                    <Layers className="w-3 h-3 text-brand-ink/40 shrink-0" />
-                    <span className="font-semibold truncate">
-                      {exam.participatingClasses && exam.participatingClasses.length > 0 
-                        ? exam.participatingClasses.map(c => `${c}. Sınıf`).join(', ')
-                        : 'Tüm Sınıflar'}
-                    </span>
+                    {/* Order Quantity Badge */}
+                    {(exam.orderQuantity || 0) > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 text-blue-800 px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                        <Package className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                        <span>{exam.orderQuantity} Sip.</span>
+                      </div>
+                    )}
+
+                    {/* Publisher Cost Badge */}
+                    {totalCost > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 text-amber-900 px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                        <DollarSign className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                        <span>₺{totalCost.toLocaleString('tr-TR')}</span>
+                      </div>
+                    )}
                   </div>
 
+                  {/* Açılır Şube & Detay Çekmecesi Butonu */}
                   <button
-                    onClick={() => setEditingExam(exam)}
-                    className="text-brand-accent font-bold hover:underline flex items-center gap-1 text-xs shrink-0 cursor-pointer"
+                    type="button"
+                    onClick={() => {
+                      setExpandedCardIds(prev => 
+                        prev.includes(exam.id) ? prev.filter(x => x !== exam.id) : [...prev, exam.id]
+                      );
+                    }}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all border shadow-2xs cursor-pointer active:scale-95 ml-auto ${
+                      isExpanded
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200/80'
+                    }`}
                   >
-                    <span>Yönet & Notlar</span>
-                    <ChevronDown className="w-3 h-3 -rotate-90" />
+                    <Layers className="w-2.5 h-2.5" />
+                    <span>{branchesList.length} Şube</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-white' : 'text-indigo-600'}`} />
                   </button>
                 </div>
+
+                {/* Açılır / Kapanır Şubeler & Detay Çekmecesi */}
+                {isExpanded && (
+                  <div className="pt-2 mt-0.5 border-t border-slate-100 flex flex-col gap-2 animate-fadeIn">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="text-[10px] font-bold text-slate-400 mr-0.5">Katılan Şubeler:</span>
+                      {branchesList.map(branch => (
+                        <span 
+                          key={branch} 
+                          className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50/90 text-indigo-800 border border-indigo-200/80 shadow-2xs"
+                        >
+                          {branch}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100/80 text-xs">
+                      <span className="text-[11px] text-slate-500">
+                        {exam.assignedHalls && exam.assignedHalls.length > 0 
+                          ? `${exam.assignedHalls.length} Salon Atandı` 
+                          : 'Salon Atanmadı'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setEditingExam(exam)}
+                        className="text-indigo-600 font-bold hover:text-indigo-700 flex items-center gap-1 text-[11px] cursor-pointer"
+                      >
+                        <span>Sınavı Yönet & Notlar</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

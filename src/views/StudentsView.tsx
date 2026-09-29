@@ -7,13 +7,53 @@ import {
   Search, Calendar, DollarSign, Users, Award, Sparkles, BookOpen, 
   AlertCircle, SlidersHorizontal, Trash, ChevronDown, ChevronRight,
   TrendingUp, Wallet, Check, UserPlus, Filter, DoorOpen, CheckCircle2,
-  XCircle, ArrowUpDown, Layers, Receipt, CreditCard, GraduationCap, Hash, User
+  XCircle, ArrowUpDown, Layers, Receipt, CreditCard, GraduationCap, Hash, User,
+  LayoutGrid, List, Coins
 } from 'lucide-react';
 
 export const formatCleanFee = (val: number): string => {
   if (isNaN(val) || val === null || val === undefined) return '0';
   const clean = Math.round((Number(val) + Number.EPSILON) * 100) / 100;
   return clean.toString();
+};
+
+export const getDisplayFeeForReg = (
+  reg: { examId: string; fee: number; isPaid?: boolean; installment?: string },
+  studentRegs: { examId: string; fee: number; isPaid?: boolean; installment?: string }[] = [],
+  allExams: { id: string; name?: string; date?: string }[] = []
+): number => {
+  if (!reg) return 0;
+  if (!studentRegs || studentRegs.length <= 1) return Number(reg.fee) || 0;
+
+  const hasInstallment = studentRegs.some(r => r.installment || (r.isPaid && studentRegs.some(sr => !sr.isPaid)));
+  if (!hasInstallment) return Number(reg.fee) || 0;
+
+  const totalPkgFee = studentRegs.reduce((sum, r) => sum + (Number(r.fee) || 0), 0);
+  if (totalPkgFee <= 0) return Number(reg.fee) || 0;
+
+  const t1Regs = studentRegs.filter(r => isExamInTerm1(allExams.find(e => e.id === r.examId) || {}));
+  const t1List = t1Regs.length > 0 ? t1Regs : studentRegs.slice(0, Math.ceil(studentRegs.length / 2));
+  const t2List = studentRegs.filter(r => !t1List.some(t1 => t1.examId === r.examId));
+
+  const isT1 = t1List.some(t1 => t1.examId === reg.examId);
+  const paidHalf = Math.round((totalPkgFee / 2) * 100) / 100;
+  const debtHalf = Math.round((totalPkgFee - paidHalf) * 100) / 100;
+
+  if (isT1 && t1List.length > 0) {
+    const idx = t1List.findIndex(t1 => t1.examId === reg.examId);
+    const perExam = Math.round((paidHalf / t1List.length) * 100) / 100;
+    return idx === t1List.length - 1
+      ? Math.max(0, Math.round((paidHalf - (perExam * (t1List.length - 1))) * 100) / 100)
+      : perExam;
+  } else if (!isT1 && t2List.length > 0) {
+    const idx = t2List.findIndex(t2 => t2.examId === reg.examId);
+    const perExam = Math.round((debtHalf / t2List.length) * 100) / 100;
+    return idx === t2List.length - 1
+      ? Math.max(0, Math.round((debtHalf - (perExam * (t2List.length - 1))) * 100) / 100)
+      : perExam;
+  }
+
+  return Number(reg.fee) || 0;
 };
 
 export const StudentsView = () => {
@@ -27,6 +67,7 @@ export const StudentsView = () => {
   const [hallFilter, setHallFilter] = useState('');
   const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
   // Selection states
   const [expandedExamId, setExpandedExamId] = useState<string | null>(null);
@@ -181,12 +222,37 @@ export const StudentsView = () => {
     let updatedStudents = [...state.students];
 
     if (bulkPaymentMode === 'installment' && totalLumpSumFee > 0) {
-      // Taksitli Ödeme: Yarısı (%50) peşin ödendi (bütçeye gelir), kalanı borç
-      const paidHalf = Math.round((totalLumpSumFee / 2) * 100) / 100;
+      // 1. Taksit Ödendi: 1. Dönem sınavları "Ödendi" (Bütçeye Gelir), 2. Dönem sınavları "Borç" olarak kaydedilir
+      const term1Exams = exams.filter(isExamInTerm1);
+      const term2Exams = exams.filter(e => !isExamInTerm1(e));
+
+      const hasBothTerms = term1Exams.length > 0 && term2Exams.length > 0;
+      const paidHalf = hasBothTerms 
+        ? Math.round((totalLumpSumFee / 2) * 100) / 100 
+        : (term1Exams.length > 0 ? totalLumpSumFee : Math.round((totalLumpSumFee / 2) * 100) / 100);
       const debtHalf = Math.round((totalLumpSumFee - paidHalf) * 100) / 100;
 
-      if (exams.length === 1) {
-        const exam = exams[0];
+      const paidExamsList = hasBothTerms ? term1Exams : (term1Exams.length > 0 ? term1Exams : exams.slice(0, Math.ceil(exams.length / 2)));
+      const unpaidExamsList = exams.filter(e => !paidExamsList.some(pe => pe.id === e.id));
+
+      const paidFeePerExam = paidExamsList.length > 0 ? Math.round((paidHalf / paidExamsList.length) * 100) / 100 : 0;
+      const unpaidFeePerExam = unpaidExamsList.length > 0 ? Math.round((debtHalf / unpaidExamsList.length) * 100) / 100 : 0;
+
+      exams.forEach((exam) => {
+        const isPaidPortion = paidExamsList.some(pe => pe.id === exam.id);
+        let examFee = 0;
+        if (isPaidPortion) {
+          const pIdx = paidExamsList.findIndex(pe => pe.id === exam.id);
+          examFee = pIdx === paidExamsList.length - 1
+            ? Math.max(0, Math.round((paidHalf - (paidFeePerExam * (paidExamsList.length - 1))) * 100) / 100)
+            : paidFeePerExam;
+        } else {
+          const uIdx = unpaidExamsList.findIndex(ue => ue.id === exam.id);
+          examFee = uIdx === unpaidExamsList.length - 1
+            ? Math.max(0, Math.round((debtHalf - (unpaidFeePerExam * (unpaidExamsList.length - 1))) * 100) / 100)
+            : unpaidFeePerExam;
+        }
+
         updatedStudents = updatedStudents.map(s => {
           if (selectedStudentIds.includes(s.id)) {
             const regs = s.examRegistrations || [];
@@ -197,78 +263,21 @@ export const StudentsView = () => {
                 ...filteredRegs,
                 {
                   examId: exam.id,
-                  fee: debtHalf,
-                  isPaid: false,
+                  fee: examFee,
+                  isPaid: isPaidPortion,
                   dateRegistered: new Date().toLocaleDateString('tr-TR'),
-                  installment: '1. Taksit (%50 Ödendi)'
+                  installment: isPaidPortion ? '1. Taksit (Ödendi)' : '2. Taksit (Kalan Borç)'
                 }
               ]
             };
           }
           return s;
         });
-      } else {
-        const paidCount = Math.floor(exams.length / 2);
-        const unpaidCount = exams.length - paidCount;
-
-        const paidFeePerExam = paidCount > 0 ? Math.round((paidHalf / paidCount) * 100) / 100 : 0;
-        const unpaidFeePerExam = unpaidCount > 0 ? Math.round((debtHalf / unpaidCount) * 100) / 100 : 0;
-
-        exams.forEach((exam, idx) => {
-          const isPaidPortion = idx < paidCount;
-          let examFee = 0;
-          if (isPaidPortion) {
-            examFee = idx === paidCount - 1
-              ? Math.max(0, Math.round((paidHalf - (paidFeePerExam * (paidCount - 1))) * 100) / 100)
-              : paidFeePerExam;
-          } else {
-            const unpaidIdx = idx - paidCount;
-            examFee = unpaidIdx === unpaidCount - 1
-              ? Math.max(0, Math.round((debtHalf - (unpaidFeePerExam * (unpaidCount - 1))) * 100) / 100)
-              : unpaidFeePerExam;
-          }
-
-          updatedStudents = updatedStudents.map(s => {
-            if (selectedStudentIds.includes(s.id)) {
-              const regs = s.examRegistrations || [];
-              const filteredRegs = regs.filter(r => r.examId !== exam.id);
-              return {
-                ...s,
-                examRegistrations: [
-                  ...filteredRegs,
-                  {
-                    examId: exam.id,
-                    fee: examFee,
-                    isPaid: isPaidPortion,
-                    dateRegistered: new Date().toLocaleDateString('tr-TR'),
-                    installment: isPaidPortion ? '1. Taksit (Ödendi)' : '2. Taksit (Kalan Borç)'
-                  }
-                ]
-              };
-            }
-            return s;
-          });
-        });
-      }
+      });
 
       setStudents(updatedStudents);
 
-      // Bütçeye Gelir Entegrasyonu (Her öğrenci için 1. taksit tutarı)
-      if (paidHalf > 0) {
-        const newIncomes = selectedStudentIds.map(stId => {
-          const st = state.students.find(s => s.id === stId);
-          const stLabel = st ? `${st.name}${st.no ? ` (No: ${st.no})` : ''}` : 'Öğrenci';
-          return {
-            id: generateId(),
-            name: `${stLabel} - Toplu Sınav Katılım Ücreti (1. Taksit / %50 - ${exams.length} Sınav)`,
-            amount: paidHalf,
-            studentId: stId
-          };
-        });
-        updateBudget('incomes', [...state.budget.incomes, ...newIncomes]);
-      }
-
-      alert(`Seçilen ${selectedStudentIds.length} öğrenci için sınav kayıtları tamamlandı. Öğrenci başına ₺${paidHalf} (Toplam: ₺${selectedStudentIds.length * paidHalf}) 1. taksit olarak bütçe gelirlerine kaydedildi, kalan ₺${debtHalf} borç olarak işlendi.`);
+      alert(`Seçilen ${selectedStudentIds.length} öğrenci için sınav kayıtları tamamlandı. Öğrenci başına ₺${paidHalf} (Toplam: ₺${selectedStudentIds.length * paidHalf}) 1. dönem sınavlarına eşit paylaştırılıp bütçe gelirlerine kaydedildi, kalan ₺${debtHalf} ise 2. dönem borcu olarak işlendi.`);
     } else {
       const isPaid = bulkPaymentMode === 'paid';
       const feePerExam = exams.length > 0 ? Math.round((totalLumpSumFee / exams.length) * 100) / 100 : 0;
@@ -300,20 +309,6 @@ export const StudentsView = () => {
       });
 
       setStudents(updatedStudents);
-
-      if (totalLumpSumFee > 0 && isPaid) {
-        const newIncomes = selectedStudentIds.map(stId => {
-          const st = state.students.find(s => s.id === stId);
-          const stLabel = st ? `${st.name}${st.no ? ` (No: ${st.no})` : ''}` : 'Öğrenci';
-          return {
-            id: generateId(),
-            name: `${stLabel} - Toplu Sınav Katılım Ücreti (${exams.length} Sınav)`,
-            amount: totalLumpSumFee,
-            studentId: stId
-          };
-        });
-        updateBudget('incomes', [...state.budget.incomes, ...newIncomes]);
-      }
 
       alert(`Seçilen ${selectedStudentIds.length} öğrenci için sınav kayıtları tamamlandı${totalLumpSumFee > 0 && isPaid ? ` ve toplam ₺${selectedStudentIds.length * totalLumpSumFee} bütçe gelirlerine kaydedildi` : ''}!`);
     }
@@ -358,6 +353,32 @@ export const StudentsView = () => {
         return {
           ...s,
           examRegistrations: regs.map(r => ({ ...r, isPaid: true }))
+        };
+      }
+      return s;
+    });
+    setStudents(updatedStudents);
+  };
+
+  const handlePayTerm1Registrations = (studentId: string) => {
+    const updatedStudents = state.students.map(s => {
+      if (s.id === studentId) {
+        const regs = s.examRegistrations || [];
+        const updatedRegs = regs.map(r => {
+          const examObj = state.exams.find(e => e.id === r.examId);
+          const isTerm1 = examObj ? isExamInTerm1(examObj) : false;
+          if (isTerm1 && !r.isPaid) {
+            return {
+              ...r,
+              isPaid: true,
+              installment: '1. Taksit (Ödendi)'
+            };
+          }
+          return r;
+        });
+        return {
+          ...s,
+          examRegistrations: updatedRegs
         };
       }
       return s;
@@ -411,13 +432,37 @@ export const StudentsView = () => {
     let updatedStudents = [...state.students];
 
     if (newRegPaymentMode === 'installment' && totalLumpSumFee > 0) {
-      // 1. Taksit Ödendi: Toplu katılım ücretinin yarısı (%50) peşin ödendi (bütçeye gelir), kalanı borçtur
-      const paidHalf = Math.round((totalLumpSumFee / 2) * 100) / 100;
+      // 1. Taksit Ödendi: 1. Dönem sınavları "Ödendi" (Bütçeye Gelir), 2. Dönem sınavları "Borç" olarak kaydedilir
+      const term1Exams = exams.filter(isExamInTerm1);
+      const term2Exams = exams.filter(e => !isExamInTerm1(e));
+
+      const hasBothTerms = term1Exams.length > 0 && term2Exams.length > 0;
+      const paidHalf = hasBothTerms 
+        ? Math.round((totalLumpSumFee / 2) * 100) / 100 
+        : (term1Exams.length > 0 ? totalLumpSumFee : Math.round((totalLumpSumFee / 2) * 100) / 100);
       const debtHalf = Math.round((totalLumpSumFee - paidHalf) * 100) / 100;
 
-      if (exams.length === 1) {
-        // Tek sınav ise: Borç kalan yarısı kadar oluşturulur, taksit bilgisi eklenir
-        const exam = exams[0];
+      const paidExamsList = hasBothTerms ? term1Exams : (term1Exams.length > 0 ? term1Exams : exams.slice(0, Math.ceil(exams.length / 2)));
+      const unpaidExamsList = exams.filter(e => !paidExamsList.some(pe => pe.id === e.id));
+
+      const paidFeePerExam = paidExamsList.length > 0 ? Math.round((paidHalf / paidExamsList.length) * 100) / 100 : 0;
+      const unpaidFeePerExam = unpaidExamsList.length > 0 ? Math.round((debtHalf / unpaidExamsList.length) * 100) / 100 : 0;
+
+      exams.forEach((exam) => {
+        const isPaidPortion = paidExamsList.some(pe => pe.id === exam.id);
+        let examFee = 0;
+        if (isPaidPortion) {
+          const pIdx = paidExamsList.findIndex(pe => pe.id === exam.id);
+          examFee = pIdx === paidExamsList.length - 1
+            ? Math.max(0, Math.round((paidHalf - (paidFeePerExam * (paidExamsList.length - 1))) * 100) / 100)
+            : paidFeePerExam;
+        } else {
+          const uIdx = unpaidExamsList.findIndex(ue => ue.id === exam.id);
+          examFee = uIdx === unpaidExamsList.length - 1
+            ? Math.max(0, Math.round((debtHalf - (unpaidFeePerExam * (unpaidExamsList.length - 1))) * 100) / 100)
+            : unpaidFeePerExam;
+        }
+
         updatedStudents = updatedStudents.map(s => {
           if (s.id === studentId) {
             const regs = s.examRegistrations || [];
@@ -428,71 +473,17 @@ export const StudentsView = () => {
                 ...filteredRegs,
                 {
                   examId: exam.id,
-                  fee: debtHalf,
-                  isPaid: false,
+                  fee: examFee,
+                  isPaid: isPaidPortion,
                   dateRegistered: new Date().toLocaleDateString('tr-TR'),
-                  installment: '1. Taksit (%50 Ödendi)'
+                  installment: isPaidPortion ? '1. Taksit (Ödendi)' : '2. Taksit (Kalan Borç)'
                 }
               ]
             };
           }
           return s;
         });
-      } else {
-        // Çoklu sınav: Sınavlar ikiye bölünür (ilk yarı ödendi, ikinci yarı borç)
-        const paidCount = Math.floor(exams.length / 2);
-        const unpaidCount = exams.length - paidCount;
-
-        const paidFeePerExam = paidCount > 0 ? Math.round((paidHalf / paidCount) * 100) / 100 : 0;
-        const unpaidFeePerExam = unpaidCount > 0 ? Math.round((debtHalf / unpaidCount) * 100) / 100 : 0;
-
-        exams.forEach((exam, idx) => {
-          const isPaidPortion = idx < paidCount;
-          let examFee = 0;
-          if (isPaidPortion) {
-            examFee = idx === paidCount - 1
-              ? Math.max(0, Math.round((paidHalf - (paidFeePerExam * (paidCount - 1))) * 100) / 100)
-              : paidFeePerExam;
-          } else {
-            const unpaidIdx = idx - paidCount;
-            examFee = unpaidIdx === unpaidCount - 1
-              ? Math.max(0, Math.round((debtHalf - (unpaidFeePerExam * (unpaidCount - 1))) * 100) / 100)
-              : unpaidFeePerExam;
-          }
-
-          updatedStudents = updatedStudents.map(s => {
-            if (s.id === studentId) {
-              const regs = s.examRegistrations || [];
-              const filteredRegs = regs.filter(r => r.examId !== exam.id);
-              return {
-                ...s,
-                examRegistrations: [
-                  ...filteredRegs,
-                  {
-                    examId: exam.id,
-                    fee: examFee,
-                    isPaid: isPaidPortion,
-                    dateRegistered: new Date().toLocaleDateString('tr-TR'),
-                    installment: isPaidPortion ? '1. Taksit (Ödendi)' : '2. Taksit (Kalan Borç)'
-                  }
-                ]
-              };
-            }
-            return s;
-          });
-        });
-      }
-
-      // Bütçeye Gelir Entegrasyonu: 1. Taksit tutarı (%50) anında bütçe gelirlerine kaydedilir
-      if (paidHalf > 0) {
-        const newIncome: BudgetIncome = {
-          id: generateId(),
-          name: `${studentLabel} - Toplu Sınav Katılım Ücreti (1. Taksit / %50 - ${exams.length} Sınav)`,
-          amount: paidHalf,
-          studentId: studentId
-        };
-        updateBudget('incomes', [...state.budget.incomes, newIncome]);
-      }
+      });
     } else {
       // 'paid' veya 'debt' modu
       const isPaid = newRegPaymentMode === 'paid';
@@ -523,17 +514,6 @@ export const StudentsView = () => {
           return s;
         });
       });
-
-      // Bütçeye Gelir Entegrasyonu
-      if (totalLumpSumFee > 0 && isPaid) {
-        const newIncome: BudgetIncome = {
-          id: generateId(),
-          name: `${studentLabel} - Toplu Sınav Katılım Ücreti (${exams.length} Sınav)`,
-          amount: totalLumpSumFee,
-          studentId: studentId
-        };
-        updateBudget('incomes', [...state.budget.incomes, newIncome]);
-      }
     }
 
     setStudents(updatedStudents);
@@ -984,462 +964,594 @@ export const StudentsView = () => {
         </div>
       </section>
 
-      {/* Filter Bar - Collapsible on Mobile, Expanded on Desktop */}
-      <section className={`${isMobileFiltersOpen ? 'flex' : 'hidden sm:flex'} bg-white p-2 sm:p-4 rounded-xl sm:rounded-2xl border border-brand-border/70 shadow-xs sm:shadow-sm flex-col gap-1.5 sm:gap-3`}>
-        <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-2.5 items-stretch sm:items-center">
-          {/* Search Box */}
+      {/* Filter Bar - Prominent & Always Visible on Mobile & Desktop */}
+      <section className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/90 shadow-xs sm:shadow-sm flex flex-col gap-2 sm:gap-3 transition-all">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5 items-stretch sm:items-center">
+          {/* Search Box - Enhanced Mobile Visibility */}
           <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-2.5 sm:left-3.5 top-1/2 -translate-y-1/2 text-brand-ink/40 h-3.5 w-3.5 sm:h-4 sm:w-4 pointer-events-none" />
+            <Search className="absolute left-3 sm:left-3.5 top-1/2 -translate-y-1/2 text-indigo-600 h-4 w-4 pointer-events-none" />
             <input 
               type="text" 
-              placeholder="Öğrenci adı veya numarası ile ara..." 
+              placeholder="Öğrenci adı, soyadı veya okul no ile ara..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#F5F4F0] border border-transparent rounded-lg sm:rounded-xl pl-8 sm:pl-9 pr-7 sm:pr-8 py-1.5 sm:py-2 text-[11px] sm:text-sm text-brand-ink placeholder-brand-ink/40 font-medium focus:bg-white focus:border-brand-accent focus:ring-1 sm:ring-2 focus:ring-brand-accent/20 focus:outline-none transition-all"
+              className="w-full bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-xl pl-9 sm:pl-10 pr-8 sm:pr-9 py-2.5 sm:py-2 text-xs sm:text-sm text-slate-900 placeholder-slate-400 font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all shadow-2xs"
             />
             {searchQuery && (
               <button 
+                type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 sm:right-2.5 top-1/2 -translate-y-1/2 text-brand-ink/40 hover:text-brand-ink p-0.5 sm:p-1 rounded-full"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100 transition-colors"
+                aria-label="Aramayı Temizle"
               >
-                <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          {/* Filter Dropdowns - Horizontal Scroll on Mobile, Flex on Desktop */}
-          <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 items-center overflow-x-auto no-scrollbar shrink-0 py-0.5 w-full sm:w-auto">
-            <div className="relative shrink-0">
+          {/* Filter Dropdowns - 3 Columns Single-Row on Mobile, Flex on Desktop */}
+          <div className="grid grid-cols-3 sm:flex sm:items-center gap-1 sm:gap-2 w-full sm:w-auto">
+            {/* 1. Şube Filtresi */}
+            <div className="relative min-w-0 w-full sm:w-auto">
               <select
                 value={classFilter}
                 onChange={(e) => setClassFilter(e.target.value)}
-                className="appearance-none pl-2.5 pr-6 sm:pl-3 sm:pr-7 py-1.5 sm:py-2 border border-brand-border/80 text-[11px] sm:text-xs bg-white rounded-lg sm:rounded-xl text-brand-ink focus:outline-none focus:border-brand-accent font-semibold min-w-[95px] sm:min-w-[105px] shadow-xs cursor-pointer truncate"
+                className={`w-full appearance-none pl-1.5 sm:pl-3 pr-4 sm:pr-7 py-1.5 sm:py-2 border text-[10px] sm:text-xs rounded-lg sm:rounded-xl focus:outline-none focus:border-indigo-500 font-bold shadow-2xs cursor-pointer truncate transition-colors ${
+                  classFilter 
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-900 ring-1 ring-indigo-200' 
+                    : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200 hover:border-slate-300 text-slate-800'
+                }`}
+                aria-label="Şube Filtresi"
               >
-                <option value="">Tüm Şubeler</option>
+                <option value="">Şubeler</option>
                 {uniqueClassesForFilter.map(cls => (
                   <option key={cls} value={cls}>{cls}</option>
                 ))}
               </select>
-              <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand-ink/40 absolute right-2 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 text-slate-400 absolute right-1 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            <div className="relative shrink-0">
+            {/* 2. Sınav Filtresi */}
+            <div className="relative min-w-0 w-full sm:w-auto">
               <select
                 value={examFilter}
                 onChange={(e) => setExamFilter(e.target.value)}
-                className="appearance-none pl-2.5 pr-6 sm:pl-3 sm:pr-7 py-1.5 sm:py-2 border border-brand-border/80 text-[11px] sm:text-xs bg-white rounded-lg sm:rounded-xl text-brand-ink focus:outline-none focus:border-brand-accent font-semibold min-w-[100px] sm:min-w-[110px] max-w-[140px] sm:max-w-[160px] shadow-xs cursor-pointer truncate"
+                className={`w-full appearance-none pl-1.5 sm:pl-3 pr-4 sm:pr-7 py-1.5 sm:py-2 border text-[10px] sm:text-xs rounded-lg sm:rounded-xl focus:outline-none focus:border-indigo-500 font-bold sm:min-w-[125px] sm:max-w-[170px] shadow-2xs cursor-pointer truncate transition-colors ${
+                  examFilter 
+                    ? 'bg-purple-50 border-purple-200 text-purple-900 ring-1 ring-purple-200' 
+                    : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200 hover:border-slate-300 text-slate-800'
+                }`}
+                aria-label="Sınav Filtresi"
               >
-                <option value="">Tüm Sınavlar</option>
+                <option value="">Sınavlar</option>
                 {state.exams.map(ex => (
                   <option key={ex.id} value={ex.id}>{ex.name}</option>
                 ))}
               </select>
-              <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand-ink/40 absolute right-2 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 text-slate-400 absolute right-1 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            <div className="relative shrink-0">
+            {/* 3. Salon Filtresi */}
+            <div className="relative min-w-0 w-full sm:w-auto">
               <select
                 value={hallFilter}
                 onChange={(e) => setHallFilter(e.target.value)}
-                className="appearance-none pl-2.5 pr-6 sm:pl-3 sm:pr-7 py-1.5 sm:py-2 border border-brand-border/80 text-[11px] sm:text-xs bg-white rounded-lg sm:rounded-xl text-brand-ink focus:outline-none focus:border-brand-accent font-semibold min-w-[95px] sm:min-w-[105px] max-w-[130px] sm:max-w-[150px] shadow-xs cursor-pointer truncate"
+                className={`w-full appearance-none pl-1.5 sm:pl-3 pr-4 sm:pr-7 py-1.5 sm:py-2 border text-[10px] sm:text-xs rounded-lg sm:rounded-xl focus:outline-none focus:border-indigo-500 font-bold sm:min-w-[115px] sm:max-w-[160px] shadow-2xs cursor-pointer truncate transition-colors ${
+                  hallFilter 
+                    ? 'bg-amber-50 border-amber-200 text-amber-900 ring-1 ring-amber-200' 
+                    : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200 hover:border-slate-300 text-slate-800'
+                }`}
+                aria-label="Salon Filtresi"
               >
-                <option value="">Tüm Salonlar</option>
+                <option value="">Salonlar</option>
                 {uniqueHallsForFilter.map(hall => (
                   <option key={hall.id} value={hall.id}>{hall.name}</option>
                 ))}
               </select>
-              <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand-ink/40 absolute right-2 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 text-slate-400 absolute right-1 sm:right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
             {(searchQuery || classFilter || examFilter || hallFilter) && (
               <button 
+                type="button"
                 onClick={() => { setSearchQuery(''); setClassFilter(''); setExamFilter(''); setHallFilter(''); }}
-                className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 text-[11px] sm:text-xs text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg sm:rounded-xl font-bold shrink-0 transition-colors shadow-xs active:scale-95 whitespace-nowrap cursor-pointer"
+                className="col-span-3 sm:col-span-1 flex items-center justify-center gap-1 px-2.5 py-1.5 text-[11px] sm:text-xs text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl font-bold transition-all shadow-2xs active:scale-95 whitespace-nowrap cursor-pointer mt-0.5 sm:mt-0"
               >
                 <X className="w-3 h-3" />
-                <span>Temizle</span>
+                <span>Filtreleri Temizle</span>
               </button>
             )}
           </div>
         </div>
       </section>
 
-      {/* Main Student List Container */}
-      <div className="bg-white border border-brand-border/70 rounded-2xl shadow-sm flex-1 overflow-hidden flex flex-col min-h-[400px]">
+      {/* Main Student List Container with Card & Compact Table Support */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs flex-1 overflow-hidden flex flex-col min-h-[400px]">
         
-        {/* Desktop Table View */}
-        <div className="overflow-auto flex-1 w-full hidden md:block">
-          <table className="w-full border-collapse text-left min-w-[800px]">
-            <thead>
-              <tr className="bg-[#FAF9F6] border-b-2 border-brand-ink">
-                <th style={{ width: 50 }} className="py-3.5 px-4 font-mono text-[0.7rem] text-brand-ink/60 uppercase tracking-wider text-center sticky top-0 bg-[#FAF9F6]">
-                  <button 
-                    onClick={handleSelectAll}
-                    className="p-1 rounded hover:bg-black/5 text-brand-ink transition-colors cursor-pointer"
-                    title="Hepsini Seç / Bırak"
-                  >
-                    {allFilteredSelected ? (
-                      <CheckSquare className="h-4 w-4 text-brand-accent" />
-                    ) : (
-                      <Square className="h-4 w-4 text-brand-ink/40" />
-                    )}
-                  </button>
-                </th>
-                <th style={{ width: 90 }} className="py-3.5 px-4 font-mono text-[0.7rem] text-brand-ink/60 uppercase tracking-wider sticky top-0 bg-[#FAF9F6]">NO</th>
-                <th className="py-3.5 px-4 font-mono text-[0.7rem] text-brand-ink/60 uppercase tracking-wider sticky top-0 bg-[#FAF9F6]">ADI SOYADI</th>
-                <th style={{ width: 120 }} className="py-3.5 px-4 font-mono text-[0.7rem] text-brand-ink/60 uppercase tracking-wider sticky top-0 bg-[#FAF9F6]">SINIFI</th>
-                <th style={{ width: 180 }} className="py-3.5 px-4 font-mono text-[0.7rem] text-brand-ink/60 uppercase tracking-wider sticky top-0 bg-[#FAF9F6]">SINAV SALONU</th>
-                <th className="py-3.5 px-4 font-mono text-[0.7rem] text-brand-ink/60 uppercase tracking-wider sticky top-0 bg-[#FAF9F6]">KAYITLI SINAVLAR</th>
-                <th style={{ width: 80 }} className="py-3.5 px-4 font-mono text-[0.7rem] text-brand-ink/60 uppercase tracking-wider text-center sticky top-0 bg-[#FAF9F6]">İŞLEM</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm">
-              {filteredStudents.map((student, idx) => {
-                const isSelected = selectedStudentIds.includes(student.id);
-                return (
-                  <tr 
-                    key={student.id ? `student-${student.id}-${idx}` : `student-${student.no}-${idx}`} 
-                    className={`border-b border-brand-border/60 transition-all hover:bg-[#FAF9F6] ${
-                      isSelected ? 'bg-brand-accent/5' : ''
-                    }`}
-                  >
-                    {/* Checkbox column */}
-                    <td className="py-4 px-5 text-center" data-label="SEÇİM">
-                      <button 
-                        onClick={() => toggleSelectStudent(student.id)}
-                        className="p-1 rounded text-brand-ink transition-colors cursor-pointer"
-                      >
-                        {isSelected ? (
-                          <CheckSquare className="h-4 w-4 text-brand-accent" />
-                        ) : (
-                          <Square className="h-4 w-4 text-brand-ink/30 hover:text-brand-ink" />
-                        )}
-                      </button>
-                    </td>
+        {/* List Header Bar: Quick Stats & View Mode Switcher */}
+        <div className="bg-slate-50/80 border-b border-slate-200/80 px-3.5 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button 
+              type="button"
+              onClick={handleSelectAll}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-indigo-600 bg-white border border-slate-200 hover:border-indigo-200 px-2.5 py-1 rounded-xl shadow-2xs transition-all active:scale-95 cursor-pointer"
+              title="Tümünü Seç / Seçimi Kaldır"
+            >
+              {allFilteredSelected ? (
+                <>
+                  <CheckSquare className="w-4 h-4 text-indigo-600" />
+                  <span>Seçimi Kaldır</span>
+                </>
+              ) : (
+                <>
+                  <Square className="w-4 h-4 text-slate-400" />
+                  <span>Tümünü Seç</span>
+                </>
+              )}
+            </button>
 
-                    {/* Student Number Input */}
-                    <td className="py-4 px-5" data-label="NO">
-                      <span className="font-mono font-semibold text-brand-accent">{student.no || ''}</span>
-                    </td>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+              <span className="font-bold text-slate-800 bg-slate-200/70 px-2 py-0.5 rounded-lg text-xs font-mono">
+                {filteredStudents.length}
+              </span>
+              <span>öğrenci</span>
+            </div>
+          </div>
 
-                    {/* Student Name Input */}
-                    <td className="py-4 px-5" data-label="ADI SOYADI">
-                      <button 
-                        onClick={() => {
-                          setEditingStudentId(student.id);
-                          setIsStudentModalOpen(true);
-                        }}
-                        className={`font-semibold hover:underline text-left cursor-pointer transition-all ${
-                          (student.examRegistrations || []).some(reg => 
-                            !state.examHalls.some(h => 
-                              (h.examId === reg.examId || h.examIds?.includes(reg.examId)) && 
-                              h.seatingPlan?.some(sp => sp.studentId === student.id)
-                            )
-                          ) ? 'text-red-600' : 'text-brand-ink'
-                        }`}
-                      >
-                        {student.name || 'İsimsiz'}
-                      </button>
-                    </td>
+          {/* View Switcher: Kartlar vs Tablo */}
+          <div className="flex items-center bg-slate-200/70 p-0.5 rounded-xl border border-slate-300/60 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'cards'
+                  ? 'bg-white text-indigo-700 shadow-xs ring-1 ring-black/5'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Kart / Grid Görünümü"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Kartlar</span>
+            </button>
 
-                    {/* Student Class Input */}
-                    <td className="py-4 px-5" data-label="SINIFI">
-                      <span className="bg-[#F3F2EE] px-2.5 py-1 text-[0.7rem] font-semibold text-brand-ink rounded">{student.className || '-'}</span>
-                    </td>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-white text-indigo-700 shadow-xs ring-1 ring-black/5'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Kompakt Tablo Görünümü"
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>Tablo</span>
+            </button>
+          </div>
+        </div>
 
-                    {/* Student Exam Hall */}
-                    <td className="py-4 px-5" data-label="SINAV SALONU">
-                      <div className="flex flex-col gap-1">
-                        {(studentHallsMap[student.id] || []).length > 0 ? (
-                          (studentHallsMap[student.id] || []).map(hall => (
-                            <span key={hall.id} className="text-[0.75rem] text-brand-ink font-semibold bg-[#151618]/5 px-2 py-0.5 rounded border border-brand-border w-fit">
-                              {hall.name}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-brand-ink/40 font-semibold">-</span>
-                        )}
-                      </div>
-                    </td>
+        {/* View Mode 1: CARD GRID VIEW (Web & Mobile Optimized) */}
+        {viewMode === 'cards' && (
+          <div className="flex-1 overflow-auto p-2.5 sm:p-4 bg-slate-50/50">
+            {filteredStudents.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-3">
+                {filteredStudents.map((student, idx) => {
+                  const isSelected = selectedStudentIds.includes(student.id);
+                  const studentHalls = studentHallsMap[student.id] || [];
+                  const registrations = student.examRegistrations || [];
+                  
+                  const unpaidTotal = Math.round((registrations.reduce((acc, r) => !r.isPaid ? acc + (Number(r.fee) || 0) : acc, 0) + Number.EPSILON) * 100) / 100;
+                  const hasRegistrations = registrations.length > 0;
 
-                    {/* Live Exam Registrations Badges with quick-delete / quick-add */}
-                    <td className="py-4 px-5" data-label="KAYITLI SINAVLAR" id="student-exam-regs-cell">
-                      <div className="flex flex-wrap gap-2 items-center">
-                        {(student.examRegistrations || []).map((reg) => {
-                          const examObj = state.exams.find(e => e.id === reg.examId);
-                          const examName = examObj ? examObj.name : 'Sınav';
-                          
-                          return (
-                            <span 
-                              key={reg.examId} 
-                              className="inline-flex items-center bg-[#F3F2EE] text-brand-ink border border-brand-border px-3 py-0.5 rounded text-[0.75rem] font-semibold"
+                  const hasMissingHall = registrations.some(reg => 
+                    !state.examHalls.some(h => 
+                      (h.examId === reg.examId || h.examIds?.includes(reg.examId)) && 
+                      h.seatingPlan?.some(sp => sp.studentId === student.id)
+                    )
+                  );
+
+                  return (
+                    <div 
+                      key={student.id ? `card-${student.id}-${idx}` : `card-${student.no}-${idx}`} 
+                      className={`bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border transition-all duration-150 shadow-2xs hover:shadow-xs flex flex-col justify-between gap-2 sm:gap-2.5 ${
+                        isSelected 
+                          ? 'border-indigo-500 bg-indigo-50/30 ring-2 ring-indigo-500/20' 
+                          : 'border-slate-200/90 hover:border-slate-300'
+                      }`}
+                    >
+                      {/* Top Header: Select + No + Class + Name + Quick Actions */}
+                      <div>
+                        <div className="flex items-center justify-between gap-1.5 border-b border-slate-100 pb-1.5 sm:pb-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <button 
+                              type="button"
+                              onClick={() => toggleSelectStudent(student.id)} 
+                              className="p-0.5 sm:p-1 text-slate-500 hover:text-indigo-600 active:scale-90 transition-transform shrink-0 cursor-pointer"
+                              title="Öğrenci Seç"
                             >
-                              {examName}
+                              {isSelected ? (
+                                <CheckSquare className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-indigo-600" />
+                              ) : (
+                                <Square className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-slate-300 hover:text-slate-500" />
+                              )}
+                            </button>
+
+                            <span className="bg-slate-100 text-slate-800 border border-slate-200/80 px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-mono font-bold shrink-0 shadow-2xs">
+                              {student.no || '-'}
                             </span>
+
+                            <span className="bg-indigo-50 border border-indigo-100 text-indigo-700 px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-bold truncate">
+                              {student.className || '-'}
+                            </span>
+                          </div>
+
+                          {/* Quick Action Buttons */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                setEditingStudentId(student.id);
+                                setIsStudentModalOpen(true);
+                              }}
+                              className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-all active:scale-95 cursor-pointer"
+                              title="Düzenle / Detay"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => removeStudent(student.id)}
+                              className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-all active:scale-95 cursor-pointer"
+                              title="Sil"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Student Name & Status */}
+                        <div className="pt-1.5 flex items-center justify-between gap-1.5">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setEditingStudentId(student.id);
+                              setIsStudentModalOpen(true);
+                            }}
+                            className="text-xs sm:text-sm font-bold text-left text-slate-900 hover:text-indigo-600 transition-colors truncate block"
+                          >
+                            {student.name || 'İsimsiz Öğrenci'}
+                          </button>
+
+                          {hasMissingHall && (
+                            <span className="text-[9px] sm:text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded-md shrink-0 flex items-center gap-0.5 shadow-2xs">
+                              <AlertCircle className="w-2.5 h-2.5" />
+                              <span>Salonsuz</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Mid Info Bar: Hall + Debt/Paid Badges */}
+                        <div className="pt-1 flex flex-wrap items-center gap-1 sm:gap-1.5">
+                          {/* Hall Badge */}
+                          <div className={`px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-semibold flex items-center gap-1 border shadow-2xs ${
+                            studentHalls.length > 0 
+                              ? 'bg-slate-50 border-slate-200 text-slate-700' 
+                              : registrations.length > 0
+                              ? 'bg-rose-50/70 border-rose-200 text-rose-700'
+                              : 'bg-slate-50/50 border-slate-200/60 text-slate-400'
+                          }`}>
+                            <DoorOpen className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0 text-indigo-600 opacity-80" />
+                            <span className="truncate max-w-[110px] sm:max-w-[130px]">
+                              {studentHalls.length > 0 ? studentHalls.map(h => h.name).join(', ') : registrations.length > 0 ? 'Salonsuz' : 'Kayıtsız'}
+                            </span>
+                          </div>
+
+                          {/* Payment Status Badge */}
+                          {hasRegistrations && (
+                            unpaidTotal > 0 ? (
+                              <div className="bg-rose-50 border border-rose-200 text-rose-700 px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                                <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-rose-500" />
+                                <span>₺{formatCleanFee(unpaidTotal)} Borç</span>
+                              </div>
+                            ) : (
+                              <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                                <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600" />
+                                <span>Ödendi</span>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Card Bottom: Registrations Chips & Quick Action Buttons */}
+                      <div className="pt-1.5 sm:pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1 sm:gap-1.5">
+                        {registrations.map(reg => {
+                          const ex = state.exams.find(e => e.id === reg.examId);
+                          if (!ex) return null;
+                          return (
+                            <div 
+                              key={reg.examId} 
+                              className={`flex items-center border rounded-lg sm:rounded-xl overflow-hidden pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 gap-1 text-[9px] sm:text-[10px] font-semibold transition-all shadow-2xs ${
+                                reg.isPaid 
+                                  ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900' 
+                                  : 'bg-rose-50/80 border-rose-200 text-rose-900'
+                              }`}
+                            >
+                              <button 
+                                type="button"
+                                onClick={() => toggleRegistrationPayment(student.id, reg.examId)}
+                                className="flex items-center gap-1 hover:underline cursor-pointer"
+                                title={reg.isPaid ? "Ödendi (Değiştirmek için tıkla)" : "Ödenmedi (Ödendi yapmak için tıkla)"}
+                              >
+                                <span className="truncate max-w-[80px] sm:max-w-[100px]">{ex.name}</span>
+                                <span className={`text-[8px] font-extrabold px-1 py-0.2 rounded-full ${
+                                  reg.isPaid ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+                                }`}>
+                                  {reg.isPaid ? '✓' : '₺'}
+                                </span>
+                              </button>
+                              
+                              <button 
+                                type="button"
+                                onClick={() => removeSingleRegistration(student.id, reg.examId)}
+                                className="text-slate-400 hover:text-rose-600 p-0.5 rounded hover:bg-black/5 transition-colors ml-0.5 cursor-pointer"
+                                title="Sınav Kaydını Sil"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
                           );
                         })}
-                        
-                        {/* Quick Register Plus Button */}
-                        <button
+
+                        {/* Quick Add Exam */}
+                        <button 
                           type="button"
                           onClick={() => {
                             setSelectedStudentIds([student.id]);
                             setIsBulkModalOpen(true);
                           }}
-                          className="inline-flex items-center gap-1.5 px-3 py-0.5 bg-transparent border border-dashed border-brand-accent text-brand-accent hover:bg-brand-accent/5 rounded text-[0.7rem] font-semibold transition-all cursor-pointer shrink-0"
-                          title="Bu Öğrenciyi Sınava Kaydet"
+                          className="flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] font-bold bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-dashed border-slate-300 hover:border-indigo-300 px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-lg transition-all shadow-2xs active:scale-95 cursor-pointer"
+                          title="Yeni Sınav Ekle"
                         >
-                          <Plus className="w-3 h-3" />
-                          <span>+ Sınav Ekle</span>
+                          <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-indigo-600" />
+                          <span>+ Sınav</span>
                         </button>
+
+                        {/* Quick Pay All Unpaid Fees Button */}
+                        {unpaidTotal > 0 && (
+                          <button 
+                            type="button"
+                            onClick={() => handlePayAllRegistrations(student.id)}
+                            className="flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 rounded-md sm:rounded-lg transition-all shadow-2xs active:scale-95 ml-auto cursor-pointer"
+                            title="Öğrencinin tüm sınav borçlarını ödendi yap"
+                          >
+                            <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                            <span>Tahsil Et</span>
+                          </button>
+                        )}
                       </div>
-                    </td>
-
-                    {/* Single Actions */}
-                    <td className="py-4 px-5 text-center" data-label="SEÇİM">
-                      <button 
-                        onClick={() => removeStudent(student.id)} 
-                        className="w-7 h-7 rounded-full border border-brand-border flex items-center justify-center cursor-pointer transition-all bg-white hover:border-red-500 hover:text-red-500 hover:bg-red-50"
-                        title="Öğrenciyi Sil"
-                      >
-                        <X className="h-3.5 w-3.5 mx-auto" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredStudents.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="py-16 text-center text-brand-ink/40 font-medium">
-                    {state.students.length === 0 
-                      ? "Kayıtlı öğrenci bulunmuyor. Yeni ekleyebilir veya Excel'den aktarabilirsiniz." 
-                      : "Arama kriterine uyan öğrenci bulunamadı."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Modern Cards View */}
-        <div className="md:hidden flex-1 overflow-auto w-full p-3 flex flex-col gap-2.5 bg-[#F9F8F5]">
-          
-          {/* Mobile List Quick Control Bar */}
-          <div className="flex items-center justify-between px-1 py-1 text-xs text-brand-ink/60 font-semibold">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-brand-ink">{filteredStudents.length}</span>
-              <span>öğrenci listelendi</span>
-            </div>
-            <button 
-              onClick={handleSelectAll}
-              className="flex items-center gap-1.5 text-xs text-brand-accent font-bold hover:underline cursor-pointer active:scale-95 transition-all"
-            >
-              {allFilteredSelected ? (
-                <>
-                  <CheckSquare className="w-4 h-4 text-brand-accent" />
-                  <span>Seçimi Kaldır</span>
-                </>
-              ) : (
-                <>
-                  <Square className="w-4 h-4 text-brand-ink/40" />
-                  <span>Tümünü Seç</span>
-                </>
-              )}
-            </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-16 px-4 bg-white rounded-2xl border border-slate-200/80">
+                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-500 font-semibold">Arama veya filtre kriterlerine uyan öğrenci bulunamadı.</p>
+              </div>
+            )}
           </div>
+        )}
 
-          {filteredStudents.map((student, idx) => {
-            const isSelected = selectedStudentIds.includes(student.id);
-            const studentHalls = studentHallsMap[student.id] || [];
-            const registrations = student.examRegistrations || [];
-            
-            const unpaidTotal = Math.round((registrations.reduce((acc, r) => !r.isPaid ? acc + (Number(r.fee) || 0) : acc, 0) + Number.EPSILON) * 100) / 100;
-            const paidTotal = Math.round((registrations.reduce((acc, r) => r.isPaid ? acc + (Number(r.fee) || 0) : acc, 0) + Number.EPSILON) * 100) / 100;
-            const hasRegistrations = registrations.length > 0;
-
-            const hasMissingHall = registrations.some(reg => 
-              !state.examHalls.some(h => 
-                (h.examId === reg.examId || h.examIds?.includes(reg.examId)) && 
-                h.seatingPlan?.some(sp => sp.studentId === student.id)
-              )
-            );
-
-            return (
-              <div 
-                key={student.id ? `mobile-${student.id}-${idx}` : `mobile-${student.no}-${idx}`} 
-                className={`bg-white rounded-2xl p-3.5 border transition-all duration-200 shadow-sm flex flex-col gap-2.5 ${
-                  isSelected 
-                    ? 'border-brand-accent bg-amber-500/[0.04] ring-1 ring-brand-accent/40' 
-                    : 'border-brand-border/80 hover:border-brand-border'
-                }`}
-              >
-                {/* Card Top Control Row: Selection Checkbox + Student No + Class Badge + Actions */}
-                <div className="flex items-center justify-between gap-2 border-b border-brand-border/40 pb-2">
-                  <div className="flex items-center gap-2 min-w-0">
+        {/* View Mode 2: ULTRA-COMPACT TABLE VIEW */}
+        {viewMode === 'table' && (
+          <div className="overflow-auto flex-1 w-full">
+            <table className="w-full border-collapse text-left min-w-[700px]">
+              <thead>
+                <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-500 font-bold text-xs">
+                  <th style={{ width: 44 }} className="py-2.5 px-3 uppercase tracking-wider text-center sticky top-0 bg-slate-50">
                     <button 
-                      onClick={() => toggleSelectStudent(student.id)} 
-                      className="p-1 text-brand-ink active:scale-90 transition-transform shrink-0 cursor-pointer"
-                      title="Öğrenci Seç"
+                      type="button"
+                      onClick={handleSelectAll}
+                      className="p-1 rounded-lg hover:bg-slate-200/60 text-slate-600 transition-colors cursor-pointer inline-flex items-center justify-center"
+                      title="Hepsini Seç / Bırak"
                     >
-                      {isSelected ? (
-                        <CheckSquare className="h-5 w-5 text-brand-accent" />
+                      {allFilteredSelected ? (
+                        <CheckSquare className="h-4 w-4 text-indigo-600" />
                       ) : (
-                        <Square className="h-5 w-5 text-brand-ink/30 hover:text-brand-ink" />
+                        <Square className="h-4 w-4 text-slate-400 hover:text-slate-600" />
                       )}
                     </button>
-
-                    <div className="bg-amber-100/90 text-amber-950 border border-amber-200/80 px-2.5 py-0.5 rounded-md text-xs font-mono font-bold shrink-0 flex items-center gap-1 shadow-2xs">
-                      <span className="text-[10px] text-amber-800/70 font-sans uppercase">No:</span>
-                      <span>{student.no || '-'}</span>
-                    </div>
-
-                    <div className="bg-indigo-50 border border-indigo-100/80 text-indigo-700 px-2 py-0.5 rounded-md text-xs font-bold truncate">
-                      {student.className || '-'}
-                    </div>
-                  </div>
-
-                  {/* Actions (Edit / Delete) */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button 
-                      onClick={() => {
-                        setEditingStudentId(student.id);
-                        setIsStudentModalOpen(true);
-                      }}
-                      className="w-8 h-8 rounded-xl bg-gray-50 border border-brand-border/70 flex items-center justify-center text-brand-ink/70 hover:text-brand-accent hover:border-brand-accent transition-all active:scale-95 cursor-pointer"
-                      title="Öğrenciyi Düzenle / Detay"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </button>
-                    <button 
-                      onClick={() => removeStudent(student.id)}
-                      className="w-8 h-8 rounded-xl bg-gray-50 border border-brand-border/70 flex items-center justify-center text-brand-ink/40 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-all active:scale-95 cursor-pointer"
-                      title="Öğrenciyi Sil"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Card Student Name Section (Super legible, high hierarchy) */}
-                <div className="py-0.5">
-                  <button 
-                    onClick={() => {
-                      setEditingStudentId(student.id);
-                      setIsStudentModalOpen(true);
-                    }}
-                    className={`text-base font-sans font-bold text-left leading-snug hover:text-brand-accent transition-colors block w-full break-words ${
-                      hasMissingHall ? 'text-rose-600' : 'text-brand-ink'
-                    }`}
-                  >
-                    {student.name || 'İsimsiz Öğrenci'}
-                  </button>
-                </div>
-
-                {/* Card Meta Badges (Hall, Payment Status) */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {/* Hall Badge */}
-                  <div className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 border ${
-                    studentHalls.length > 0 
-                      ? 'bg-amber-50/80 border-amber-200/80 text-amber-900' 
-                      : 'bg-gray-100 border-gray-200 text-gray-500'
-                  }`}>
-                    <DoorOpen className="w-3 h-3 shrink-0 opacity-70" />
-                    <span className="truncate max-w-[150px]">
-                      {studentHalls.length > 0 ? studentHalls.map(h => h.name).join(', ') : 'Salonsuz'}
-                    </span>
-                  </div>
-
-                  {/* Payment Status Badge */}
-                  {hasRegistrations && (
-                    unpaidTotal > 0 ? (
-                      <div className="bg-rose-50 border border-rose-200 text-rose-700 px-2.5 py-0.5 rounded-lg text-[11px] font-bold flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3 text-rose-500" />
-                        <span>₺{formatCleanFee(unpaidTotal)} Borç</span>
-                      </div>
-                    ) : (
-                      <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-0.5 rounded-lg text-[11px] font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        <span>Ödendi</span>
-                      </div>
+                  </th>
+                  <th style={{ width: 75 }} className="py-2.5 px-3 uppercase tracking-wider sticky top-0 bg-slate-50 font-bold">NO</th>
+                  <th className="py-2.5 px-3 uppercase tracking-wider sticky top-0 bg-slate-50 font-bold">ADI SOYADI</th>
+                  <th style={{ width: 95 }} className="py-2.5 px-3 uppercase tracking-wider sticky top-0 bg-slate-50 font-bold">SINIFI</th>
+                  <th style={{ width: 150 }} className="py-2.5 px-3 uppercase tracking-wider sticky top-0 bg-slate-50 font-bold">SINAV SALONU</th>
+                  <th className="py-2.5 px-3 uppercase tracking-wider sticky top-0 bg-slate-50 font-bold">KAYITLI SINAVLAR</th>
+                  <th style={{ width: 80 }} className="py-2.5 px-3 uppercase tracking-wider text-center sticky top-0 bg-slate-50 font-bold">İŞLEM</th>
+                </tr>
+              </thead>
+              <tbody className="text-xs divide-y divide-slate-100">
+                {filteredStudents.map((student, idx) => {
+                  const isSelected = selectedStudentIds.includes(student.id);
+                  const studentHalls = studentHallsMap[student.id] || [];
+                  const registrations = student.examRegistrations || [];
+                  const hasMissingHall = registrations.some(reg => 
+                    !state.examHalls.some(h => 
+                      (h.examId === reg.examId || h.examIds?.includes(reg.examId)) && 
+                      h.seatingPlan?.some(sp => sp.studentId === student.id)
                     )
-                  )}
-                </div>
+                  );
 
-                {/* Card Bottom: Registrations Chips & Quick Add Button */}
-                <div className="pt-2 border-t border-brand-border/40 flex flex-wrap items-center gap-1.5">
-                  {registrations.map(reg => {
-                    const ex = state.exams.find(e => e.id === reg.examId);
-                    if (!ex) return null;
-                    return (
-                      <div 
-                        key={reg.examId} 
-                        className={`flex items-center border rounded-xl overflow-hidden pl-2 pr-1 py-1 gap-1 text-[11px] font-semibold transition-all ${
-                          reg.isPaid 
-                            ? 'bg-emerald-50/50 border-emerald-200/70 text-emerald-900' 
-                            : 'bg-rose-50/50 border-rose-200/70 text-rose-900'
-                        }`}
-                      >
+                  return (
+                    <tr 
+                      key={student.id ? `table-${student.id}-${idx}` : `table-${student.no}-${idx}`} 
+                      className={`transition-colors hover:bg-slate-50/80 ${
+                        isSelected ? 'bg-indigo-50/40' : ''
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <td className="py-2 px-3 text-center">
                         <button 
-                          onClick={() => toggleRegistrationPayment(student.id, reg.examId)}
-                          className="flex items-center gap-1 hover:underline cursor-pointer"
-                          title={reg.isPaid ? "Ödendi (Değiştirmek için tıkla)" : "Ödenmedi (Ödendi yapmak için tıkla)"}
+                          type="button"
+                          onClick={() => toggleSelectStudent(student.id)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer inline-flex items-center justify-center"
+                          title="Öğrenci Seç"
                         >
-                          <span className="truncate max-w-[110px]">{ex.name}</span>
-                          <span className="text-[10px] opacity-75">(₺{reg.fee})</span>
-                          {reg.isPaid ? (
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          {isSelected ? (
+                            <CheckSquare className="h-4 w-4 text-indigo-600" />
                           ) : (
-                            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-pulse" />
+                            <Square className="h-4 w-4 text-slate-300 hover:text-slate-500" />
                           )}
                         </button>
-                        
-                        <button 
-                          onClick={() => removeSingleRegistration(student.id, reg.examId)}
-                          className="text-gray-400 hover:text-rose-600 p-0.5 rounded hover:bg-black/5 transition-colors ml-0.5"
-                          title="Sınav Kaydını Sil"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    );
-                  })}
+                      </td>
 
-                  {/* Quick Add Exam to Student */}
-                  <button 
-                    onClick={() => {
-                      setSelectedStudentIds([student.id]);
-                      setIsBulkModalOpen(true);
-                    }}
-                    className="flex items-center gap-1 text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80 px-2.5 py-1 rounded-xl transition-all shadow-xs active:scale-95"
-                    title="Yeni Sınav Ekle"
-                  >
-                    <Plus className="w-3 h-3 text-amber-700" />
-                    <span>+ Sınav</span>
-                  </button>
+                      {/* No */}
+                      <td className="py-2 px-3">
+                        <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200/80">
+                          {student.no || '-'}
+                        </span>
+                      </td>
 
-                  {/* Quick Pay All Unpaid Fees Button */}
-                  {unpaidTotal > 0 && (
-                    <button 
-                      onClick={() => handlePayAllRegistrations(student.id)}
-                      className="flex items-center gap-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-xl transition-all shadow-xs active:scale-95 ml-auto"
-                      title="Öğrencinin tüm sınav borçlarını ödendi yap"
-                    >
-                      <Check className="w-3 h-3" />
-                      <span>Tahsil Et</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                      {/* Name */}
+                      <td className="py-2 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setEditingStudentId(student.id);
+                              setIsStudentModalOpen(true);
+                            }}
+                            className="font-bold text-slate-800 hover:text-indigo-600 text-left cursor-pointer transition-colors text-xs hover:underline truncate max-w-[200px]"
+                          >
+                            {student.name || 'İsimsiz Öğrenci'}
+                          </button>
+                          {hasMissingHall && (
+                            <span 
+                              className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200 shrink-0" 
+                              title="Salonsuz Sınavı Var"
+                            >
+                              Salonsuz
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-          {filteredStudents.length === 0 && (
-            <div className="text-center py-12 px-4 bg-white rounded-2xl border border-brand-border/60">
-              <Users className="w-8 h-8 text-brand-ink/20 mx-auto mb-2" />
-              <p className="text-xs text-brand-ink/60 font-semibold">Arama veya filtre kriterlerine uyan öğrenci bulunamadı.</p>
-            </div>
-          )}
-        </div>
+                      {/* Class */}
+                      <td className="py-2 px-3">
+                        <span className="font-bold text-[11px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          {student.className || '-'}
+                        </span>
+                      </td>
+
+                      {/* Hall */}
+                      <td className="py-2 px-3">
+                        <div className="flex flex-wrap gap-1 items-center">
+                          {studentHalls.length > 0 ? (
+                            studentHalls.map(hall => (
+                              <span key={hall.id} className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                                <DoorOpen className="w-2.5 h-2.5 text-indigo-600" />
+                                <span className="truncate max-w-[100px]">{hall.name}</span>
+                              </span>
+                            ))
+                          ) : registrations.length > 0 ? (
+                            <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                              Salonsuz
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Registered Exams */}
+                      <td className="py-2 px-3" id="student-exam-regs-cell">
+                        <div className="flex flex-wrap gap-1 items-center">
+                          {registrations.map((reg) => {
+                            const examObj = state.exams.find(e => e.id === reg.examId);
+                            const examName = examObj ? examObj.name : 'Sınav';
+                            
+                            return (
+                              <span 
+                                key={reg.examId} 
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                                  reg.isPaid 
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                                    : 'bg-rose-50 border-rose-200 text-rose-900'
+                                }`}
+                              >
+                                <span className="font-bold truncate max-w-[90px]">{examName}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRegistrationPayment(student.id, reg.examId)}
+                                  className={`text-[8px] font-extrabold px-1 rounded-full cursor-pointer ${
+                                    reg.isPaid
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-rose-600 text-white'
+                                  }`}
+                                  title={reg.isPaid ? "Ödendi" : "Borç"}
+                                >
+                                  {reg.isPaid ? '✓' : '₺'}
+                                </button>
+                              </span>
+                            );
+                          })}
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedStudentIds([student.id]);
+                              setIsBulkModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-50 hover:bg-indigo-50 border border-indigo-200 text-indigo-600 rounded text-[10px] font-bold transition-all cursor-pointer"
+                            title="Sınav Ekle"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>+</span>
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-2 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setEditingStudentId(student.id);
+                              setIsStudentModalOpen(true);
+                            }}
+                            className="p-1 rounded border border-slate-200 bg-white text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all cursor-pointer"
+                            title="Düzenle"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => removeStudent(student.id)} 
+                            className="p-1 rounded border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                            title="Sil"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredStudents.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium text-xs">
+                      {state.students.length === 0 
+                        ? "Kayıtlı öğrenci bulunmuyor. Yeni ekleyebilir veya Excel'den aktarabilirsiniz." 
+                        : "Arama kriterine uyan öğrenci bulunamadı."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* STICKY FLOATING BULK ACTIONS BAR - Modern Curved Glass on Mobile */}
@@ -1969,16 +2081,29 @@ export const StudentsView = () => {
                           {(student.examRegistrations || []).length} Sınav
                         </span>
                       </div>
-                      {student.examRegistrations && student.examRegistrations.some(r => !r.isPaid) && (
-                        <button
-                          type="button"
-                          onClick={() => handlePayAllRegistrations(student.id)}
-                          className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1.5 rounded-full shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Tüm Borçları Tahsil Et</span>
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {student.examRegistrations && student.examRegistrations.some(r => !r.isPaid && isExamInTerm1(state.exams.find(e => e.id === r.examId) || {})) && (
+                          <button
+                            type="button"
+                            onClick={() => handlePayTerm1Registrations(student.id)}
+                            className="text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 px-3 py-1.5 rounded-full shadow-2xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                            title="Öğrencinin sadece 1. Dönem sınav borçlarını tahsil et (1. Taksit Ödendi)"
+                          >
+                            <Coins className="w-3.5 h-3.5 text-amber-700" />
+                            <span>1. Taksit (1. Dönem) Tahsil Et</span>
+                          </button>
+                        )}
+                        {student.examRegistrations && student.examRegistrations.some(r => !r.isPaid) && (
+                          <button
+                            type="button"
+                            onClick={() => handlePayAllRegistrations(student.id)}
+                            className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1.5 rounded-full shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Tüm Borçları Tahsil Et</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                     
                     {student.examRegistrations && student.examRegistrations.length > 0 ? (
@@ -2013,9 +2138,45 @@ export const StudentsView = () => {
                                   }
                                 }
 
-                                const eligibleHalls = state.examHalls.filter(h => 
-                                  h.examId === reg.examId || h.examIds?.includes(reg.examId)
-                                );
+                                const eligibleHalls = state.examHalls.filter(h => {
+                                  // 1. Öğrenci zaten bu salona yerleştirilmişse daima göster
+                                  const isCurrentlySeated = (hall && hall.id === h.id) || h.seatingPlan?.some(sp => sp.studentId === student.id || (sp.studentNo && student.no && sp.studentNo === student.no));
+                                  if (isCurrentlySeated) return true;
+
+                                  // 2. Sınav eşleşmesi kontrolü
+                                  const isDirectlyInExamHalls = Array.isArray(exam?.assignedHalls) && exam.assignedHalls.includes(h.id);
+                                  const isHallLinkedToExam = h.examId === reg.examId || (Array.isArray(h.examIds) && h.examIds.includes(reg.examId));
+
+                                  // Eğer sınavın özel atanmış salonları varsa sadece o salonlar uygundur
+                                  if (exam?.assignedHalls && exam.assignedHalls.length > 0) {
+                                    if (!isDirectlyInExamHalls && !isHallLinkedToExam) return false;
+                                  } else if ((h.examIds && h.examIds.length > 0) || h.examId) {
+                                    // Sınavda salon listesi boş ama salon belirli sınavlara kilitlenmişse bu sınavı içermeli
+                                    if (!isHallLinkedToExam) return false;
+                                  }
+
+                                  // 3. Şube / Kademe / Sınıf Seviyesi Uygunluğu Kontrolü
+                                  const studentClass = (student.className || student.classStr || '').trim();
+                                  const studentGradeMatch = studentClass.match(/^(\d+)/) || studentClass.match(/(\d+)/);
+                                  const studentGrade = studentGradeMatch ? studentGradeMatch[1] : '';
+
+                                  // Salona özel atanmış şubeler/kademeler varsa kontrol et
+                                  if (h.selectedClasses && h.selectedClasses.length > 0) {
+                                    if (!studentClass) return false;
+
+                                    const isDirectClassMatch = h.selectedClasses.some(sc => sc.trim().toLowerCase() === studentClass.toLowerCase());
+                                    const isGradeMatch = h.selectedClasses.some(sc => {
+                                      const gMatch = sc.match(/^(\d+)/) || sc.match(/(\d+)/);
+                                      return gMatch && studentGrade && gMatch[1] === studentGrade;
+                                    });
+
+                                    if (!isDirectClassMatch && !isGradeMatch) {
+                                      return false;
+                                    }
+                                  }
+
+                                  return true;
+                                });
 
                                 const isExpanded = expandedExamId === reg.examId;
                                 const studentResult = state.results.find(r => (r.studentNo === student.no || r.studentNo === Number(student.no)));
@@ -2049,7 +2210,9 @@ export const StudentsView = () => {
                                     </td>
                                     <td className="py-3 px-4">
                                       <div className="flex items-center space-x-2">
-                                        <span className="font-bold text-[#2d2c25]">₺{reg.fee}</span>
+                                        <span className="font-bold text-[#2d2c25]">
+                                          ₺{getDisplayFeeForReg(reg, student.examRegistrations, state.exams)}
+                                        </span>
                                         {reg.installment && (
                                           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                                             {reg.installment}
@@ -2086,10 +2249,11 @@ export const StudentsView = () => {
                                           const occupiedCount = h.seatingPlan?.length || 0;
                                           const isCurrent = hall?.id === h.id;
                                           const isFull = occupiedCount >= cap;
+                                          const branchInfo = h.selectedClasses && h.selectedClasses.length > 0 ? ` [${h.selectedClasses.join(', ')}]` : '';
                                           
                                           return (
                                             <option key={h.id} value={h.id} disabled={isFull && !isCurrent}>
-                                              {h.name} {isCurrent ? `(Sıra: ${deskNo})` : `(${occupiedCount}/${cap}${isFull ? ' - Dolu' : ''})`}
+                                              {h.name}{branchInfo} {isCurrent ? `(Sıra: ${deskNo})` : `(${occupiedCount}/${cap}${isFull ? ' - Dolu' : ''})`}
                                             </option>
                                           );
                                         })}
@@ -2186,9 +2350,45 @@ export const StudentsView = () => {
                               if (seating) deskNo = seating.deskNumber.toString();
                             }
 
-                            const eligibleHalls = state.examHalls.filter(h => 
-                              h.examId === reg.examId || h.examIds?.includes(reg.examId)
-                            );
+                            const eligibleHalls = state.examHalls.filter(h => {
+                              // 1. Öğrenci zaten bu salona yerleştirilmişse daima göster
+                              const isCurrentlySeated = (hall && hall.id === h.id) || h.seatingPlan?.some(sp => sp.studentId === student.id || (sp.studentNo && student.no && sp.studentNo === student.no));
+                              if (isCurrentlySeated) return true;
+
+                              // 2. Sınav eşleşmesi kontrolü
+                              const isDirectlyInExamHalls = Array.isArray(exam?.assignedHalls) && exam.assignedHalls.includes(h.id);
+                              const isHallLinkedToExam = h.examId === reg.examId || (Array.isArray(h.examIds) && h.examIds.includes(reg.examId));
+
+                              // Eğer sınavın özel atanmış salonları varsa sadece o salonlar uygundur
+                              if (exam?.assignedHalls && exam.assignedHalls.length > 0) {
+                                if (!isDirectlyInExamHalls && !isHallLinkedToExam) return false;
+                              } else if ((h.examIds && h.examIds.length > 0) || h.examId) {
+                                // Sınavda salon listesi boş ama salon belirli sınavlara kilitlenmişse bu sınavı içermeli
+                                if (!isHallLinkedToExam) return false;
+                              }
+
+                              // 3. Şube / Kademe / Sınıf Seviyesi Uygunluğu Kontrolü
+                              const studentClass = (student.className || student.classStr || '').trim();
+                              const studentGradeMatch = studentClass.match(/^(\d+)/) || studentClass.match(/(\d+)/);
+                              const studentGrade = studentGradeMatch ? studentGradeMatch[1] : '';
+
+                              // Salona özel atanmış şubeler/kademeler varsa kontrol et
+                              if (h.selectedClasses && h.selectedClasses.length > 0) {
+                                if (!studentClass) return false;
+
+                                const isDirectClassMatch = h.selectedClasses.some(sc => sc.trim().toLowerCase() === studentClass.toLowerCase());
+                                const isGradeMatch = h.selectedClasses.some(sc => {
+                                  const gMatch = sc.match(/^(\d+)/) || sc.match(/(\d+)/);
+                                  return gMatch && studentGrade && gMatch[1] === studentGrade;
+                                });
+
+                                if (!isDirectClassMatch && !isGradeMatch) {
+                                  return false;
+                                }
+                              }
+
+                              return true;
+                            });
 
                             const isExpanded = expandedExamId === reg.examId;
                             const studentResult = state.results.find(r => (r.studentNo === student.no || r.studentNo === Number(student.no)));
@@ -2215,7 +2415,9 @@ export const StudentsView = () => {
 
                                 <div className="flex items-center justify-between pt-1 border-t border-[#f0eee6]">
                                   <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-[#2d2c25]">₺{reg.fee}</span>
+                                    <span className="text-xs font-bold text-[#2d2c25]">
+                                      ₺{getDisplayFeeForReg(reg, student.examRegistrations, state.exams)}
+                                    </span>
                                     {reg.installment && (
                                       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                                         {reg.installment}
@@ -2253,9 +2455,11 @@ export const StudentsView = () => {
                                       const occupiedCount = h.seatingPlan?.length || 0;
                                       const isCurrent = hall?.id === h.id;
                                       const isFull = occupiedCount >= cap;
+                                      const branchInfo = h.selectedClasses && h.selectedClasses.length > 0 ? ` [${h.selectedClasses.join(', ')}]` : '';
+
                                       return (
                                         <option key={h.id} value={h.id} disabled={isFull && !isCurrent}>
-                                          {h.name} {isCurrent ? `(Sıra: ${deskNo})` : `(${occupiedCount}/${cap})`}
+                                          {h.name}{branchInfo} {isCurrent ? `(Sıra: ${deskNo})` : `(${occupiedCount}/${cap}${isFull ? ' - Dolu' : ''})`}
                                         </option>
                                       );
                                     })}
@@ -2492,21 +2696,40 @@ export const StudentsView = () => {
                           </p>
                         </div>
                         <div>
-                          <label className="block text-[11px] font-bold text-[#737265] uppercase mb-1">
-                            Ödeme Durumu
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[11px] font-bold text-[#737265] uppercase">
+                              Ödeme Durumu
+                            </label>
+                            {newRegPaymentMode === 'installment' && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                %50 Gelir / %50 Borç
+                              </span>
+                            )}
+                          </div>
                           <select
                             value={newRegPaymentMode}
-                            onChange={(e) => setNewRegPaymentMode(e.target.value as 'paid' | 'installment' | 'debt')}
-                            className="w-full bg-white border border-[#e6e2d3] rounded-xl px-3 py-2 text-xs text-[#2d2c25] font-bold focus:ring-2 focus:ring-[#5a5a40]/20 focus:border-[#5a5a40] focus:outline-none transition-all cursor-pointer"
+                            onChange={(e) => {
+                              const val = e.target.value as 'paid' | 'installment' | 'debt';
+                              setNewRegPaymentMode(val);
+                              if (val === 'installment' && selectedDetailExamIds.length === 0) {
+                                setSelectedDetailExamIds(availableExamsForReg.map(ex => ex.id));
+                              }
+                            }}
+                            className={`w-full rounded-xl px-3 py-2 text-xs font-bold focus:outline-none transition-all cursor-pointer shadow-2xs ${
+                              newRegPaymentMode === 'installment'
+                                ? 'bg-amber-50/40 border-2 border-amber-500 text-amber-950 ring-2 ring-amber-500/20'
+                                : newRegPaymentMode === 'paid'
+                                ? 'bg-emerald-50/40 border-2 border-emerald-500 text-emerald-950 ring-2 ring-emerald-500/20'
+                                : 'bg-white border border-[#e6e2d3] text-[#2d2c25] focus:ring-2 focus:ring-[#5a5a40]/20 focus:border-[#5a5a40]'
+                            }`}
                           >
-                            <option value="paid">Ödendi (Tamamı Ödendi - Bütçeye Gelir)</option>
-                            <option value="installment">Taksit Ödendi (Yarısı Ödendi / Kalan Borç)</option>
-                            <option value="debt">Ödenmedi (Öğrenciye Borç Olarak Ekle)</option>
+                            <option value="paid">Tamamı Ödendi (Tüm Sınavlar Katılım & Bütçeye Gelir)</option>
+                            <option value="installment">1. Taksit Ödendi (%50 - 1. Dönem Sınavlarına Bölüştür & Gelir Yap / 2. Dönem Borç)</option>
+                            <option value="debt">Ödenmedi (Tüm Sınavlar Öğrenciye Borç Olarak Ekle)</option>
                           </select>
                           <p className="text-[10px] text-[#737265] mt-1">
                             {newRegPaymentMode === 'paid' && 'Öğrencinin adı ve tutar bütçeye doğrudan gelir olarak kaydedilir.'}
-                            {newRegPaymentMode === 'installment' && 'Toplu sınav ücretinin yarısı (%50) bütçeye gelir kaydedilir, kalan yarısı öğrenci borcu olarak işlenir.'}
+                            {newRegPaymentMode === 'installment' && 'Toplu sınav ücretinin yarısı (%50) otomatik 1. Dönem sınavlarına eşit bölünerek bütçeye gelir yansıtılır, kalan %50 ise 2. Dönem sınavları için borç olarak kaydedilir.'}
                             {newRegPaymentMode === 'debt' && 'Bütçede öğrencinin borç hanesine aktarılır.'}
                           </p>
                         </div>
@@ -2514,32 +2737,73 @@ export const StudentsView = () => {
 
                       {/* Calculation & Budget Sync preview */}
                       {selectedDetailExamIds.length > 0 && newRegFee > 0 && (
-                        <div className={`p-3 rounded-xl border text-xs flex items-center justify-between animate-fade-in ${
+                        <div className={`p-4 rounded-2xl border text-xs flex items-center justify-between animate-fade-in ${
                           newRegPaymentMode === 'paid' 
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                            ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900 shadow-xs' 
                             : newRegPaymentMode === 'installment'
-                            ? 'bg-amber-50 border-amber-200 text-amber-900'
-                            : 'bg-rose-50 border-rose-200 text-rose-800'
+                            ? 'bg-amber-50/90 border-amber-300 text-amber-950 shadow-xs'
+                            : 'bg-rose-50/90 border-rose-200 text-rose-900 shadow-xs'
                         }`}>
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 shrink-0" />
-                            <span>
+                          <div className="flex items-start gap-3 w-full">
+                            <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+                            <div className="space-y-1.5 w-full">
                               {newRegPaymentMode === 'paid' && (
-                                <>
-                                  Toplu Ödeme: <strong>₺{newRegFee}</strong> ({selectedDetailExamIds.length} Sınav Paketi). Bütçeye <strong>{student.name}</strong> adına doğrudan gelir kaydedilecektir.
-                                </>
+                                <p className="text-xs font-medium">
+                                  Toplu Ödeme: <strong>₺{newRegFee}</strong> ({selectedDetailExamIds.length} Sınav Paketi). Bütçeye <strong>{student.name}</strong> adına doğrudan sınav gelirleri olarak kaydedilecektir.
+                                </p>
                               )}
-                              {newRegPaymentMode === 'installment' && (
-                                <>
-                                  1. Taksit Ödemesi: Toplam ₺{newRegFee} ücretin yarısı olan <strong>₺{Math.round((newRegFee / 2) * 100) / 100}</strong> (%50) <strong>{student.name}</strong> adına bütçeye gelir kaydedilecek, kalan <strong>₺{Math.round((newRegFee - Math.round((newRegFee / 2) * 100) / 100) * 100) / 100}</strong> ise öğrenci borcu olarak işlenecektir.
-                                </>
-                              )}
+                              {newRegPaymentMode === 'installment' && (() => {
+                                const selectedExamsList = state.exams.filter(e => selectedDetailExamIds.includes(e.id));
+                                const t1Exams = selectedExamsList.filter(isExamInTerm1);
+                                const t2Exams = selectedExamsList.filter(e => !isExamInTerm1(e));
+                                const hasBoth = t1Exams.length > 0 && t2Exams.length > 0;
+                                const paidList = hasBoth ? t1Exams : (t1Exams.length > 0 ? t1Exams : selectedExamsList.slice(0, Math.ceil(selectedExamsList.length / 2)));
+                                const unpaidList = selectedExamsList.filter(e => !paidList.some(pe => pe.id === e.id));
+
+                                const paidHalf = Math.round((newRegFee / 2) * 100) / 100;
+                                const debtHalf = Math.round((newRegFee - paidHalf) * 100) / 100;
+                                const paidFeePerExam = paidList.length > 0 ? Math.round((paidHalf / paidList.length) * 100) / 100 : 0;
+                                const unpaidFeePerExam = unpaidList.length > 0 ? Math.round((debtHalf / unpaidList.length) * 100) / 100 : 0;
+
+                                return (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between flex-wrap gap-1">
+                                      <p className="font-bold text-xs text-amber-950 flex items-center gap-1.5">
+                                        <span>1. Taksit Otomatik Bütçe ve Dönem Dağılımı</span>
+                                        <span className="text-[10px] bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full font-mono font-bold">
+                                          Toplam: ₺{newRegFee}
+                                        </span>
+                                      </p>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-0.5">
+                                      <div className="bg-white/95 p-2.5 rounded-xl border border-emerald-300 shadow-2xs">
+                                        <div className="font-bold text-emerald-900 flex items-center justify-between">
+                                          <span>✓ 1. Dönem ({paidList.length} Sınav)</span>
+                                          <span className="text-[10px] px-2 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold">ÖDENDİ & GELİR</span>
+                                        </div>
+                                        <p className="text-emerald-950/90 mt-1">
+                                          Toplam <strong>₺{paidHalf}</strong> (%50) 1. dönem sınavlarına eşit bölündü (Sınav başına <strong>₺{paidFeePerExam}</strong>) ve <strong>Bütçe Gelirlerine</strong> entegre edildi.
+                                        </p>
+                                      </div>
+                                      <div className="bg-white/95 p-2.5 rounded-xl border border-rose-300 shadow-2xs">
+                                        <div className="font-bold text-rose-900 flex items-center justify-between">
+                                          <span>⏳ 2. Dönem ({unpaidList.length} Sınav)</span>
+                                          <span className="text-[10px] px-2 py-0.2 rounded bg-rose-100 text-rose-800 font-bold">BORÇ</span>
+                                        </div>
+                                        <p className="text-rose-950/90 mt-1">
+                                          Kalan <strong>₺{debtHalf}</strong> (%50) 2. dönem sınavlarına eşit bölündü (Sınav başına <strong>₺{unpaidFeePerExam}</strong>) ve <strong>Öğrenci Borcu</strong> olarak kaydedildi.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                               {newRegPaymentMode === 'debt' && (
-                                <>
+                                <p className="text-xs font-medium">
                                   Toplu Borç: <strong>₺{newRegFee}</strong> ({selectedDetailExamIds.length} Sınav Paketi). Bütçeye <strong>{student.name}</strong> adına öğrenci borcu olarak işlenecektir.
-                                </>
+                                </p>
                               )}
-                            </span>
+                            </div>
                           </div>
                         </div>
                       )}

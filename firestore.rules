@@ -55,6 +55,12 @@ service cloud.firestore {
       allow get, list: if isSignedIn();
       allow write: if isSchoolAdmin() || isSuperAdmin();
 
+      // Modular Data Subcollection
+      match /modules/{moduleId} {
+        allow get, list: if isSignedIn();
+        allow write: if isSchoolAdmin() || isSuperAdmin();
+      }
+
       // Cloud Backups subcollection
       match /backups/{backupId} {
         allow get, list: if isSignedIn();

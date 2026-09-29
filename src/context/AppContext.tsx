@@ -24,7 +24,13 @@ import {
   FIRESTORE_UPGRADE_URL,
   uploadSnapshotToStorage,
   fetchSnapshotFromStorage,
-  uploadBackupToStorage
+  uploadBackupToStorage,
+  listBackupsFromStorage,
+  storage,
+  ref,
+  getBytes,
+  fetchModularSchoolState,
+  writeModularSchoolState
 } from '../lib/firebase';
 import { 
   subscribeToNotifications, 
@@ -121,7 +127,13 @@ const syncFinancials = (students: Student[], exams: Exam[], budget: BudgetData):
       const exam = exams.find(e => e.id === reg.examId);
       const key = `${student.id}-${reg.examId}`;
       const existing = currentIncomeMap.get(key);
-      if (existing) return existing;
+      if (existing) {
+        return {
+          ...existing,
+          amount: reg.fee,
+          name: `${student.name} - ${exam?.name || 'Sınav'} Katılım Ücreti`
+        };
+      }
       
       return {
         id: generateId(),
@@ -362,6 +374,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   const [state, setState] = useState<AppState>(loadInitialState);
   const stateRef = useRef<AppState>(state);
   const lastSavedPayloadRef = useRef<string>('');
+  const lastSavedModuleHashesRef = useRef<Record<string, string>>({});
   const debounceTimerRef = useRef<any>(null);
   const isQuotaExceededRef = useRef(isInitialQuotaExceeded);
   const hasSentGuestRequestRef = useRef(false);
@@ -555,7 +568,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     return currentRole;
   };
 
-  // Real-time Database & State Sync Listener
+  // Storage-First State Hydration and Session Initializer
   useEffect(() => {
     if (!auth.currentUser || !firebaseConfig.projectId) {
       const cleanUserEmail = (user?.email || '').trim().toLowerCase();
@@ -567,139 +580,57 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       return;
     }
 
-    const docRef = doc(db, 'schools', 'main');
-    
-    const unsubscribe = onSnapshot(docRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data() as AppState;
-        
-        const cleanAdmins = Array.from(new Set(
-          (data.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com']).map(a => (a || '').trim().toLowerCase())
-        ));
-        const cleanTeachers = Array.from(new Set(
-          (data.teachers || []).map(t => (t || '').trim().toLowerCase())
-        ));
-
-        const safeExams = (data.exams || []).map(e => {
-          if (!e.omrMap || !e.omrMap.specs) {
-            return { ...e, omrMap: generateExamOmrMap(e) };
-          }
-          return e;
-        });
-
-        const safeData: AppState = {
-          students: data.students || [],
-          exams: safeExams,
-          results: data.results || [],
-          budget: data.budget || { incomes: [], expenses: [], debts: [] },
-          examHalls: data.examHalls || [],
-          leagueMentors: data.leagueMentors || {},
-          leagueTeamPoints: data.leagueTeamPoints || {},
-          approvedTransfers: data.approvedTransfers || [],
-          admins: cleanAdmins,
-          teachers: cleanTeachers
-        };
-        
-        safeData.budget = syncFinancials(safeData.students, safeData.exams, safeData.budget);
-        
-        setState(safeData);
-        stateRef.current = safeData;
-        
-        // Cache to localStorage
-        try {
-          localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
-          lastSavedPayloadRef.current = JSON.stringify(safeData);
-        } catch (e) {
-          console.warn('LocalStorage save error:', e);
-        }
-        
-        const cleanUserEmail = (user.email || '').trim().toLowerCase();
-        const computedRole = evaluateUserRole(cleanUserEmail, safeData.admins, safeData.teachers);
-        setUserRole(computedRole);
-
-        // Register or sync user profile only ONCE per day per browser session to prevent quota exhaustion
-        const dailyRegKey = `access_request_daily_${cleanUserEmail}_${getTodayDateStr()}`;
-        if (cleanUserEmail && !localStorage.getItem(dailyRegKey) && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
-          localStorage.setItem(dailyRegKey, '1');
-          setDoc(doc(db, 'access_requests', cleanUserEmail), {
-            email: cleanUserEmail,
-            name: user.displayName || cleanUserEmail.split('@')[0],
-            photoURL: user.photoURL || null,
-            role: computedRole,
-            status: computedRole === 'guest' ? 'pending' : 'approved',
-            lastLoginAt: new Date().toISOString(),
-            timestamp: new Date().toISOString()
-          }, { merge: true }).catch((err: any) => {
-            const errStr = String(err?.message || err || '');
-            if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted' || errStr.includes('Free daily')) {
-              markQuotaExceededToday();
-              isQuotaExceededRef.current = true;
-              setSyncStatus('quota_exceeded');
-            }
-          });
-        }
-
-        setSyncStatus('synced');
-        setSyncErrorMessage(null);
-      } else {
-        const userEmail = (user.email || '').trim().toLowerCase();
-        if (userEmail === 'kirklareliataturkortaokulu@gmail.com' || userEmail === 'bahadirkumcu@gmail.com') {
-          setUserRole('admin');
-          if (!isQuotaExceededRef.current && !checkIsQuotaExceededToday()) {
-            setDoc(docRef, stateRef.current).catch((err) => {
-              console.warn('Initial doc save error:', err);
-            });
-          }
-        }
-      }
+    // 1. Initial hydration from Firebase Cloud Storage (Primary truth)
+    syncFromCloudStorage().finally(() => {
       setLoading(false);
-    }, (error: any) => {
-      console.warn('Snapshot listener notice:', error);
-      const errStr = String(error?.message || error || '');
-      if (
-        errStr.includes('Quota exceeded') || 
-        errStr.includes('resource-exhausted') || 
-        error?.code === 'resource-exhausted' || 
-        errStr.includes('Free daily')
-      ) {
-        markQuotaExceededToday();
-        isQuotaExceededRef.current = true;
-        setSyncStatus('quota_exceeded');
-        setSyncErrorMessage('Firestore günlük ücretsiz işlem kotası doldu (Spark Plan). Verileriniz yerel hafızada korunmaktadır.');
-      } else {
-        setSyncStatus('offline');
-        setSyncErrorMessage(error?.message || 'Veriler yerel hafızada korunmaktadır.');
-      }
-
-      const cleanUserEmail = (user.email || '').trim().toLowerCase();
-      const fallbackRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
-      setUserRole(fallbackRole);
-      setLoading(false);
+      const cleanUserEmail = (user?.email || '').trim().toLowerCase();
+      const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+      setUserRole(initialComputedRole);
+      setSyncStatus('synced');
+      setSyncErrorMessage(null);
     });
 
-    return () => unsubscribe();
+    // 2. Register user profile to access_requests once per daily session (throttled)
+    const cleanUserEmail = (user?.email || '').trim().toLowerCase();
+    const computedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+    setUserRole(computedRole);
+
+    const dailyRegKey = `access_request_daily_${cleanUserEmail}_${getTodayDateStr()}`;
+    if (cleanUserEmail && !localStorage.getItem(dailyRegKey) && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
+      localStorage.setItem(dailyRegKey, '1');
+      setDoc(doc(db, 'access_requests', cleanUserEmail), {
+        email: cleanUserEmail,
+        name: user.displayName || cleanUserEmail.split('@')[0],
+        photoURL: user.photoURL || null,
+        role: computedRole,
+        status: computedRole === 'guest' ? 'pending' : 'approved',
+        lastLoginAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      }, { merge: true }).catch(() => {});
+    }
   }, [user.uid, user.email]);
 
-  // Sync snapshot from Firebase Cloud Storage (akademi_data.json) as Primary Sync
+  // Sync state from Modular Firestore (schools/main/modules/*) with fallback to Storage and Legacy docs
   const syncFromCloudStorage = async (): Promise<boolean> => {
     try {
       let remoteData: (AppState & { version?: number; lastPublishedAt?: string }) | null = null;
       
-      // 1. Try Firebase Cloud Storage (akademi_data.json)
-      try {
-        const remote = await fetchSnapshotFromStorage();
-        if (remote && remote.data) {
-          remoteData = remote.data;
-        }
-      } catch (e) {}
-
-      // 2. Try Firestore Snapshot document (snapshots/akademi_data)
-      if (!remoteData && firebaseConfig.projectId) {
+      // 1. Primary: Try Modular Firestore Subcollections (schools/main/modules/*)
+      if (firebaseConfig.projectId && !checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
         try {
-          const snapDoc = await getDoc(doc(db, 'snapshots', 'akademi_data'));
-          if (snapDoc.exists()) {
-            const snapObj = snapDoc.data();
-            remoteData = (snapObj.data || snapObj) as any;
+          const modRes = await fetchModularSchoolState(db, 'main');
+          if (modRes && modRes.data) {
+            remoteData = modRes.data;
+          }
+        } catch (e) {}
+      }
+
+      // 2. Auxiliary: Try Firebase Cloud Storage (akademi_data.json) if available
+      if (!remoteData) {
+        try {
+          const remote = await fetchSnapshotFromStorage();
+          if (remote && remote.data) {
+            remoteData = remote.data;
           }
         } catch (e) {}
       }
@@ -731,7 +662,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
       return false;
     } catch (e) {
-      console.warn('Storage sync check notice:', e);
+      console.warn('Cloud sync check notice:', e);
       return false;
     }
   };
@@ -747,10 +678,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     };
     window.addEventListener('focus', handleFocus);
 
-    // Periodic check every 25 seconds
+    // Periodic check every 35 seconds
     const interval = setInterval(() => {
       syncFromCloudStorage().catch(() => {});
-    }, 25000);
+    }, 35000);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
@@ -758,7 +689,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     };
   }, [user?.email]);
 
-  // Performs cloud sync using Firebase Cloud Storage (akademi_data.json) as Primary + Firestore snapshot mirror
+  // Performs cloud sync using Modular Firestore (schools/main/modules/*) with smart diff updates
   const executeFirestoreWrite = async (newState: AppState, forceRetry = false) => {
     if (userRole !== 'admin') return;
 
@@ -793,26 +724,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
       setSyncStatus('saving');
 
-      // 1. Primary Sync: Firebase Cloud Storage (akademi_data.json)
-      // Free quota: 5GB storage, 20.000 uploads/day, zero Firestore write units
-      let storageSuccess = false;
-      try {
-        const storageRes = await uploadSnapshotToStorage(cleanState);
-        if (storageRes.success) {
-          storageSuccess = true;
-        }
-      } catch (stErr) {
-        console.warn('Storage snapshot notice:', stErr);
-      }
-
-      // 2. Auxiliary Cloud Snapshot: Firestore document write ONLY if quota is not exceeded
+      // 1. Primary: Write ONLY changed subcollections to Modular Firestore (schools/main/modules/*)
       if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
         try {
-          const mainDocRef = doc(db, 'schools', 'main');
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Bulut zaman aşımı')), 2500)
-          );
-          await Promise.race([setDoc(mainDocRef, cleanState), timeoutPromise]);
+          const modRes = await writeModularSchoolState(db, cleanState, lastSavedModuleHashesRef.current, 'main');
+          if (modRes.success) {
+            lastSavedModuleHashesRef.current = modRes.newHashes;
+          }
         } catch (fsErr: any) {
           const errStr = String(fsErr?.message || fsErr || '');
           if (
@@ -828,8 +746,12 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         }
       }
 
-      // 3. Guaranteed state update: Cloud Snapshot + Local Mirror
-      // Data is safely committed so app NEVER hangs on 'saving'
+      // 2. Auxiliary: Mirror snapshot to Storage if bucket exists
+      try {
+        await uploadSnapshotToStorage(cleanState);
+      } catch (stErr) {}
+
+      // 3. Guaranteed state update: Local Mirror & Sync Status
       lastSavedPayloadRef.current = payloadString;
       stateRef.current = cleanState;
       setState(cleanState);
@@ -1611,12 +1533,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           console.warn('Could not write backup to Cloud Storage:', e);
         }
 
-        if (!checkIsQuotaExceededToday()) {
+        if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
           try {
             const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
-            await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
+            const { data, ...metaOnly } = backupPayload;
+            await setDoc(backupRef, metaOnly);
           } catch (e) {
-            console.warn('Could not write backup to Firestore:', e);
+            console.warn('Could not write backup meta to Firestore:', e);
           }
         }
       }
@@ -1682,12 +1605,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           console.warn('Could not write backup to Cloud Storage:', e);
         }
 
-        if (!checkIsQuotaExceededToday()) {
+        if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
           try {
             const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
-            await setDoc(backupRef, JSON.parse(JSON.stringify(backupPayload)));
+            const { data, ...metaOnly } = backupPayload;
+            await setDoc(backupRef, metaOnly);
           } catch (e) {
-            console.warn('Could not write backup to Firestore:', e);
+            console.warn('Could not write backup meta to Firestore:', e);
           }
         }
       }
@@ -1709,7 +1633,21 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
     try {
       let targetBackup = cloudBackups.find(b => b.id === backupId);
-      if (!targetBackup && firebaseConfig.projectId) {
+      
+      // If data is not present in local list, try fetching full JSON from Cloud Storage first
+      if ((!targetBackup || !targetBackup.data) && firebaseConfig.storageBucket) {
+        try {
+          const storageRef = ref(storage, `backups/${backupId}.json`);
+          const bytes = await getBytes(storageRef, 50 * 1024 * 1024);
+          const jsonStr = new TextDecoder().decode(bytes);
+          targetBackup = JSON.parse(jsonStr);
+        } catch (stErr) {
+          console.warn('Storage backup fetch note:', stErr);
+        }
+      }
+
+      // Fallback check in Firestore if needed
+      if ((!targetBackup || !targetBackup.data) && firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
         try {
           const snap = await getDoc(doc(db, 'schools', 'main', 'backups', backupId));
           if (snap.exists()) {

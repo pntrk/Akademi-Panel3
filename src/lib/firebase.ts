@@ -46,9 +46,9 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 // Initialize Firebase Storage
 export const storage: FirebaseStorage = getStorage(app);
 try {
-  // Prevent SDK from retrying for 10 minutes when bucket is unreachable/uncreated
-  storage.maxUploadRetryTime = 2500;
-  storage.maxOperationRetryTime = 2500;
+  // Generous timeout for large snapshots (up to 30s)
+  storage.maxUploadRetryTime = 30000;
+  storage.maxOperationRetryTime = 30000;
 } catch (e) {}
 
 // Initialize Firebase Auth
@@ -305,7 +305,7 @@ export const uploadSnapshotToStorage = async (data: any): Promise<{ success: boo
     });
 
     const timeoutPromise = new Promise<{ success: boolean; url?: string; error?: string; nativeStorage?: boolean }>((resolve) =>
-      setTimeout(() => resolve({ success: false, error: 'Storage upload timeout' }), 2500)
+      setTimeout(() => resolve({ success: false, error: 'Storage upload timeout' }), 25000)
     );
 
     const result = await Promise.race([uploadPromise, timeoutPromise]);
@@ -341,7 +341,7 @@ export const fetchSnapshotFromStorage = async (): Promise<{ data: any; lastModif
     })();
 
     const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 2500)
+      setTimeout(() => resolve(null), 20000)
     );
 
     return await Promise.race([fetchPromise, timeoutPromise]);
@@ -373,13 +373,156 @@ export const uploadBackupToStorage = async (backupId: string, backupRecord: any)
     });
 
     const timeoutPromise = new Promise<{ success: boolean; error: string }>((resolve) =>
-      setTimeout(() => resolve({ success: false, error: 'Backup storage timeout' }), 2500)
+      setTimeout(() => resolve({ success: false, error: 'Backup storage timeout' }), 25000)
     );
 
     return await Promise.race([uploadPromise, timeoutPromise]);
   } catch (error: any) {
     console.warn('Storage backup upload error:', error);
     return { success: false, error: error?.message || String(error) };
+  }
+};
+
+export const listBackupsFromStorage = async (): Promise<Array<{ id: string; name: string; url?: string }>> => {
+  if (!firebaseConfig.storageBucket) return [];
+  try {
+    const listRef = ref(storage, 'backups');
+    const res = await listAll(listRef);
+    const items = await Promise.all(
+      res.items.map(async (itemRef) => {
+        const url = await getDownloadURL(itemRef).catch(() => undefined);
+        return {
+          id: itemRef.name.replace('.json', ''),
+          name: itemRef.name,
+          url
+        };
+      })
+    );
+    return items;
+  } catch (e) {
+    return [];
+  }
+};
+
+// Modular Firestore Storage Engine (Subcollection based - 0% risk of 1MB limit & minimal writes)
+export interface ModularWriteResult {
+  success: boolean;
+  updatedModules: string[];
+  newHashes: Record<string, string>;
+  error?: string;
+}
+
+export const fetchModularSchoolState = async (
+  dbInstance: any,
+  schoolId = 'main'
+): Promise<{ data: any; source: 'modular' | 'legacy' | 'none' } | null> => {
+  try {
+    const modulesColRef = collection(dbInstance, 'schools', schoolId, 'modules');
+    const snap = await getDocs(modulesColRef);
+
+    if (!snap.empty) {
+      const merged: any = {
+        students: [],
+        exams: [],
+        results: [],
+        budget: { incomes: [], expenses: [], debts: [] },
+        examHalls: [],
+        leagueMentors: {},
+        leagueTeamPoints: {},
+        approvedTransfers: [],
+        admins: ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
+        teachers: []
+      };
+
+      snap.forEach(docSnap => {
+        const id = docSnap.id;
+        const d = docSnap.data();
+        if (id === 'students') merged.students = d.students || [];
+        else if (id === 'exams') merged.exams = d.exams || [];
+        else if (id === 'results') merged.results = d.results || [];
+        else if (id === 'budget') merged.budget = d.budget || { incomes: [], expenses: [], debts: [] };
+        else if (id === 'halls') merged.examHalls = d.examHalls || [];
+        else if (id === 'league') {
+          merged.leagueMentors = d.leagueMentors || {};
+          merged.leagueTeamPoints = d.leagueTeamPoints || {};
+          merged.approvedTransfers = d.approvedTransfers || [];
+        } else if (id === 'meta') {
+          merged.version = d.version || 1;
+          merged.lastPublishedAt = d.lastPublishedAt;
+          merged.lastPublishedBy = d.lastPublishedBy;
+          if (Array.isArray(d.admins) && d.admins.length > 0) merged.admins = d.admins;
+          if (Array.isArray(d.teachers)) merged.teachers = d.teachers;
+          if (d.examCalendarPrintSettings) merged.examCalendarPrintSettings = d.examCalendarPrintSettings;
+        }
+      });
+
+      return { data: merged, source: 'modular' };
+    }
+
+    // Fallback: Check legacy single-document 'schools/main'
+    const legacySnap = await getDoc(doc(dbInstance, 'schools', schoolId));
+    if (legacySnap.exists()) {
+      return { data: legacySnap.data(), source: 'legacy' };
+    }
+
+    return null;
+  } catch (err: any) {
+    console.warn('fetchModularSchoolState notice:', err);
+    return null;
+  }
+};
+
+export const writeModularSchoolState = async (
+  dbInstance: any,
+  cleanState: any,
+  lastHashes: Record<string, string>,
+  schoolId = 'main'
+): Promise<ModularWriteResult> => {
+  const updatedModules: string[] = [];
+  const newHashes: Record<string, string> = { ...lastHashes };
+
+  const modulesData: Record<string, any> = {
+    students: { students: cleanState.students || [] },
+    exams: { exams: cleanState.exams || [] },
+    results: { results: cleanState.results || [] },
+    budget: { budget: cleanState.budget || { incomes: [], expenses: [], debts: [] } },
+    halls: { examHalls: cleanState.examHalls || [] },
+    league: {
+      leagueMentors: cleanState.leagueMentors || {},
+      leagueTeamPoints: cleanState.leagueTeamPoints || {},
+      approvedTransfers: cleanState.approvedTransfers || []
+    },
+    meta: {
+      version: cleanState.version || 1,
+      lastPublishedAt: cleanState.lastPublishedAt || new Date().toISOString(),
+      lastPublishedBy: cleanState.lastPublishedBy || 'admin',
+      admins: cleanState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
+      teachers: cleanState.teachers || [],
+      examCalendarPrintSettings: cleanState.examCalendarPrintSettings
+    }
+  };
+
+  try {
+    const promises: Promise<void>[] = [];
+
+    for (const [modKey, modPayload] of Object.entries(modulesData)) {
+      const payloadStr = JSON.stringify(modPayload);
+      if (lastHashes[modKey] !== payloadStr || modKey === 'meta') {
+        const modDocRef = doc(dbInstance, 'schools', schoolId, 'modules', modKey);
+        promises.push(setDoc(modDocRef, modPayload));
+        updatedModules.push(modKey);
+        newHashes[modKey] = payloadStr;
+      }
+    }
+
+    if (promises.length > 0) {
+      await Promise.all(promises);
+    }
+
+    return { success: true, updatedModules, newHashes };
+  } catch (err: any) {
+    console.warn('writeModularSchoolState notice:', err);
+    return { success: false, updatedModules, newHashes, error: err?.message || String(err) };
   }
 };
 

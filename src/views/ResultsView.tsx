@@ -1000,6 +1000,8 @@ export function ResultsView() {
 
   // Active top-level tab switcher
   const [activeMainTab, setActiveMainTab] = useState<'results' | 'analysis'>('results');
+  const [isMobileControlsOpen, setIsMobileControlsOpen] = useState(false);
+  const [isMobileMoreActionsOpen, setIsMobileMoreActionsOpen] = useState(false);
 
   // Active selected exam
   const [selectedExamId, setSelectedExamId] = useState<string>(() => {
@@ -2349,62 +2351,149 @@ export function ResultsView() {
       )}
 
       {/* =====================================================================
-          ÜST KONTROL VE GEÇİŞ ÇUBUĞU (SaaS Segmented Tabs & Sınav Seçici)
+          ÜST KONTROL VE GEÇİŞ ÇUBUĞU (Mobil Açılır / Masaüstü Segmented Tabs)
           ===================================================================== */}
-      <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 gap-1 overflow-x-auto custom-scrollbar">
-          <button
-            type="button"
-            onClick={() => setActiveMainTab('results')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeMainTab === 'results'
-                ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-            }`}
-          >
-            <BarChart3 className={`w-4 h-4 ${activeMainTab === 'results' ? 'text-indigo-600' : 'text-slate-400'}`} />
-            <span>Sınav Sıralaması & Sonuçlar</span>
-            <span className={`text-[11px] font-mono tabular-nums px-2 py-0.5 rounded-md font-bold ${
-              activeMainTab === 'results' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200/70 text-slate-600'
-            }`}>
-              {evaluatedResults.length}
-            </span>
-          </button>
+      <div className="bg-white/95 backdrop-blur-md rounded-2xl p-2.5 sm:p-3.5 border border-slate-200/90 shadow-sm flex flex-col gap-2.5 transition-all">
+        {/* MOBİL: Kompakt Başlık ve Doğrudan Sınav Seçici (sm:hidden) */}
+        <div className="flex sm:hidden items-center justify-between gap-2">
+          {/* Mobil Sekme Seçici (Native Dropdown) */}
+          <div className="relative flex-1 min-w-0">
+            <select
+              value={activeMainTab}
+              onChange={(e) => setActiveMainTab(e.target.value as 'results' | 'analysis')}
+              className="w-full bg-slate-100 hover:bg-slate-200/80 font-bold text-xs text-slate-800 rounded-xl pl-8 pr-7 py-2.5 outline-none border border-slate-200 appearance-none cursor-pointer truncate shadow-2xs"
+              aria-label="Görünüm Seçiniz"
+            >
+              <option value="results">📊 Sıralama ({evaluatedResults.length})</option>
+              <option value="analysis">📈 Madde Analizi ({exam.subjects?.reduce((acc, s) => acc + (s.count || 0), 0) || 90} Soru)</option>
+            </select>
+            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-indigo-600 pointer-events-none">
+              {activeMainTab === 'results' ? <BarChart3 className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />}
+            </div>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveMainTab('analysis')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeMainTab === 'analysis'
-                ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-            }`}
-          >
-            <TrendingUp className={`w-4 h-4 ${activeMainTab === 'analysis' ? 'text-indigo-600' : 'text-slate-400'}`} />
-            <span>Soru & Madde Analizi</span>
-          </button>
+          {/* Mobil Sınav Doğrudan Seçim Dropdown (Tek Tıkla Sınav Listesi Açılır) */}
+          <div className="relative shrink-0 max-w-[160px]">
+            {state.exams.length > 1 ? (
+              <div className="relative">
+                <select
+                  value={selectedExamId}
+                  onChange={(e) => setSelectedExamId(e.target.value)}
+                  className="w-full bg-indigo-50/70 hover:bg-indigo-50 border border-indigo-200 text-indigo-950 font-bold text-xs rounded-xl pl-8 pr-7 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none truncate shadow-2xs"
+                  aria-label="Sınavı Değiştir"
+                >
+                  {state.exams.map(e => (
+                    <option key={e.id} value={e.id}>
+                      {e.examType === 'internal' ? '🎯 ' : '📚 '}{e.name}
+                    </option>
+                  ))}
+                </select>
+                <BookOpen className="w-4 h-4 text-indigo-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <ChevronDown className="w-3.5 h-3.5 text-indigo-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            ) : (
+              <div className="px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 truncate">
+                <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="truncate text-[11px]">{exam.name}</span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Aktif Sınav Seçici */}
-        <div className="flex items-center gap-2 self-stretch md:self-auto justify-between md:justify-end">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider hidden sm:inline">Sınav:</span>
-          {state.exams.length > 1 ? (
-            <select
-              value={selectedExamId}
-              onChange={(e) => setSelectedExamId(e.target.value)}
-              className="bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-colors max-w-xs truncate"
+        {/* MASAÜSTÜ / TABLET GÖRÜNÜMÜ (hidden sm:flex) */}
+        <div className="hidden sm:flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Segmented Tab Switcher */}
+          <div className="flex items-center bg-slate-100/90 p-1.5 rounded-xl border border-slate-200/80 gap-1.5 overflow-x-auto custom-scrollbar shadow-inner">
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('results')}
+              className={`flex items-center gap-2.5 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                activeMainTab === 'results'
+                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200/70 scale-[1.01]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
             >
-              {state.exams.map(e => (
-                <option key={e.id} value={e.id}>
-                  {e.examType === 'internal' ? '🎯 [Kurum İçi] ' : '📚 [Yayıncı] '}{e.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="text-xs font-bold text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 truncate">
-              {exam.name}
+              <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
+                activeMainTab === 'results' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-200/50 text-slate-500'
+              }`}>
+                <BarChart3 className="w-3.5 h-3.5" />
+              </div>
+              <span>Sınav Sıralaması & Karneler</span>
+              <span className={`text-[11px] font-mono tabular-nums px-2 py-0.5 rounded-full font-bold transition-colors ${
+                activeMainTab === 'results' 
+                  ? 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200' 
+                  : 'bg-slate-200/70 text-slate-600'
+              }`}>
+                {evaluatedResults.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('analysis')}
+              className={`flex items-center gap-2.5 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                activeMainTab === 'analysis'
+                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200/70 scale-[1.01]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
+                activeMainTab === 'analysis' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200/50 text-slate-500'
+              }`}>
+                <TrendingUp className="w-3.5 h-3.5" />
+              </div>
+              <span>Soru & Madde Analizi</span>
+              <span className={`text-[11px] font-mono tabular-nums px-2 py-0.5 rounded-full font-bold transition-colors ${
+                activeMainTab === 'analysis' 
+                  ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200' 
+                  : 'bg-slate-200/70 text-slate-600'
+              }`}>
+                {exam.subjects?.reduce((acc, s) => acc + (s.count || 0), 0) || 90} Soru
+              </span>
+            </button>
+          </div>
+
+          {/* Aktif Sınav Seçici ve Meta Rozetler */}
+          <div className="flex items-center gap-2 self-stretch lg:self-auto justify-between lg:justify-end flex-wrap sm:flex-nowrap">
+            {/* Sınav Tipi & Yayıncı Rozeti */}
+            <div className="hidden md:flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-200/80 px-2.5 py-1.5 rounded-xl shrink-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-slate-700 font-bold">{exam.publisher || 'Kurum İçi'}</span>
+              {exam.date && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-slate-500 font-mono text-[10px]">{exam.date}</span>
+                </>
+              )}
             </div>
-          )}
+
+            {/* Sınav Dropdown Seçici */}
+            <div className="relative flex-1 sm:flex-initial min-w-[200px] max-w-sm">
+              {state.exams.length > 1 ? (
+                <div className="relative">
+                  <select
+                    value={selectedExamId}
+                    onChange={(e) => setSelectedExamId(e.target.value)}
+                    className="w-full bg-slate-50 hover:bg-slate-100/90 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer transition-all truncate shadow-2xs appearance-none"
+                    aria-label="Sınav Seçiniz"
+                  >
+                    {state.exams.map(e => (
+                      <option key={e.id} value={e.id}>
+                        {e.examType === 'internal' ? '🎯 [Kurum İçi] ' : `📚 [${e.publisher || 'Yayın'}] `}{e.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              ) : (
+                <div className="text-xs font-bold text-slate-800 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 truncate flex items-center gap-2">
+                  <BookOpen className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <span className="truncate">{exam.name}</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2414,31 +2503,32 @@ export function ResultsView() {
       {activeMainTab === 'results' && (
         <div className="flex flex-col gap-3">
           {/* Executive Header Card */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-2xs border border-slate-200/80">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-              <div className="flex items-start sm:items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs shrink-0 mt-0.5 sm:mt-0">
-                  <BarChart3 className="w-5 h-5" />
+          <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-2xs border border-slate-200/80">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3 sm:pb-4 border-b border-slate-100">
+              {/* Sınav Bilgisi & İkon */}
+              <div className="flex items-start sm:items-center gap-2.5 sm:gap-3">
+                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs shrink-0 mt-0.5 sm:mt-0">
+                  <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-lg font-bold text-slate-900 tracking-tight truncate">
                       {exam.name}
                     </h3>
                     {exam.examType === 'internal' ? (
-                      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
-                        <Target className="w-3 h-3" /> Kurum İçi Optik Deneme
+                      <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1 shrink-0">
+                        <Target className="w-3 h-3" /> Kurum İçi Optik
                       </span>
                     ) : (
-                      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200/80 flex items-center gap-1">
+                      <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200/80 flex items-center gap-1 shrink-0">
                         <FileSpreadsheet className="w-3 h-3" /> Yayıncı Denemesi
                       </span>
                     )}
-                    <span className="text-[11px] font-mono tabular-nums font-bold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                    <span className="text-[10px] sm:text-[11px] font-mono tabular-nums font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
                       {evaluatedResults.length} Öğrenci
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block">
                     {exam.examType === 'internal' 
                       ? 'Optik kamera tarama & kütük eşleştirmeli anlık sonuç değerlendirmesi' 
                       : 'Yayıncı veri aktarımı ve öğrenci gelişim takip karnesi'}
@@ -2446,162 +2536,259 @@ export function ResultsView() {
                 </div>
               </div>
 
-                {/* Action Buttons Toolbar */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  {exam.examType === 'internal' && userRole === 'admin' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => (window as any).__navigateToTab?.('scan')}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
-                      >
-                        <Camera className="w-3.5 h-3.5" />
-                        <span>Canlı Optik Tara</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => (window as any).__navigateToTab?.('omr-setup')}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span>Form Bas (PDF)</span>
-                      </button>
-                    </>
-                  )}
+              {/* MASAÜSTÜ: Action Buttons Toolbar */}
+              <div className="hidden md:flex items-center gap-2 flex-wrap">
+                {exam.examType === 'internal' && userRole === 'admin' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => (window as any).__navigateToTab?.('scan')}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Canlı Optik Tara</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => (window as any).__navigateToTab?.('omr-setup')}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Form Bas (PDF)</span>
+                    </button>
+                  </>
+                )}
 
-                  {exam.examType !== 'internal' && userRole === 'admin' && (
-                    <>
-                      <input
-                        ref={publisherFileInputRef}
-                        type="file"
-                        accept=".xlsx,.xls,.csv"
-                        className="hidden"
-                        onChange={handlePublisherExcelUpload}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => publisherFileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
-                      >
-                        <FileSpreadsheet className="w-3.5 h-3.5" />
-                        <span>Excel Yükle</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDownloadPublisherTemplate}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
-                        title="Örnek Excel Şablonu İndir"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Örnek Şablon</span>
-                      </button>
-                    </>
-                  )}
+                {exam.examType !== 'internal' && userRole === 'admin' && (
+                  <>
+                    <input
+                      ref={publisherFileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={handlePublisherExcelUpload}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => publisherFileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>Excel Yükle</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadPublisherTemplate}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
+                      title="Örnek Excel Şablonu İndir"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Örnek Şablon</span>
+                    </button>
+                  </>
+                )}
 
+                <button
+                  type="button"
+                  onClick={handleExportResultsExcel}
+                  disabled={evaluatedResults.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer disabled:opacity-50"
+                  title="Sonuçları Excel dosyası olarak indir"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Excel İndir</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsBatchPdfModalOpen(true)}
+                  disabled={evaluatedResults.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                  title="Öğrenci karnelerini renkli ve aranabilir Türkçe destekli toplu PDF olarak indir"
+                >
+                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Toplu Karne (PDF)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintResults}
+                  disabled={evaluatedResults.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>A4 Yazdır</span>
+                </button>
+
+                {userRole === 'admin' && (
                   <button
                     type="button"
-                    onClick={handleExportResultsExcel}
-                    disabled={evaluatedResults.length === 0}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer disabled:opacity-50"
-                    title="Sonuçları Excel dosyası olarak indir"
+                    onClick={handleDeleteAllResults}
+                    disabled={currentExamResults.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-all cursor-pointer disabled:opacity-50"
+                    title="Sınav sonuçlarını sıfırla / temizle"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Excel İndir</span>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Temizle</span>
                   </button>
+                )}
+              </div>
 
+              {/* MOBİL: Kompakt 2 Kademeli Hızlı İşlem Araç Çubuğu (md:hidden) */}
+              <div className="flex md:hidden flex-col gap-2 w-full pt-1">
+                {/* Ana Mobil Butonlar (Toplu Karne ve Tarama/Yükleme) */}
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setIsBatchPdfModalOpen(true)}
                     disabled={evaluatedResults.length === 0}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                    title="Öğrenci karnelerini renkli ve aranabilir Türkçe destekli toplu PDF olarak indir"
+                    className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-2xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                   >
-                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    <FileText className="w-4 h-4 text-indigo-600" />
                     <span>Toplu Karne (PDF)</span>
+                  </button>
+
+                  {exam.examType === 'internal' && userRole === 'admin' ? (
+                    <button
+                      type="button"
+                      onClick={() => (window as any).__navigateToTab?.('scan')}
+                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-400 bg-emerald-600 text-white shadow-2xs active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>Optik Tara</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => publisherFileInputRef.current?.click()}
+                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-400 bg-emerald-600 text-white shadow-2xs active:scale-95 transition-all cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      <span>Excel Yükle</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* İkincil Mobil Butonlar (Yatay Kaydırılabilir Çipler) */}
+                <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-0.5">
+                  <button
+                    type="button"
+                    onClick={handleExportResultsExcel}
+                    disabled={evaluatedResults.length === 0}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 active:bg-slate-100 whitespace-nowrap shrink-0 disabled:opacity-50"
+                  >
+                    <Download className="w-3 h-3 text-emerald-600" />
+                    <span>Excel</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handlePrintResults}
                     disabled={evaluatedResults.length === 0}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-50"
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 active:bg-slate-100 whitespace-nowrap shrink-0 disabled:opacity-50"
                   >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>A4 Yazdır</span>
+                    <Printer className="w-3 h-3" />
+                    <span>A4 Liste</span>
                   </button>
 
-                  {userRole === 'admin' && (
+                  {exam.examType === 'internal' && userRole === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => (window as any).__navigateToTab?.('omr-setup')}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 active:bg-slate-100 whitespace-nowrap shrink-0"
+                    >
+                      <Printer className="w-3 h-3 text-indigo-600" />
+                      <span>Form Bas</span>
+                    </button>
+                  )}
+
+                  {exam.examType !== 'internal' && userRole === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadPublisherTemplate}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 active:bg-slate-100 whitespace-nowrap shrink-0"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Şablon</span>
+                    </button>
+                  )}
+
+                  {userRole === 'admin' && currentExamResults.length > 0 && (
                     <button
                       type="button"
                       onClick={handleDeleteAllResults}
-                      disabled={currentExamResults.length === 0}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-all cursor-pointer disabled:opacity-50"
-                      title="Sınav sonuçlarını sıfırla / temizle"
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-rose-200 bg-rose-50 text-rose-700 active:bg-rose-100 whitespace-nowrap shrink-0"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3 h-3" />
                       <span>Temizle</span>
                     </button>
                   )}
                 </div>
+              </div>
             </div>
 
-            {/* KPI Metric Strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 pt-3.5">
-              <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/70 flex flex-col justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Katılım Oranı</span>
-                <div className="flex items-baseline gap-1.5 mt-1">
-                  <span className="text-base sm:text-lg font-black font-mono tabular-nums text-slate-800">
+            {/* KPI Metric Strip - Responsive Dashboard */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-2.5 pt-3 sm:pt-3.5">
+              {/* Katılım Oranı */}
+              <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between shadow-2xs">
+                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Katılım Oranı</span>
+                <div className="flex items-baseline gap-1 mt-0.5 sm:mt-1">
+                  <span className="text-sm sm:text-lg font-black font-mono tabular-nums text-slate-800">
                     {summaryStats.totalScanned}
                   </span>
-                  <span className="text-xs text-slate-500 font-mono">/ {summaryStats.totalMaster}</span>
-                  <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded font-mono ml-auto">
+                  <span className="text-[10px] sm:text-xs text-slate-500 font-mono">/ {summaryStats.totalMaster}</span>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded font-mono ml-auto">
                     %{summaryStats.participationRate}
                   </span>
                 </div>
               </div>
 
-              <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100/80 flex flex-col justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Net Ortalaması</span>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-base sm:text-lg font-black font-mono tabular-nums text-blue-800">
+              {/* Net Ortalaması */}
+              <div className="bg-blue-50/60 p-2.5 sm:p-3 rounded-xl border border-blue-100 flex flex-col justify-between shadow-2xs">
+                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-700">Net Ortalaması</span>
+                <div className="flex items-baseline gap-1 mt-0.5 sm:mt-1">
+                  <span className="text-sm sm:text-lg font-black font-mono tabular-nums text-blue-900">
                     {summaryStats.avgNet}
                   </span>
-                  <span className="text-[11px] text-blue-600 font-semibold">Net</span>
+                  <span className="text-[10px] sm:text-[11px] text-blue-600 font-bold">Net</span>
                 </div>
               </div>
 
-              <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100/80 flex flex-col justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Zirve Net (En Yüksek)</span>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-base sm:text-lg font-black font-mono tabular-nums text-emerald-800">
+              {/* Zirve Net */}
+              <div className="bg-emerald-50/60 p-2.5 sm:p-3 rounded-xl border border-emerald-100 flex flex-col justify-between shadow-2xs">
+                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-700">Zirve Net</span>
+                <div className="flex items-baseline gap-1 mt-0.5 sm:mt-1">
+                  <span className="text-sm sm:text-lg font-black font-mono tabular-nums text-emerald-900">
                     {summaryStats.maxNet}
                   </span>
-                  <span className="text-[11px] text-emerald-600 font-semibold">Net</span>
+                  <span className="text-[10px] sm:text-[11px] text-emerald-600 font-bold">Net</span>
                 </div>
               </div>
 
-              <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-100/80 flex flex-col justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Doğru / Yanlış Ort.</span>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-sm sm:text-base font-black font-mono tabular-nums text-emerald-700">
+              {/* Doğru / Yanlış */}
+              <div className="bg-amber-50/60 p-2.5 sm:p-3 rounded-xl border border-amber-100 flex flex-col justify-between shadow-2xs">
+                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-700">D / Y Ortalaması</span>
+                <div className="flex items-baseline gap-1.5 mt-0.5 sm:mt-1">
+                  <span className="text-xs sm:text-base font-black font-mono tabular-nums text-emerald-700">
                     {summaryStats.avgCorrect} D
                   </span>
                   <span className="text-slate-300">/</span>
-                  <span className="text-sm sm:text-base font-black font-mono tabular-nums text-rose-600">
+                  <span className="text-xs sm:text-base font-black font-mono tabular-nums text-rose-600">
                     {summaryStats.avgWrong} Y
                   </span>
                 </div>
               </div>
 
-              <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-100/80 col-span-2 sm:col-span-4 lg:col-span-1 flex flex-col justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700">
+              {/* LGS Puan / En Düşük Net */}
+              <div className="bg-purple-50/60 p-2.5 sm:p-3 rounded-xl border border-purple-100 col-span-2 sm:col-span-4 lg:col-span-1 flex flex-col justify-between shadow-2xs">
+                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-purple-700">
                   {isLgs ? 'LGS Puan Ortalaması' : 'En Düşük Net'}
                 </span>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-base sm:text-lg font-black font-mono tabular-nums text-purple-800">
+                <div className="flex items-baseline gap-1 mt-0.5 sm:mt-1">
+                  <span className="text-sm sm:text-lg font-black font-mono tabular-nums text-purple-900">
                     {isLgs ? summaryStats.avgLgs : summaryStats.minNet}
                   </span>
-                  <span className="text-[11px] text-purple-600 font-semibold">
+                  <span className="text-[10px] sm:text-[11px] text-purple-600 font-bold">
                     {isLgs ? 'Puan' : 'Net'}
                   </span>
                 </div>
@@ -2610,8 +2797,9 @@ export function ResultsView() {
           </div>
 
           {/* Search, Filter & View Controls */}
-          <div className="bg-white rounded-2xl p-3 sm:p-3.5 shadow-2xs border border-slate-200/80 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
-            <div className="relative flex-1">
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3.5 shadow-2xs border border-slate-200/80 flex flex-col sm:flex-row gap-2 sm:gap-2.5 items-stretch sm:items-center justify-between transition-all">
+            {/* Arama Çubuğu */}
+            <div className="relative flex-1 min-w-0">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                 <Search className="w-3.5 h-3.5" />
               </span>
@@ -2619,35 +2807,41 @@ export function ResultsView() {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Öğrenci adı veya numarası ile ara..."
-                className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-slate-50/80 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 font-medium transition-all"
+                placeholder="Öğrenci adı veya no ile ara..."
+                className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-slate-50/90 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium transition-all shadow-2xs"
               />
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer rounded-full hover:bg-slate-100"
+                  aria-label="Aramayı Temizle"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            {/* Filtre ve Görünüm Kontrolleri (Mobilde 2 Eşit Sütun, Masaüstünde Yan Yana) */}
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
               {/* Sınıf Filtresi */}
               {availableClasses.length > 0 && (
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs">
-                  <Filter className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-slate-400 font-semibold hidden sm:inline">Sınıf:</span>
-                  <select
-                    value={selectedClassFilter}
-                    onChange={e => setSelectedClassFilter(e.target.value)}
-                    className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs"
-                  >
-                    <option value="ALL">Tüm Sınıflar ({currentExamResults.length})</option>
-                    {availableClasses.map(cls => (
-                      <option key={cls} value={cls}>{cls} ({classCounts[cls] || 0})</option>
-                    ))}
-                  </select>
+                <div className="relative w-full sm:w-auto">
+                  <div className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl pl-2.5 pr-7 py-2 text-xs font-bold text-slate-800 transition-colors shadow-2xs cursor-pointer">
+                    <Filter className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <select
+                      value={selectedClassFilter}
+                      onChange={e => setSelectedClassFilter(e.target.value)}
+                      className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs w-full appearance-none truncate"
+                      aria-label="Sınıf Filtresi"
+                    >
+                      <option value="ALL">Tüm Sınıflar ({currentExamResults.length})</option>
+                      {availableClasses.map(cls => (
+                        <option key={cls} value={cls}>{cls} ({classCounts[cls] || 0})</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
                 </div>
               )}
 
@@ -2656,15 +2850,15 @@ export function ResultsView() {
                 <button
                   type="button"
                   onClick={() => setShowSubjectColumns(prev => !prev)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  className={`w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
                     showSubjectColumns
-                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200 ring-1 ring-indigo-200'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                   }`}
                   title="Tabloda ders bazlı Doğru/Yanlış/Net sütunlarını göster veya gizle"
                 >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>{showSubjectColumns ? 'Dersleri Daralt' : 'Ders Netlerini Göster'}</span>
+                  <SlidersHorizontal className={`w-3.5 h-3.5 shrink-0 ${showSubjectColumns ? 'text-indigo-600' : 'text-slate-500'}`} />
+                  <span className="truncate">{showSubjectColumns ? 'Dersleri Daralt' : 'Ders Netleri'}</span>
                 </button>
               )}
             </div>
