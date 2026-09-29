@@ -240,6 +240,16 @@ export const BudgetView = () => {
     const key = `${item.studentId}_${item.examId}`;
     setSelectedStudentDebtKeys(prev => prev.filter(k => k !== key));
 
+    // Bütçe gelirlerine öğrenci adı ve tahsilatla kaydet
+    const newIncome = {
+      id: generateId(),
+      name: `${item.studentName} - Sınav Katılım Tahsilatı (${item.examName})`,
+      amount: item.fee,
+      studentId: item.studentId,
+      examId: item.examId
+    };
+    updateBudget('incomes', [...incomes, newIncome]);
+
     alert(`${item.studentName} isimli öğrenciden ₺${item.fee} kayıt ücreti tahsil edildi ve bütçe gelirlerine eklendi!`);
   };
 
@@ -417,6 +427,16 @@ export const BudgetView = () => {
         return s;
       });
       setStudents(updatedStudents);
+
+      // Bütçe gelirlerine her öğrenci için tahsilat geliri ekle
+      const newIncomes = debtsToCollect.map(d => ({
+        id: generateId(),
+        name: `${d.studentName} - Sınav Katılım Tahsilatı (${d.examName})`,
+        amount: d.fee,
+        studentId: d.studentId,
+        examId: d.examId
+      }));
+      updateBudget('incomes', [...incomes, ...newIncomes]);
 
       setSelectedStudentDebtKeys([]);
       alert(`Seçili ${debtsToCollect.length} öğrenciden toplam ₺${debtsToCollect.reduce((sum, d) => sum + d.fee, 0)} başarıyla tahsil edilerek bütçe gelirlerine entegre edildi!`);

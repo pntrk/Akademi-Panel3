@@ -1,6 +1,6 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Student } from '../types';
+import { Student, BudgetIncome } from '../types';
 import { exportToExcel, importFromExcel, generateId, normalizeForSearch, formatDateLong } from '../lib/utils';
 import { 
   Upload, Download, Edit2, Plus, Trash2, X, CheckSquare, Square, 
@@ -157,12 +157,17 @@ export const StudentsView = () => {
     const exams = state.exams.filter(e => selectedBulkExamIds.includes(e.id));
     if (exams.length === 0) return;
 
-    const fee = parseFloat(registrationFee.toString()) || 0;
+    const totalLumpSumFee = parseFloat(registrationFee.toString()) || 0;
+    const feePerExam = exams.length > 0 ? Math.round((totalLumpSumFee / exams.length) * 100) / 100 : 0;
 
     // 1. Update students in state with their new exam registrations
     let updatedStudents = [...state.students];
     
-    exams.forEach(exam => {
+    exams.forEach((exam, idx) => {
+      const examFee = idx === exams.length - 1
+        ? Math.max(0, Math.round((totalLumpSumFee - (feePerExam * (exams.length - 1))) * 100) / 100)
+        : feePerExam;
+
       updatedStudents = updatedStudents.map(s => {
         if (selectedStudentIds.includes(s.id)) {
           const regs = s.examRegistrations || [];
@@ -174,9 +179,9 @@ export const StudentsView = () => {
               ...filteredRegs,
               {
                 examId: exam.id,
-                fee: fee,
+                fee: examFee,
                 isPaid: registrationPaid,
-                dateRegistered: new Date().toLocaleDateString()
+                dateRegistered: new Date().toLocaleDateString('tr-TR')
               }
             ]
           };
@@ -187,7 +192,22 @@ export const StudentsView = () => {
 
     setStudents(updatedStudents);
 
-    alert(`Seçilen ${selectedStudentIds.length} öğrenci seçilen sınavlara başarıyla kaydedildi!`);
+    // 2. Bütçeye Gelir Entegrasyonu (Öğrenci adı ve toplu ödeme tutarıyla)
+    if (totalLumpSumFee > 0 && registrationPaid) {
+      const newIncomes = selectedStudentIds.map(stId => {
+        const st = state.students.find(s => s.id === stId);
+        const stLabel = st ? `${st.name}${st.no ? ` (No: ${st.no})` : ''}` : 'Öğrenci';
+        return {
+          id: generateId(),
+          name: `${stLabel} - Toplu Sınav Katılım Ücreti (${exams.length} Sınav)`,
+          amount: totalLumpSumFee,
+          studentId: stId
+        };
+      });
+      updateBudget('incomes', [...state.budget.incomes, ...newIncomes]);
+    }
+
+    alert(`Seçilen ${selectedStudentIds.length} öğrenci için sınav kayıtları tamamlandı${totalLumpSumFee > 0 && registrationPaid ? ` ve toplam ₺${selectedStudentIds.length * totalLumpSumFee} bütçe gelirlerine kaydedildi` : ''}!`);
     setSelectedStudentIds([]);
     setIsBulkModalOpen(false);
     setSelectedBulkExamIds([]);
@@ -266,18 +286,24 @@ export const StudentsView = () => {
     setExamHalls(updatedHalls);
   };
 
-  // Add exam registrations to a student from the detail modal
+  // Add exam registrations to a student from the detail modal with lump-sum fee
   const addDetailRegistrations = (studentId: string) => {
     if (selectedDetailExamIds.length === 0) return;
     
     const exams = state.exams.filter(e => selectedDetailExamIds.includes(e.id));
     if (exams.length === 0) return;
 
-    const fee = parseFloat(newRegFee.toString()) || 0;
+    const totalLumpSumFee = parseFloat(newRegFee.toString()) || 0;
+    const feePerExam = exams.length > 0 ? Math.round((totalLumpSumFee / exams.length) * 100) / 100 : 0;
+    const student = state.students.find(s => s.id === studentId);
 
     let updatedStudents = [...state.students];
 
-    exams.forEach(exam => {
+    exams.forEach((exam, idx) => {
+      const examFee = idx === exams.length - 1
+        ? Math.max(0, Math.round((totalLumpSumFee - (feePerExam * (exams.length - 1))) * 100) / 100)
+        : feePerExam;
+
       updatedStudents = updatedStudents.map(s => {
         if (s.id === studentId) {
           const regs = s.examRegistrations || [];
@@ -288,9 +314,9 @@ export const StudentsView = () => {
               ...filteredRegs,
               {
                 examId: exam.id,
-                fee: fee,
+                fee: examFee,
                 isPaid: newRegPaid,
-                dateRegistered: new Date().toLocaleDateString()
+                dateRegistered: new Date().toLocaleDateString('tr-TR')
               }
             ]
           };
@@ -301,10 +327,22 @@ export const StudentsView = () => {
 
     setStudents(updatedStudents);
 
+    // Bütçeye Gelir Entegrasyonu (Öğrenci adı ve toplu ödeme tutarıyla)
+    if (totalLumpSumFee > 0 && newRegPaid) {
+      const studentLabel = student ? `${student.name}${student.no ? ` (No: ${student.no})` : ''}` : 'Öğrenci';
+      const newIncome: BudgetIncome = {
+        id: generateId(),
+        name: `${studentLabel} - Toplu Sınav Katılım Ücreti (${exams.length} Sınav)`,
+        amount: totalLumpSumFee,
+        studentId: studentId
+      };
+      updateBudget('incomes', [...state.budget.incomes, newIncome]);
+    }
+
     // Reset states
     setSelectedDetailExamIds([]);
     setNewRegFee(0);
-    setNewRegPaid(false);
+    setNewRegPaid(true);
   };
 
   // Toggle single registration payment status
@@ -1338,7 +1376,7 @@ export const StudentsView = () => {
 
               <div>
                 <label className="block text-xs font-bold text-[#5a5a40] uppercase tracking-wider mb-1.5">
-                  Öğrenci Başına Ödenecek Ücret
+                  Öğrenci Başına Toplu Katılım Ücreti
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8e8d82] text-sm font-bold">₺</span>
@@ -1352,7 +1390,7 @@ export const StudentsView = () => {
                   />
                 </div>
                 <p className="text-[10px] text-[#8e8d82] leading-normal mt-1 italic">
-                  Öğrenci başına sınav kayıt ücreti belirleyebilirsiniz. Bu ücret ödeme durumuna göre bütçeye entegre edilir.
+                  Öğrencinin katıldığı tüm seçili sınavlar için geçerli tek ve toplu ödeme tutarıdır. Sınav başı ücret toplamaya gerek yoktur.
                 </p>
               </div>
 
@@ -1369,7 +1407,7 @@ export const StudentsView = () => {
                           : 'text-[#8e8d82] hover:text-[#5a5a40]'
                       }`}
                     >
-                      Ödendi (Gelir)
+                      Ödendi (Bütçeye Gelir)
                     </button>
                     <button
                       type="button"
@@ -1380,7 +1418,7 @@ export const StudentsView = () => {
                           : 'text-[#8e8d82] hover:text-red-600'
                       }`}
                     >
-                      Ödenmedi (Borç)
+                      Ödenmedi (Öğrenci Borcu)
                     </button>
                   </div>
                 </div>
@@ -1394,7 +1432,7 @@ export const StudentsView = () => {
                       Bütçe Geliri Otomatik Eşitlenecek!
                     </p>
                     <p className="text-[10px] text-emerald-700/90 leading-normal">
-                      {selectedStudentIds.length} Öğrenci × {selectedBulkExamIds.length} Sınav × ₺{registrationFee} = <strong>₺{selectedStudentIds.length * selectedBulkExamIds.length * registrationFee}</strong> toplam kayıt geliri bütçenize otomatik olarak gelir kalemi olarak eklenecektir.
+                      {selectedStudentIds.length} Öğrenci × ₺{registrationFee} = <strong>₺{selectedStudentIds.length * registrationFee}</strong> toplu sınav katılım geliri, her öğrencinin adına ayrı gelir olarak bütçeye otomatik kaydedilecektir.
                     </p>
                   </div>
                 ) : (
@@ -1404,7 +1442,7 @@ export const StudentsView = () => {
                       Öğrenci Borcu Otomatik Entegre Edilecek!
                     </p>
                     <p className="text-[10px] text-red-700/90 leading-normal">
-                      {selectedStudentIds.length} Öğrenci × {selectedBulkExamIds.length} Sınav × ₺{registrationFee} = <strong>₺{selectedStudentIds.length * selectedBulkExamIds.length * registrationFee}</strong> toplam tutar bütçede ve öğrenci detaylarında borç olarak görünecek, bütçede otomatik entegre olacaktır.
+                      {selectedStudentIds.length} Öğrenci × ₺{registrationFee} = <strong>₺{selectedStudentIds.length * registrationFee}</strong> toplam tutar bütçede ve öğrenci detaylarında borç olarak görünecek, bütçeyle otomatik entegre olacaktır.
                     </p>
                   </div>
                 )
@@ -2090,7 +2128,7 @@ export const StudentsView = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                         <div>
                           <label className="block text-[11px] font-bold text-[#737265] uppercase mb-1">
-                            Sınav Başına Kayıt Ücreti
+                            Toplu Sınav Katılım Ücreti
                           </label>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#737265] text-xs font-bold">₺</span>
@@ -2099,10 +2137,13 @@ export const StudentsView = () => {
                               value={newRegFee || ''}
                               onChange={(e) => setNewRegFee(parseFloat(e.target.value) || 0)}
                               className="w-full bg-white border border-[#e6e2d3] rounded-xl pl-7 pr-3 py-2 text-xs font-bold text-[#2d2c25] focus:ring-2 focus:ring-[#5a5a40]/20 focus:border-[#5a5a40] focus:outline-none transition-all"
-                              placeholder="0"
+                              placeholder="0,00"
                               min="0"
                             />
                           </div>
+                          <p className="text-[10px] text-[#737265] mt-1">
+                            Seçilen {selectedDetailExamIds.length > 0 ? `${selectedDetailExamIds.length} sınavın tümü` : 'tüm sınavlar'} için geçerli tek ve toplu ödeme tutarıdır.
+                          </p>
                         </div>
                         <div>
                           <label className="block text-[11px] font-bold text-[#737265] uppercase mb-1">
@@ -2113,15 +2154,20 @@ export const StudentsView = () => {
                             onChange={(e) => setNewRegPaid(e.target.value === 'paid')}
                             className="w-full bg-white border border-[#e6e2d3] rounded-xl px-3 py-2 text-xs text-[#2d2c25] font-bold focus:ring-2 focus:ring-[#5a5a40]/20 focus:border-[#5a5a40] focus:outline-none transition-all cursor-pointer"
                           >
-                            <option value="debt">Ödenmedi (Borç Olarak Ekle)</option>
-                            <option value="paid">Ödendi (Gelir Olarak Ekle)</option>
+                            <option value="paid">Ödendi (Bütçeye Gelir Olarak Ekle)</option>
+                            <option value="debt">Ödenmedi (Öğrenciye Borç Olarak Ekle)</option>
                           </select>
+                          <p className="text-[10px] text-[#737265] mt-1">
+                            {newRegPaid 
+                              ? 'Öğrencinin adı ve tutar bütçeye doğrudan gelir olarak kaydedilir.' 
+                              : 'Bütçede öğrencinin borç hanesine aktarılır.'}
+                          </p>
                         </div>
                       </div>
 
                       {/* Calculation & Budget Sync preview */}
                       {selectedDetailExamIds.length > 0 && newRegFee > 0 && (
-                        <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+                        <div className={`p-3 rounded-xl border text-xs flex items-center justify-between animate-fade-in ${
                           newRegPaid 
                             ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
                             : 'bg-rose-50 border-rose-200 text-rose-800'
@@ -2129,7 +2175,15 @@ export const StudentsView = () => {
                           <div className="flex items-center gap-2">
                             <Sparkles className="w-4 h-4 shrink-0" />
                             <span>
-                              {selectedDetailExamIds.length} Sınav × ₺{newRegFee} = <strong>₺{selectedDetailExamIds.length * newRegFee}</strong> ({newRegPaid ? 'Bütçeye Gelir Eklenecek' : 'Öğrenciye Borç Eklenecek'})
+                              {newRegPaid ? (
+                                <>
+                                  Toplu Ödeme: <strong>₺{newRegFee}</strong> ({selectedDetailExamIds.length} Sınav Paketi). Bütçeye <strong>{student.name}</strong> adına doğrudan gelir kaydedilecektir.
+                                </>
+                              ) : (
+                                <>
+                                  Toplu Borç: <strong>₺{newRegFee}</strong> ({selectedDetailExamIds.length} Sınav Paketi). Bütçeye <strong>{student.name}</strong> adına öğrenci borcu olarak işlenecektir.
+                                </>
+                              )}
                             </span>
                           </div>
                         </div>
@@ -2147,7 +2201,7 @@ export const StudentsView = () => {
                           }`}
                         >
                           <Check className="w-4 h-4" />
-                          <span>Öğrenciyi Seçilen Sınavlara Kaydet ({selectedDetailExamIds.length})</span>
+                          <span>Toplu Ödemeyi Kaydet ve Sınavlara Eşitle ({selectedDetailExamIds.length})</span>
                         </button>
                       </div>
                     </div>

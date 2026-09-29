@@ -1820,6 +1820,91 @@ export const ExamsView = () => {
     }).length;
   }, [state.students, selectedClasses]);
 
+  // Sınava katılan öğrenci sayıları, şube dağılımları ve sipariş/baskı planlama analizi
+  const examParticipantStats = useMemo(() => {
+    const activeGrades = selectedClasses.length > 0
+      ? selectedClasses
+      : (editingExam?.participatingClasses && editingExam.participatingClasses.length > 0)
+        ? editingExam.participatingClasses
+        : [];
+
+    const totalHallCapacity = selectedHalls.reduce((sum, hId) => {
+      const h = state.examHalls.find(hall => hall.id === hId);
+      return sum + (h?.capacity || 0);
+    }, 0);
+
+    const gradeBreakdown = activeGrades.map(lvl => {
+      const studentsInGrade = state.students.filter(s => {
+        const match = s.className ? s.className.trim().match(/^(\d+)/) : null;
+        const studentLvl = match ? match[1] : 'Diğer';
+        return studentLvl === lvl;
+      });
+
+      const branchMap: Record<string, number> = {};
+      studentsInGrade.forEach(s => {
+        const cls = s.className?.trim() || (lvl === 'Diğer' ? 'Diğer' : `${lvl}-Şube`);
+        branchMap[cls] = (branchMap[cls] || 0) + 1;
+      });
+
+      const branchList = Object.entries(branchMap)
+        .map(([branchName, count]) => ({ branchName, count }))
+        .sort((a, b) => a.branchName.localeCompare(b.branchName, 'tr'));
+
+      const registeredInGrade = editingExam?.id
+        ? studentsInGrade.filter(s => s.examRegistrations?.some(r => r.examId === editingExam.id))
+        : [];
+
+      const count = studentsInGrade.length;
+      const registeredCount = registeredInGrade.length;
+      const currentOrderQty = examGradeOrderQuantities[lvl] || 0;
+      const recommendedQty = registeredCount > 0 ? registeredCount : count;
+      const diff = currentOrderQty - recommendedQty;
+
+      return {
+        gradeLevel: lvl,
+        displayLabel: lvl === 'Diğer' ? 'Diğer Kademeler' : `${lvl}. Sınıf`,
+        studentCount: count,
+        registeredCount,
+        branchList,
+        currentOrderQty,
+        recommendedQty,
+        diff
+      };
+    });
+
+    const totalStudents = gradeBreakdown.reduce((sum, g) => sum + g.studentCount, 0);
+    const totalRegistered = gradeBreakdown.reduce((sum, g) => sum + g.registeredCount, 0);
+    const totalRecommended = gradeBreakdown.reduce((sum, g) => sum + g.recommendedQty, 0);
+    const totalCurrentOrder = gradeBreakdown.reduce((sum, g) => sum + g.currentOrderQty, 0);
+    const targetParticipants = totalRecommended > 0 ? totalRecommended : totalStudents;
+    const capacityBalance = totalHallCapacity - targetParticipants;
+
+    return {
+      activeGrades,
+      gradeBreakdown,
+      totalStudents,
+      totalRegistered,
+      totalRecommended,
+      totalCurrentOrder,
+      targetParticipants,
+      totalHallCapacity,
+      capacityBalance
+    };
+  }, [selectedClasses, editingExam, state.examHalls, selectedHalls, state.students, examGradeOrderQuantities]);
+
+  const handleApplyRecommendedOrderQuantities = (extraSparePerGrade: number = 0) => {
+    if (examParticipantStats.gradeBreakdown.length === 0) return;
+    const updated: Record<string, number> = { ...examGradeOrderQuantities };
+    let total = 0;
+    examParticipantStats.gradeBreakdown.forEach(g => {
+      const targetVal = Math.max(0, g.recommendedQty + extraSparePerGrade);
+      updated[g.gradeLevel] = targetVal;
+      total += targetVal;
+    });
+    setExamGradeOrderQuantities(updated);
+    setExamOrderQuantity(total);
+  };
+
   const formatDateLong = (dateStr: string) => {
     if (!dateStr) return '';
     let dateObj: Date | null = null;
@@ -3082,6 +3167,243 @@ export const ExamsView = () => {
                             </div>
                           )}
                         </div>
+                      </div>
+
+                      {/* Katılımcı Sayısı ve Kademelere Göre Sipariş Planlama Tablosu */}
+                      <div className="pt-3.5 border-t border-[#f2efe9] space-y-3">
+                        {/* Özet ve Kapasite Göstergesi */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#fcfbf7] p-3 rounded-xl border border-[#e6e2d3]/90">
+                          <div className="flex items-center space-x-2.5">
+                            <div className="p-2 bg-[#5a5a40] text-white rounded-xl shadow-2xs shrink-0">
+                              <Users className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-[#2d2c25] flex items-center gap-1.5">
+                                Sınava Katılan Kişi Sayısı & Sipariş Dağılımı
+                              </h5>
+                              <p className="text-[10px] text-[#737265]">
+                                Sınava dahil edilen kademelerin öğrenci sayıları ve sipariş tablosu
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center flex-wrap gap-1.5 text-xs">
+                            <div className="flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-[#e6e2d3] shadow-2xs">
+                              <span className="text-[11px] text-[#737265]">Katılımcı:</span>
+                              <strong className="text-xs font-bold text-indigo-700">
+                                {examParticipantStats.targetParticipants} Öğrenci
+                              </strong>
+                            </div>
+
+                            <div className="flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-[#e6e2d3] shadow-2xs">
+                              <span className="text-[11px] text-[#737265]">Salon Sırası:</span>
+                              <strong className="text-xs font-bold text-amber-800">
+                                {examParticipantStats.totalHallCapacity} Kapasite
+                              </strong>
+                            </div>
+
+                            {selectedHalls.length > 0 && (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                examParticipantStats.capacityBalance >= 0
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : 'bg-rose-50 text-rose-700 border-rose-200'
+                              }`}>
+                                {examParticipantStats.capacityBalance >= 0 
+                                  ? `+${examParticipantStats.capacityBalance} Boş Koltuk`
+                                  : `${Math.abs(examParticipantStats.capacityBalance)} Koltuk Yetersiz`
+                                }
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Detaylı Kademeler ve Sipariş Tablosu */}
+                        {examParticipantStats.gradeBreakdown.length > 0 ? (
+                          <div className="space-y-2.5">
+                            <div className="overflow-x-auto border border-[#e6e2d3] rounded-xl shadow-2xs bg-white">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                  <tr className="bg-[#f5f5f0] text-[#5a5a40] border-b border-[#e6e2d3] font-bold text-[11px]">
+                                    <th className="py-2.5 px-3">Sınıf Seviyesi</th>
+                                    <th className="py-2.5 px-3">Şube Dağılımı (Mevcutlar)</th>
+                                    <th className="py-2.5 px-3 text-center">Katılan Öğrenci</th>
+                                    <th className="py-2.5 px-3 text-center">Belirlenen Sipariş</th>
+                                    <th className="py-2.5 px-3 text-center">Sipariş Durumu</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#f2efe9]">
+                                  {examParticipantStats.gradeBreakdown.map((row) => {
+                                    const isComplete = row.currentOrderQty === row.recommendedQty && row.recommendedQty > 0;
+                                    const hasExcess = row.currentOrderQty > row.recommendedQty;
+                                    const isMissing = row.currentOrderQty < row.recommendedQty;
+
+                                    return (
+                                      <tr key={row.gradeLevel} className="hover:bg-[#fcfbf7] transition-colors">
+                                        {/* Sınıf Seviyesi */}
+                                        <td className="py-2.5 px-3">
+                                          <div className="flex items-center gap-1.5 font-bold text-[#2d2c25]">
+                                            <span className="w-2 h-2 rounded-full bg-[#5a5a40]"></span>
+                                            <span>{row.displayLabel}</span>
+                                          </div>
+                                        </td>
+
+                                        {/* Şube Dağılımı */}
+                                        <td className="py-2.5 px-3">
+                                          <div className="flex flex-wrap gap-1 max-w-[280px]">
+                                            {row.branchList.length > 0 ? (
+                                              row.branchList.map(b => (
+                                                <span 
+                                                  key={b.branchName}
+                                                  className="inline-flex items-center gap-1 text-[10px] bg-[#f5f5f0] text-[#43423b] px-1.5 py-0.5 rounded-md border border-[#e6e2d3]"
+                                                  title={`${b.branchName} Şubesi: ${b.count} Öğrenci`}
+                                                >
+                                                  <strong>{b.branchName}:</strong> {b.count}
+                                                </span>
+                                              ))
+                                            ) : (
+                                              <span className="text-[10px] text-[#8e8d82] italic">Şube kaydı yok</span>
+                                            )}
+                                          </div>
+                                        </td>
+
+                                        {/* Katılan Öğrenci Sayısı */}
+                                        <td className="py-2.5 px-3 text-center">
+                                          <div className="inline-flex flex-col items-center">
+                                            <span className="font-extrabold text-xs text-[#2d2c25] bg-indigo-50/70 border border-indigo-100 text-indigo-900 px-2.5 py-0.5 rounded-lg">
+                                              {row.recommendedQty} Öğrenci
+                                            </span>
+                                            {row.registeredCount > 0 && row.registeredCount !== row.studentCount && (
+                                              <span className="text-[9px] text-[#8e8d82] mt-0.5">
+                                                (Mevcut: {row.studentCount})
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+
+                                        {/* Belirlenen Sipariş Adedi (Hızlı Giriş) */}
+                                        <td className="py-2.5 px-3 text-center">
+                                          <div className="inline-flex items-center justify-center gap-1">
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              value={row.currentOrderQty || ''}
+                                              onChange={(e) => handleGradeOrderQuantityChange(row.gradeLevel, parseInt(e.target.value) || 0)}
+                                              placeholder="0"
+                                              className="w-16 bg-[#fcfbf7] border border-[#e6e2d3] rounded-lg px-2 py-1 text-xs font-bold text-center text-[#2d2c25] focus:ring-1 focus:ring-[#5a5a40] focus:border-[#5a5a40]"
+                                            />
+                                            <span className="text-[10px] text-[#737265] font-semibold">adet</span>
+                                          </div>
+                                        </td>
+
+                                        {/* Durum / Karşılama */}
+                                        <td className="py-2.5 px-3 text-center">
+                                          {row.currentOrderQty === 0 ? (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                                              <AlertCircle className="w-3 h-3 text-amber-600" />
+                                              Sipariş Girilmedi
+                                            </span>
+                                          ) : isComplete ? (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                              Birebir Eşit
+                                            </span>
+                                          ) : hasExcess ? (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
+                                              <Check className="w-3 h-3 text-blue-600" />
+                                              +{row.diff} Yedek Kitapçık
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                                              <AlertCircle className="w-3 h-3 text-rose-600" />
+                                              {Math.abs(row.diff)} Kitapçık Eksik
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+
+                                  {/* Toplam Satırı */}
+                                  <tr className="bg-[#fcfbf7] font-bold border-t-2 border-[#e6e2d3] text-xs">
+                                    <td className="py-2.5 px-3 text-[#2d2c25]">
+                                      TOPLAM
+                                    </td>
+                                    <td className="py-2.5 px-3 text-[#737265] text-[11px]">
+                                      {examParticipantStats.gradeBreakdown.length} Kademe Seçili
+                                    </td>
+                                    <td className="py-2.5 px-3 text-center">
+                                      <span className="text-xs font-black text-indigo-900 bg-indigo-100/70 px-2.5 py-0.5 rounded-md border border-indigo-200">
+                                        {examParticipantStats.targetParticipants} Öğrenci
+                                      </span>
+                                    </td>
+                                    <td className="py-2.5 px-3 text-center">
+                                      <span className="text-xs font-black text-[#2d2c25]">
+                                        {examParticipantStats.totalCurrentOrder} Adet
+                                      </span>
+                                    </td>
+                                    <td className="py-2.5 px-3 text-center">
+                                      {examParticipantStats.totalCurrentOrder === examParticipantStats.targetParticipants && examParticipantStats.targetParticipants > 0 ? (
+                                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                          Tam Eşitlendi
+                                        </span>
+                                      ) : examParticipantStats.totalCurrentOrder > examParticipantStats.targetParticipants ? (
+                                        <span className="text-[10px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                          +{examParticipantStats.totalCurrentOrder - examParticipantStats.targetParticipants} Yedek
+                                        </span>
+                                      ) : examParticipantStats.totalCurrentOrder === 0 ? (
+                                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                          Sipariş Bekliyor
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                          {examParticipantStats.targetParticipants - examParticipantStats.totalCurrentOrder} Eksik
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Hızlı Sipariş Doldurma ve İdareci Araçları */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                              <p className="text-[11px] text-[#737265] italic flex items-center gap-1">
+                                <Sparkles className="w-3.5 h-3.5 text-[#5a5a40]" />
+                                Sipariş adetlerini katılımcı sayısına göre tek tıkla otomatik doldurabilirsiniz:
+                              </p>
+                              
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApplyRecommendedOrderQuantities(0)}
+                                  className="text-xs font-bold bg-[#5a5a40] hover:bg-[#43423b] text-white px-3 py-1.5 rounded-xl shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                  title="Tüm sınıf seviyelerindeki sipariş adetlerini net öğrenci mevcuduna eşitler"
+                                >
+                                  <Check className="w-3.5 h-3.5 text-amber-300" />
+                                  <span>Öğrenci Sayısına Eşitle ({examParticipantStats.targetParticipants})</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleApplyRecommendedOrderQuantities(1)}
+                                  className="text-xs font-bold bg-white hover:bg-[#f5f5f0] text-[#43423b] border border-[#e6e2d3] px-2.5 py-1.5 rounded-xl shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                  title="Her kademe için +1 yedek / gözetmen kitapçığı ekler"
+                                >
+                                  <span>+1 Yedekli Eşitle</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 bg-[#fcfbf7] border border-dashed border-[#e6e2d3] rounded-xl text-center space-y-1.5">
+                            <p className="text-xs font-semibold text-[#5a5a40]">
+                              Henüz sınava katılacak sınıf seviyesi seçilmedi
+                            </p>
+                            <p className="text-[11px] text-[#8e8d82]">
+                              Yukarıdaki "Katılacak Sınıf Seviyeleri" bölümünden kademeleri seçtiğinizde, sınıflardaki öğrenci sayıları ve sipariş tablosu anında burada listelenir.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
 
