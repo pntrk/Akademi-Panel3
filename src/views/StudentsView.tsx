@@ -10,6 +10,12 @@ import {
   XCircle, ArrowUpDown, Layers, Receipt, CreditCard, GraduationCap, Hash, User
 } from 'lucide-react';
 
+export const formatCleanFee = (val: number): string => {
+  if (isNaN(val) || val === null || val === undefined) return '0';
+  const clean = Math.round((Number(val) + Number.EPSILON) * 100) / 100;
+  return clean.toString();
+};
+
 export const StudentsView = () => {
   const { state, setStudents, setResults, updateBudget, setExamHalls, userRole } = useAppContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,27 +109,32 @@ export const StudentsView = () => {
 
   // Overall registration statistics
   const stats = useMemo(() => {
-    let totalRegistrations = 0;
+    let totalRegisteredStudents = 0;
     let totalFees = 0;
     let totalUnpaidFees = 0;
     state.students.forEach(s => {
       const regs = s.examRegistrations || [];
-      totalRegistrations += regs.length;
-      regs.forEach(r => {
+      const relevantRegs = examFilter ? regs.filter(r => r.examId === examFilter) : regs;
+      if (relevantRegs.length > 0) {
+        totalRegisteredStudents++;
+      }
+      relevantRegs.forEach(r => {
+        const fee = Number(r.fee) || 0;
         if (r.isPaid) {
-          totalFees += r.fee;
+          totalFees += fee;
         } else {
-          totalUnpaidFees += r.fee;
+          totalUnpaidFees += fee;
         }
       });
     });
     return {
       totalStudents: state.students.length,
-      totalRegistrations,
-      totalFees,
-      totalUnpaidFees
+      totalRegisteredStudents,
+      totalRegistrations: totalRegisteredStudents,
+      totalFees: Math.round((totalFees + Number.EPSILON) * 100) / 100,
+      totalUnpaidFees: Math.round((totalUnpaidFees + Number.EPSILON) * 100) / 100
     };
-  }, [state.students]);
+  }, [state.students, examFilter]);
 
   // Checkbox functions
   const toggleSelectStudent = (id: string) => {
@@ -738,19 +749,19 @@ export const StudentsView = () => {
           </div>
         </div>
 
-        {/* Stat 2: Aktif Sınav Kaydı */}
+        {/* Stat 2: Sınava Kayıtlı Öğrenci */}
         <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-brand-accent/50">
           <div className="flex items-center gap-1.5 min-w-0 sm:w-full sm:justify-between sm:mb-2">
             <span className="text-[10px] sm:text-xs font-semibold text-brand-ink/60 uppercase tracking-wider truncate">
-              <span className="hidden sm:inline">Aktif </span>Kayıt
+              <span className="hidden sm:inline">Sınava </span>Kayıtlı
             </span>
             <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
               <Award className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </div>
           </div>
           <div className="flex items-baseline gap-1 shrink-0">
-            <span className="font-sans text-sm sm:text-2xl md:text-3xl font-bold tracking-tight text-brand-ink leading-none">{stats.totalRegistrations}</span>
-            <span className="text-[9px] sm:text-xs text-brand-ink/50 font-medium">sınav</span>
+            <span className="font-sans text-sm sm:text-2xl md:text-3xl font-bold tracking-tight text-brand-ink leading-none">{stats.totalRegisteredStudents}</span>
+            <span className="text-[9px] sm:text-xs text-brand-ink/50 font-medium">öğrenci</span>
           </div>
         </div>
 
@@ -765,7 +776,7 @@ export const StudentsView = () => {
             </div>
           </div>
           <div className="shrink-0">
-            <span className="font-sans text-sm sm:text-2xl md:text-3xl font-bold tracking-tight text-emerald-700 leading-none">₺{stats.totalFees}</span>
+            <span className="font-sans text-sm sm:text-2xl md:text-3xl font-bold tracking-tight text-emerald-700 leading-none">₺{formatCleanFee(stats.totalFees)}</span>
           </div>
         </div>
 
@@ -780,7 +791,7 @@ export const StudentsView = () => {
             </div>
           </div>
           <div className="shrink-0">
-            <span className="font-sans text-sm sm:text-2xl md:text-3xl font-bold tracking-tight text-rose-600 leading-none">₺{stats.totalUnpaidFees}</span>
+            <span className="font-sans text-sm sm:text-2xl md:text-3xl font-bold tracking-tight text-rose-600 leading-none">₺{formatCleanFee(stats.totalUnpaidFees)}</span>
           </div>
         </div>
       </section>
@@ -1054,8 +1065,8 @@ export const StudentsView = () => {
             const studentHalls = studentHallsMap[student.id] || [];
             const registrations = student.examRegistrations || [];
             
-            const unpaidTotal = registrations.reduce((acc, r) => !r.isPaid ? acc + (r.fee || 0) : acc, 0);
-            const paidTotal = registrations.reduce((acc, r) => r.isPaid ? acc + (r.fee || 0) : acc, 0);
+            const unpaidTotal = Math.round((registrations.reduce((acc, r) => !r.isPaid ? acc + (Number(r.fee) || 0) : acc, 0) + Number.EPSILON) * 100) / 100;
+            const paidTotal = Math.round((registrations.reduce((acc, r) => r.isPaid ? acc + (Number(r.fee) || 0) : acc, 0) + Number.EPSILON) * 100) / 100;
             const hasRegistrations = registrations.length > 0;
 
             const hasMissingHall = registrations.some(reg => 
@@ -1155,7 +1166,7 @@ export const StudentsView = () => {
                     unpaidTotal > 0 ? (
                       <div className="bg-rose-50 border border-rose-200 text-rose-700 px-2.5 py-0.5 rounded-lg text-[11px] font-bold flex items-center gap-1">
                         <AlertCircle className="w-3 h-3 text-rose-500" />
-                        <span>₺{unpaidTotal} Borç</span>
+                        <span>₺{formatCleanFee(unpaidTotal)} Borç</span>
                       </div>
                     ) : (
                       <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-0.5 rounded-lg text-[11px] font-bold flex items-center gap-1">
@@ -1580,9 +1591,9 @@ export const StudentsView = () => {
                       const regs = student.examRegistrations || [];
                       const paidCount = regs.filter(r => r.isPaid).length;
                       const unpaidCount = regs.filter(r => !r.isPaid).length;
-                      const paidAmount = regs.filter(r => r.isPaid).reduce((sum, r) => sum + (r.fee || 0), 0);
-                      const unpaidAmount = regs.filter(r => !r.isPaid).reduce((sum, r) => sum + (r.fee || 0), 0);
-                      const totalAmount = paidAmount + unpaidAmount;
+                      const paidAmount = Math.round((regs.filter(r => r.isPaid).reduce((sum, r) => sum + (Number(r.fee) || 0), 0) + Number.EPSILON) * 100) / 100;
+                      const unpaidAmount = Math.round((regs.filter(r => !r.isPaid).reduce((sum, r) => sum + (Number(r.fee) || 0), 0) + Number.EPSILON) * 100) / 100;
+                      const totalAmount = Math.round(((paidAmount + unpaidAmount) + Number.EPSILON) * 100) / 100;
 
                       return (
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
@@ -1596,13 +1607,13 @@ export const StudentsView = () => {
                           <div className="bg-[#fcfbf7] border border-[#e6e2d3] rounded-2xl p-3 sm:p-3.5">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-[#737265] block">Toplam Kayıt Tutarı</span>
                             <div className="flex items-baseline gap-1 mt-1">
-                              <span className="text-xl sm:text-2xl font-serif font-bold text-[#2d2c25]">₺{totalAmount}</span>
+                              <span className="text-xl sm:text-2xl font-serif font-bold text-[#2d2c25]">₺{formatCleanFee(totalAmount)}</span>
                             </div>
                           </div>
                           <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3 sm:p-3.5">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">Tahsil Edilen (Gelir)</span>
                             <div className="flex items-baseline gap-1 mt-1">
-                              <span className="text-xl sm:text-2xl font-serif font-bold text-emerald-700">₺{paidAmount}</span>
+                              <span className="text-xl sm:text-2xl font-serif font-bold text-emerald-700">₺{formatCleanFee(paidAmount)}</span>
                               <span className="text-[11px] font-semibold text-emerald-600">({paidCount})</span>
                             </div>
                           </div>
@@ -1631,7 +1642,7 @@ export const StudentsView = () => {
                               <span className={`text-xl sm:text-2xl font-serif font-bold ${
                                 unpaidAmount > 0 ? 'text-rose-700' : 'text-[#737265]'
                               }`}>
-                                ₺{unpaidAmount}
+                                ₺{formatCleanFee(unpaidAmount)}
                               </span>
                               {unpaidAmount > 0 && (
                                 <span className="text-[11px] font-semibold text-rose-600">({unpaidCount})</span>

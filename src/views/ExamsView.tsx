@@ -1957,12 +1957,12 @@ export const ExamsView = () => {
     return dateStr;
   };
 
-  // Total participants registered across filtered exams
+  // Total unique students registered across filtered exams (distinct students, not multiplied by exam count)
   const totalRegisteredParticipants = useMemo(() => {
-    return filteredAndSortedExams.reduce((sum, exam) => {
-      const regCount = state.students.filter(s => s.examRegistrations?.some(r => r.examId === exam.id)).length;
-      return sum + regCount;
-    }, 0);
+    const examIds = new Set(filteredAndSortedExams.map(e => e.id));
+    return state.students.filter(s => 
+      s.examRegistrations?.some(r => examIds.has(r.examId))
+    ).length;
   }, [filteredAndSortedExams, state.students]);
 
   return (
@@ -2163,11 +2163,11 @@ export const ExamsView = () => {
           </div>
         </div>
 
-        {/* Stat 4: Aktif Kayıtlı Katılım */}
+        {/* Stat 4: Katılan Toplam Öğrenci */}
         <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-emerald-300">
           <div className="flex items-center gap-1.5 min-w-0 sm:w-full sm:justify-between sm:mb-2">
             <span className="text-[10px] sm:text-xs font-semibold text-brand-ink/60 uppercase tracking-wider truncate">
-              <span className="hidden sm:inline">Kayıtlı </span>Katılım
+              <span className="hidden sm:inline">Katılan </span>Öğrenci
             </span>
             <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
               <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
