@@ -3,7 +3,7 @@ export interface Student {
   no: number;
   name: string;
   className: string;
-  examRegistrations?: { examId: string; fee: number; isPaid?: boolean; dateRegistered?: string }[];
+  examRegistrations?: { examId: string; fee: number; isPaid?: boolean; dateRegistered?: string; installment?: string }[];
   leagueTeam?: 'Kutup Yıldızları' | 'Sıçrama Ustaları' | 'Taktik Avcıları' | 'Atanmadı';
   leaguePoints?: number;
   badges?: { 

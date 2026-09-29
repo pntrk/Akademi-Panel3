@@ -36,12 +36,12 @@ export const StudentsView = () => {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [selectedBulkExamIds, setSelectedBulkExamIds] = useState<string[]>([]);
   const [registrationFee, setRegistrationFee] = useState<number>(0);
-  const [registrationPaid, setRegistrationPaid] = useState<boolean>(false);
+  const [bulkPaymentMode, setBulkPaymentMode] = useState<'paid' | 'installment' | 'debt'>('debt');
 
   // New registration states inside student details modal
   const [selectedDetailExamIds, setSelectedDetailExamIds] = useState<string[]>([]);
   const [newRegFee, setNewRegFee] = useState<number>(0);
-  const [newRegPaid, setNewRegPaid] = useState<boolean>(false);
+  const [newRegPaymentMode, setNewRegPaymentMode] = useState<'paid' | 'installment' | 'debt'>('debt');
 
   // Single student details modal
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
@@ -53,17 +53,24 @@ export const StudentsView = () => {
     state.examHalls.forEach(h => {
       if (h.seatingPlan) {
         h.seatingPlan.forEach(item => {
-          if (!map[item.studentId]) {
-            map[item.studentId] = [];
+          let stId = item.studentId;
+          if (!stId && item.studentNo) {
+            const found = state.students.find(s => s.no === item.studentNo);
+            if (found) stId = found.id;
           }
-          if (!map[item.studentId].some(existing => existing.id === h.id)) {
-            map[item.studentId].push({ id: h.id, name: h.name });
+          if (stId) {
+            if (!map[stId]) {
+              map[stId] = [];
+            }
+            if (!map[stId].some(existing => existing.id === h.id)) {
+              map[stId].push({ id: h.id, name: h.name });
+            }
           }
         });
       }
     });
     return map;
-  }, [state.examHalls]);
+  }, [state.examHalls, state.students]);
 
   // Compute unique classes for filter dropdown
   const uniqueClassesForFilter = useMemo(() => {
@@ -82,39 +89,41 @@ export const StudentsView = () => {
   // Filtered students list
   const filteredStudents = useMemo(() => {
     return state.students.filter(s => {
-      const matchesSearch = normalizeForSearch(s.name).includes(normalizeForSearch(searchQuery)) || 
-                            (s.no && s.no.toString().includes(searchQuery));
-      const matchesClass = !classFilter || s.className === classFilter;
+      const q = normalizeForSearch(searchQuery.trim());
+      const matchesSearch = !q || 
+                            normalizeForSearch(s.name).includes(q) || 
+                            (s.no && s.no.toString().includes(searchQuery.trim()));
+      
+      const matchesClass = !classFilter || (s.className || '').trim() === classFilter.trim();
       
       let matchesExam = true;
       if (examFilter) {
-        const exam = state.exams.find(e => e.id === examFilter);
-        if (exam && exam.participatingClasses && exam.participatingClasses.length > 0) {
-          const studentGrade = s.className ? (s.className.trim().match(/^(\d+)/)?.[1] || 'Diğer') : 'Diğer';
-          matchesExam = exam.participatingClasses.includes(studentGrade);
-        } else {
-          matchesExam = s.examRegistrations?.some(r => r.examId === examFilter) || false;
-        }
+        matchesExam = (s.examRegistrations || []).some(r => String(r.examId) === String(examFilter));
       }
 
       let matchesHall = true;
       if (hallFilter) {
         const assignedHalls = studentHallsMap[s.id] || [];
-        matchesHall = assignedHalls.some(h => h.id === hallFilter);
+        matchesHall = assignedHalls.some(h => String(h.id) === String(hallFilter)) ||
+                      state.examHalls.some(h => String(h.id) === String(hallFilter) && h.seatingPlan?.some(sp => sp.studentId === s.id || (sp.studentNo && s.no && sp.studentNo === s.no)));
       }
 
       return matchesSearch && matchesClass && matchesExam && matchesHall;
     }).reverse(); // En son eklenen en üstte çıksın
-  }, [state.students, searchQuery, classFilter, examFilter, hallFilter, state.exams, studentHallsMap]);
+  }, [state.students, searchQuery, classFilter, examFilter, hallFilter, state.examHalls, studentHallsMap]);
 
-  // Overall registration statistics
+  // Overall registration statistics based on active filters
   const stats = useMemo(() => {
     let totalRegisteredStudents = 0;
     let totalFees = 0;
     let totalUnpaidFees = 0;
-    state.students.forEach(s => {
+
+    const hasActiveFilter = !!(classFilter || examFilter || hallFilter || searchQuery.trim());
+    const targetStudents = hasActiveFilter ? filteredStudents : state.students;
+
+    targetStudents.forEach(s => {
       const regs = s.examRegistrations || [];
-      const relevantRegs = examFilter ? regs.filter(r => r.examId === examFilter) : regs;
+      const relevantRegs = examFilter ? regs.filter(r => String(r.examId) === String(examFilter)) : regs;
       if (relevantRegs.length > 0) {
         totalRegisteredStudents++;
       }
@@ -128,13 +137,13 @@ export const StudentsView = () => {
       });
     });
     return {
-      totalStudents: state.students.length,
+      totalStudents: targetStudents.length,
       totalRegisteredStudents,
       totalRegistrations: totalRegisteredStudents,
       totalFees: Math.round((totalFees + Number.EPSILON) * 100) / 100,
       totalUnpaidFees: Math.round((totalUnpaidFees + Number.EPSILON) * 100) / 100
     };
-  }, [state.students, examFilter]);
+  }, [state.students, filteredStudents, classFilter, examFilter, hallFilter, searchQuery]);
 
   // Checkbox functions
   const toggleSelectStudent = (id: string) => {
@@ -169,61 +178,151 @@ export const StudentsView = () => {
     if (exams.length === 0) return;
 
     const totalLumpSumFee = parseFloat(registrationFee.toString()) || 0;
-    const feePerExam = exams.length > 0 ? Math.round((totalLumpSumFee / exams.length) * 100) / 100 : 0;
-
-    // 1. Update students in state with their new exam registrations
     let updatedStudents = [...state.students];
-    
-    exams.forEach((exam, idx) => {
-      const examFee = idx === exams.length - 1
-        ? Math.max(0, Math.round((totalLumpSumFee - (feePerExam * (exams.length - 1))) * 100) / 100)
-        : feePerExam;
 
-      updatedStudents = updatedStudents.map(s => {
-        if (selectedStudentIds.includes(s.id)) {
-          const regs = s.examRegistrations || [];
-          // Prevent duplicate registrations for the same exam by removing prior entry
-          const filteredRegs = regs.filter(r => r.examId !== exam.id);
+    if (bulkPaymentMode === 'installment' && totalLumpSumFee > 0) {
+      // Taksitli Ödeme: Yarısı (%50) peşin ödendi (bütçeye gelir), kalanı borç
+      const paidHalf = Math.round((totalLumpSumFee / 2) * 100) / 100;
+      const debtHalf = Math.round((totalLumpSumFee - paidHalf) * 100) / 100;
+
+      if (exams.length === 1) {
+        const exam = exams[0];
+        updatedStudents = updatedStudents.map(s => {
+          if (selectedStudentIds.includes(s.id)) {
+            const regs = s.examRegistrations || [];
+            const filteredRegs = regs.filter(r => r.examId !== exam.id);
+            return {
+              ...s,
+              examRegistrations: [
+                ...filteredRegs,
+                {
+                  examId: exam.id,
+                  fee: debtHalf,
+                  isPaid: false,
+                  dateRegistered: new Date().toLocaleDateString('tr-TR'),
+                  installment: '1. Taksit (%50 Ödendi)'
+                }
+              ]
+            };
+          }
+          return s;
+        });
+      } else {
+        const paidCount = Math.floor(exams.length / 2);
+        const unpaidCount = exams.length - paidCount;
+
+        const paidFeePerExam = paidCount > 0 ? Math.round((paidHalf / paidCount) * 100) / 100 : 0;
+        const unpaidFeePerExam = unpaidCount > 0 ? Math.round((debtHalf / unpaidCount) * 100) / 100 : 0;
+
+        exams.forEach((exam, idx) => {
+          const isPaidPortion = idx < paidCount;
+          let examFee = 0;
+          if (isPaidPortion) {
+            examFee = idx === paidCount - 1
+              ? Math.max(0, Math.round((paidHalf - (paidFeePerExam * (paidCount - 1))) * 100) / 100)
+              : paidFeePerExam;
+          } else {
+            const unpaidIdx = idx - paidCount;
+            examFee = unpaidIdx === unpaidCount - 1
+              ? Math.max(0, Math.round((debtHalf - (unpaidFeePerExam * (unpaidCount - 1))) * 100) / 100)
+              : unpaidFeePerExam;
+          }
+
+          updatedStudents = updatedStudents.map(s => {
+            if (selectedStudentIds.includes(s.id)) {
+              const regs = s.examRegistrations || [];
+              const filteredRegs = regs.filter(r => r.examId !== exam.id);
+              return {
+                ...s,
+                examRegistrations: [
+                  ...filteredRegs,
+                  {
+                    examId: exam.id,
+                    fee: examFee,
+                    isPaid: isPaidPortion,
+                    dateRegistered: new Date().toLocaleDateString('tr-TR'),
+                    installment: isPaidPortion ? '1. Taksit (Ödendi)' : '2. Taksit (Kalan Borç)'
+                  }
+                ]
+              };
+            }
+            return s;
+          });
+        });
+      }
+
+      setStudents(updatedStudents);
+
+      // Bütçeye Gelir Entegrasyonu (Her öğrenci için 1. taksit tutarı)
+      if (paidHalf > 0) {
+        const newIncomes = selectedStudentIds.map(stId => {
+          const st = state.students.find(s => s.id === stId);
+          const stLabel = st ? `${st.name}${st.no ? ` (No: ${st.no})` : ''}` : 'Öğrenci';
           return {
-            ...s,
-            examRegistrations: [
-              ...filteredRegs,
-              {
-                examId: exam.id,
-                fee: examFee,
-                isPaid: registrationPaid,
-                dateRegistered: new Date().toLocaleDateString('tr-TR')
-              }
-            ]
+            id: generateId(),
+            name: `${stLabel} - Toplu Sınav Katılım Ücreti (1. Taksit / %50 - ${exams.length} Sınav)`,
+            amount: paidHalf,
+            studentId: stId
           };
-        }
-        return s;
-      });
-    });
+        });
+        updateBudget('incomes', [...state.budget.incomes, ...newIncomes]);
+      }
 
-    setStudents(updatedStudents);
+      alert(`Seçilen ${selectedStudentIds.length} öğrenci için sınav kayıtları tamamlandı. Öğrenci başına ₺${paidHalf} (Toplam: ₺${selectedStudentIds.length * paidHalf}) 1. taksit olarak bütçe gelirlerine kaydedildi, kalan ₺${debtHalf} borç olarak işlendi.`);
+    } else {
+      const isPaid = bulkPaymentMode === 'paid';
+      const feePerExam = exams.length > 0 ? Math.round((totalLumpSumFee / exams.length) * 100) / 100 : 0;
 
-    // 2. Bütçeye Gelir Entegrasyonu (Öğrenci adı ve toplu ödeme tutarıyla)
-    if (totalLumpSumFee > 0 && registrationPaid) {
-      const newIncomes = selectedStudentIds.map(stId => {
-        const st = state.students.find(s => s.id === stId);
-        const stLabel = st ? `${st.name}${st.no ? ` (No: ${st.no})` : ''}` : 'Öğrenci';
-        return {
-          id: generateId(),
-          name: `${stLabel} - Toplu Sınav Katılım Ücreti (${exams.length} Sınav)`,
-          amount: totalLumpSumFee,
-          studentId: stId
-        };
+      exams.forEach((exam, idx) => {
+        const examFee = idx === exams.length - 1
+          ? Math.max(0, Math.round((totalLumpSumFee - (feePerExam * (exams.length - 1))) * 100) / 100)
+          : feePerExam;
+
+        updatedStudents = updatedStudents.map(s => {
+          if (selectedStudentIds.includes(s.id)) {
+            const regs = s.examRegistrations || [];
+            const filteredRegs = regs.filter(r => r.examId !== exam.id);
+            return {
+              ...s,
+              examRegistrations: [
+                ...filteredRegs,
+                {
+                  examId: exam.id,
+                  fee: examFee,
+                  isPaid: isPaid,
+                  dateRegistered: new Date().toLocaleDateString('tr-TR')
+                }
+              ]
+            };
+          }
+          return s;
+        });
       });
-      updateBudget('incomes', [...state.budget.incomes, ...newIncomes]);
+
+      setStudents(updatedStudents);
+
+      if (totalLumpSumFee > 0 && isPaid) {
+        const newIncomes = selectedStudentIds.map(stId => {
+          const st = state.students.find(s => s.id === stId);
+          const stLabel = st ? `${st.name}${st.no ? ` (No: ${st.no})` : ''}` : 'Öğrenci';
+          return {
+            id: generateId(),
+            name: `${stLabel} - Toplu Sınav Katılım Ücreti (${exams.length} Sınav)`,
+            amount: totalLumpSumFee,
+            studentId: stId
+          };
+        });
+        updateBudget('incomes', [...state.budget.incomes, ...newIncomes]);
+      }
+
+      alert(`Seçilen ${selectedStudentIds.length} öğrenci için sınav kayıtları tamamlandı${totalLumpSumFee > 0 && isPaid ? ` ve toplam ₺${selectedStudentIds.length * totalLumpSumFee} bütçe gelirlerine kaydedildi` : ''}!`);
     }
 
-    alert(`Seçilen ${selectedStudentIds.length} öğrenci için sınav kayıtları tamamlandı${totalLumpSumFee > 0 && registrationPaid ? ` ve toplam ₺${selectedStudentIds.length * totalLumpSumFee} bütçe gelirlerine kaydedildi` : ''}!`);
     setSelectedStudentIds([]);
     setIsBulkModalOpen(false);
     setSelectedBulkExamIds([]);
     setRegistrationFee(0);
-    setRegistrationPaid(false);
+    setBulkPaymentMode('debt');
   };
 
   const handleBulkDelete = () => {
@@ -298,6 +397,7 @@ export const StudentsView = () => {
   };
 
   // Add exam registrations to a student from the detail modal with lump-sum fee
+  // Add exam registrations to a student from the detail modal with lump-sum fee
   const addDetailRegistrations = (studentId: string) => {
     if (selectedDetailExamIds.length === 0) return;
     
@@ -305,55 +405,143 @@ export const StudentsView = () => {
     if (exams.length === 0) return;
 
     const totalLumpSumFee = parseFloat(newRegFee.toString()) || 0;
-    const feePerExam = exams.length > 0 ? Math.round((totalLumpSumFee / exams.length) * 100) / 100 : 0;
     const student = state.students.find(s => s.id === studentId);
+    const studentLabel = student ? `${student.name}${student.no ? ` (No: ${student.no})` : ''}` : 'Öğrenci';
 
     let updatedStudents = [...state.students];
 
-    exams.forEach((exam, idx) => {
-      const examFee = idx === exams.length - 1
-        ? Math.max(0, Math.round((totalLumpSumFee - (feePerExam * (exams.length - 1))) * 100) / 100)
-        : feePerExam;
+    if (newRegPaymentMode === 'installment' && totalLumpSumFee > 0) {
+      // 1. Taksit Ödendi: Toplu katılım ücretinin yarısı (%50) peşin ödendi (bütçeye gelir), kalanı borçtur
+      const paidHalf = Math.round((totalLumpSumFee / 2) * 100) / 100;
+      const debtHalf = Math.round((totalLumpSumFee - paidHalf) * 100) / 100;
 
-      updatedStudents = updatedStudents.map(s => {
-        if (s.id === studentId) {
-          const regs = s.examRegistrations || [];
-          const filteredRegs = regs.filter(r => r.examId !== exam.id);
-          return {
-            ...s,
-            examRegistrations: [
-              ...filteredRegs,
-              {
-                examId: exam.id,
-                fee: examFee,
-                isPaid: newRegPaid,
-                dateRegistered: new Date().toLocaleDateString('tr-TR')
-              }
-            ]
-          };
-        }
-        return s;
+      if (exams.length === 1) {
+        // Tek sınav ise: Borç kalan yarısı kadar oluşturulur, taksit bilgisi eklenir
+        const exam = exams[0];
+        updatedStudents = updatedStudents.map(s => {
+          if (s.id === studentId) {
+            const regs = s.examRegistrations || [];
+            const filteredRegs = regs.filter(r => r.examId !== exam.id);
+            return {
+              ...s,
+              examRegistrations: [
+                ...filteredRegs,
+                {
+                  examId: exam.id,
+                  fee: debtHalf,
+                  isPaid: false,
+                  dateRegistered: new Date().toLocaleDateString('tr-TR'),
+                  installment: '1. Taksit (%50 Ödendi)'
+                }
+              ]
+            };
+          }
+          return s;
+        });
+      } else {
+        // Çoklu sınav: Sınavlar ikiye bölünür (ilk yarı ödendi, ikinci yarı borç)
+        const paidCount = Math.floor(exams.length / 2);
+        const unpaidCount = exams.length - paidCount;
+
+        const paidFeePerExam = paidCount > 0 ? Math.round((paidHalf / paidCount) * 100) / 100 : 0;
+        const unpaidFeePerExam = unpaidCount > 0 ? Math.round((debtHalf / unpaidCount) * 100) / 100 : 0;
+
+        exams.forEach((exam, idx) => {
+          const isPaidPortion = idx < paidCount;
+          let examFee = 0;
+          if (isPaidPortion) {
+            examFee = idx === paidCount - 1
+              ? Math.max(0, Math.round((paidHalf - (paidFeePerExam * (paidCount - 1))) * 100) / 100)
+              : paidFeePerExam;
+          } else {
+            const unpaidIdx = idx - paidCount;
+            examFee = unpaidIdx === unpaidCount - 1
+              ? Math.max(0, Math.round((debtHalf - (unpaidFeePerExam * (unpaidCount - 1))) * 100) / 100)
+              : unpaidFeePerExam;
+          }
+
+          updatedStudents = updatedStudents.map(s => {
+            if (s.id === studentId) {
+              const regs = s.examRegistrations || [];
+              const filteredRegs = regs.filter(r => r.examId !== exam.id);
+              return {
+                ...s,
+                examRegistrations: [
+                  ...filteredRegs,
+                  {
+                    examId: exam.id,
+                    fee: examFee,
+                    isPaid: isPaidPortion,
+                    dateRegistered: new Date().toLocaleDateString('tr-TR'),
+                    installment: isPaidPortion ? '1. Taksit (Ödendi)' : '2. Taksit (Kalan Borç)'
+                  }
+                ]
+              };
+            }
+            return s;
+          });
+        });
+      }
+
+      // Bütçeye Gelir Entegrasyonu: 1. Taksit tutarı (%50) anında bütçe gelirlerine kaydedilir
+      if (paidHalf > 0) {
+        const newIncome: BudgetIncome = {
+          id: generateId(),
+          name: `${studentLabel} - Toplu Sınav Katılım Ücreti (1. Taksit / %50 - ${exams.length} Sınav)`,
+          amount: paidHalf,
+          studentId: studentId
+        };
+        updateBudget('incomes', [...state.budget.incomes, newIncome]);
+      }
+    } else {
+      // 'paid' veya 'debt' modu
+      const isPaid = newRegPaymentMode === 'paid';
+      const feePerExam = exams.length > 0 ? Math.round((totalLumpSumFee / exams.length) * 100) / 100 : 0;
+
+      exams.forEach((exam, idx) => {
+        const examFee = idx === exams.length - 1
+          ? Math.max(0, Math.round((totalLumpSumFee - (feePerExam * (exams.length - 1))) * 100) / 100)
+          : feePerExam;
+
+        updatedStudents = updatedStudents.map(s => {
+          if (s.id === studentId) {
+            const regs = s.examRegistrations || [];
+            const filteredRegs = regs.filter(r => r.examId !== exam.id);
+            return {
+              ...s,
+              examRegistrations: [
+                ...filteredRegs,
+                {
+                  examId: exam.id,
+                  fee: examFee,
+                  isPaid: isPaid,
+                  dateRegistered: new Date().toLocaleDateString('tr-TR')
+                }
+              ]
+            };
+          }
+          return s;
+        });
       });
-    });
+
+      // Bütçeye Gelir Entegrasyonu
+      if (totalLumpSumFee > 0 && isPaid) {
+        const newIncome: BudgetIncome = {
+          id: generateId(),
+          name: `${studentLabel} - Toplu Sınav Katılım Ücreti (${exams.length} Sınav)`,
+          amount: totalLumpSumFee,
+          studentId: studentId
+        };
+        updateBudget('incomes', [...state.budget.incomes, newIncome]);
+      }
+    }
 
     setStudents(updatedStudents);
-
-    // Bütçeye Gelir Entegrasyonu (Öğrenci adı ve toplu ödeme tutarıyla)
-    if (totalLumpSumFee > 0 && newRegPaid) {
-      const studentLabel = student ? `${student.name}${student.no ? ` (No: ${student.no})` : ''}` : 'Öğrenci';
-      const newIncome: BudgetIncome = {
-        id: generateId(),
-        name: `${studentLabel} - Toplu Sınav Katılım Ücreti (${exams.length} Sınav)`,
-        amount: totalLumpSumFee,
-        studentId: studentId
-      };
-      updateBudget('incomes', [...state.budget.incomes, newIncome]);
-    }
 
     // Reset states
     setSelectedDetailExamIds([]);
     setNewRegFee(0);
-    setNewRegPaid(true);
+    setNewRegPaymentMode('debt');
   };
 
   // Toggle single registration payment status
@@ -1408,35 +1596,46 @@ export const StudentsView = () => {
               {registrationFee > 0 && (
                 <div>
                   <label className="block text-xs font-bold text-[#5a5a40] uppercase tracking-wider mb-1.5">Ödeme Durumu</label>
-                  <div className="grid grid-cols-2 gap-2 bg-[#fcfbf7] p-1 border border-[#e6e2d3] rounded-xl">
+                  <div className="grid grid-cols-3 gap-2 bg-[#fcfbf7] p-1 border border-[#e6e2d3] rounded-xl">
                     <button
                       type="button"
-                      onClick={() => setRegistrationPaid(true)}
-                      className={`py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
-                        registrationPaid
+                      onClick={() => setBulkPaymentMode('paid')}
+                      className={`py-1.5 px-2 text-xs font-bold rounded-lg transition-all ${
+                        bulkPaymentMode === 'paid'
                           ? 'bg-[#5a5a40] text-white shadow-sm'
                           : 'text-[#8e8d82] hover:text-[#5a5a40]'
                       }`}
                     >
-                      Ödendi (Bütçeye Gelir)
+                      Tamamı Ödendi
                     </button>
                     <button
                       type="button"
-                      onClick={() => setRegistrationPaid(false)}
-                      className={`py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
-                        !registrationPaid
+                      onClick={() => setBulkPaymentMode('installment')}
+                      className={`py-1.5 px-2 text-xs font-bold rounded-lg transition-all ${
+                        bulkPaymentMode === 'installment'
+                          ? 'bg-amber-600 text-white shadow-sm'
+                          : 'text-[#8e8d82] hover:text-amber-600'
+                      }`}
+                    >
+                      Taksit Ödendi (%50)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkPaymentMode('debt')}
+                      className={`py-1.5 px-2 text-xs font-bold rounded-lg transition-all ${
+                        bulkPaymentMode === 'debt'
                           ? 'bg-red-600 text-white shadow-sm'
                           : 'text-[#8e8d82] hover:text-red-600'
                       }`}
                     >
-                      Ödenmedi (Öğrenci Borcu)
+                      Ödenmedi (Borç)
                     </button>
                   </div>
                 </div>
               )}
 
               {selectedBulkExamIds.length > 0 && registrationFee > 0 && (
-                registrationPaid ? (
+                bulkPaymentMode === 'paid' ? (
                   <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100 text-emerald-800 space-y-1">
                     <p className="text-xs font-bold flex items-center">
                       <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-600 shrink-0" />
@@ -1444,6 +1643,16 @@ export const StudentsView = () => {
                     </p>
                     <p className="text-[10px] text-emerald-700/90 leading-normal">
                       {selectedStudentIds.length} Öğrenci × ₺{registrationFee} = <strong>₺{selectedStudentIds.length * registrationFee}</strong> toplu sınav katılım geliri, her öğrencinin adına ayrı gelir olarak bütçeye otomatik kaydedilecektir.
+                    </p>
+                  </div>
+                ) : bulkPaymentMode === 'installment' ? (
+                  <div className="bg-amber-50 rounded-xl p-3 border border-amber-100 text-amber-900 space-y-1">
+                    <p className="text-xs font-bold flex items-center">
+                      <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-600 shrink-0" />
+                      Taksit ve Bütçe Entegrasyonu!
+                    </p>
+                    <p className="text-[10px] text-amber-800/90 leading-normal">
+                      Öğrenci başına ₺{registrationFee} ücretin yarısı olan <strong>₺{Math.round((registrationFee / 2) * 100) / 100}</strong> (Toplam: <strong>₺{selectedStudentIds.length * Math.round((registrationFee / 2) * 100) / 100}</strong>) bütçeye gelir kaydedilecek, kalan <strong>₺{Math.round((registrationFee - Math.round((registrationFee / 2) * 100) / 100) * 100) / 100}</strong> ise öğrenci borcu olarak işlenecektir.
                     </p>
                   </div>
                 ) : (
@@ -1800,6 +2009,11 @@ export const StudentsView = () => {
                                     <td className="py-3 px-4">
                                       <div className="flex items-center space-x-2">
                                         <span className="font-bold text-[#2d2c25]">₺{reg.fee}</span>
+                                        {reg.installment && (
+                                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                                            {reg.installment}
+                                          </span>
+                                        )}
                                         <button
                                           type="button"
                                           onClick={() => toggleRegistrationPayment(student.id, reg.examId)}
@@ -1961,6 +2175,11 @@ export const StudentsView = () => {
                                 <div className="flex items-center justify-between pt-1 border-t border-[#f0eee6]">
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs font-bold text-[#2d2c25]">₺{reg.fee}</span>
+                                    {reg.installment && (
+                                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                                        {reg.installment}
+                                      </span>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => toggleRegistrationPayment(student.id, reg.examId)}
@@ -2161,17 +2380,18 @@ export const StudentsView = () => {
                             Ödeme Durumu
                           </label>
                           <select
-                            value={newRegPaid ? 'paid' : 'debt'}
-                            onChange={(e) => setNewRegPaid(e.target.value === 'paid')}
+                            value={newRegPaymentMode}
+                            onChange={(e) => setNewRegPaymentMode(e.target.value as 'paid' | 'installment' | 'debt')}
                             className="w-full bg-white border border-[#e6e2d3] rounded-xl px-3 py-2 text-xs text-[#2d2c25] font-bold focus:ring-2 focus:ring-[#5a5a40]/20 focus:border-[#5a5a40] focus:outline-none transition-all cursor-pointer"
                           >
-                            <option value="paid">Ödendi (Bütçeye Gelir Olarak Ekle)</option>
+                            <option value="paid">Ödendi (Tamamı Ödendi - Bütçeye Gelir)</option>
+                            <option value="installment">Taksit Ödendi (Yarısı Ödendi / Kalan Borç)</option>
                             <option value="debt">Ödenmedi (Öğrenciye Borç Olarak Ekle)</option>
                           </select>
                           <p className="text-[10px] text-[#737265] mt-1">
-                            {newRegPaid 
-                              ? 'Öğrencinin adı ve tutar bütçeye doğrudan gelir olarak kaydedilir.' 
-                              : 'Bütçede öğrencinin borç hanesine aktarılır.'}
+                            {newRegPaymentMode === 'paid' && 'Öğrencinin adı ve tutar bütçeye doğrudan gelir olarak kaydedilir.'}
+                            {newRegPaymentMode === 'installment' && 'Toplu sınav ücretinin yarısı (%50) bütçeye gelir kaydedilir, kalan yarısı öğrenci borcu olarak işlenir.'}
+                            {newRegPaymentMode === 'debt' && 'Bütçede öğrencinin borç hanesine aktarılır.'}
                           </p>
                         </div>
                       </div>
@@ -2179,18 +2399,26 @@ export const StudentsView = () => {
                       {/* Calculation & Budget Sync preview */}
                       {selectedDetailExamIds.length > 0 && newRegFee > 0 && (
                         <div className={`p-3 rounded-xl border text-xs flex items-center justify-between animate-fade-in ${
-                          newRegPaid 
+                          newRegPaymentMode === 'paid' 
                             ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                            : newRegPaymentMode === 'installment'
+                            ? 'bg-amber-50 border-amber-200 text-amber-900'
                             : 'bg-rose-50 border-rose-200 text-rose-800'
                         }`}>
                           <div className="flex items-center gap-2">
                             <Sparkles className="w-4 h-4 shrink-0" />
                             <span>
-                              {newRegPaid ? (
+                              {newRegPaymentMode === 'paid' && (
                                 <>
                                   Toplu Ödeme: <strong>₺{newRegFee}</strong> ({selectedDetailExamIds.length} Sınav Paketi). Bütçeye <strong>{student.name}</strong> adına doğrudan gelir kaydedilecektir.
                                 </>
-                              ) : (
+                              )}
+                              {newRegPaymentMode === 'installment' && (
+                                <>
+                                  1. Taksit Ödemesi: Toplam ₺{newRegFee} ücretin yarısı olan <strong>₺{Math.round((newRegFee / 2) * 100) / 100}</strong> (%50) <strong>{student.name}</strong> adına bütçeye gelir kaydedilecek, kalan <strong>₺{Math.round((newRegFee - Math.round((newRegFee / 2) * 100) / 100) * 100) / 100}</strong> ise öğrenci borcu olarak işlenecektir.
+                                </>
+                              )}
+                              {newRegPaymentMode === 'debt' && (
                                 <>
                                   Toplu Borç: <strong>₺{newRegFee}</strong> ({selectedDetailExamIds.length} Sınav Paketi). Bütçeye <strong>{student.name}</strong> adına öğrenci borcu olarak işlenecektir.
                                 </>
