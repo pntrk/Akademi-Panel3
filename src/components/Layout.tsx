@@ -5,7 +5,7 @@ import {
   LogOut, Shield, Download, Globe, HardDriveDownload, Cloud, 
   Bell, Camera, Printer, TrendingUp, HelpCircle, ChevronRight, 
   Sparkles, Zap, CheckCircle2, User as UserIcon, RefreshCw,
-  Sliders, AlertCircle, AlertTriangle, ExternalLink
+  Sliders, AlertCircle, AlertTriangle, ExternalLink, FolderCheck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAppContext } from '../context/AppContext';
@@ -134,7 +134,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     syncStatus, 
     syncErrorMessage, 
     pendingSyncCount,
+    hasPendingChanges,
+    publishToCloud,
     lastSyncedAt,
+    lastDriveSyncedAt,
+    isDriveAutoSyncing,
+    syncToDriveNow,
     saveNow, 
     retrySync,
     cloudBackups,
@@ -145,6 +150,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     openNotificationModal
   } = useAppContext();
   
+  const [isPublishing, setIsPublishing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFirebaseStatusOpen, setIsFirebaseStatusOpen] = useState(false);
   const [isCloudBackupOpen, setIsCloudBackupOpen] = useState(false);
@@ -818,16 +824,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-auto bg-brand-bg text-brand-ink transition-colors duration-200 w-full pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-0">
         
-        {/* 📱 Mobile Header - Modern Elevated Glassmorphism */}
-        <header className="md:hidden flex items-center justify-between px-3.5 py-2.5 bg-[#131418]/95 backdrop-blur-xl text-white border-b border-white/10 shrink-0 sticky top-0 z-30 shadow-md">
+        {/* 📱 Mobile Header - Clean Elevated Warm Glassmorphism */}
+        <header className="md:hidden flex items-center justify-between px-3.5 py-2.5 bg-[#FAF9F5]/95 dark:bg-[#131418]/95 backdrop-blur-xl text-[#2d2c25] dark:text-white border-b border-[#e6e2d3] dark:border-white/10 shrink-0 sticky top-0 z-30 shadow-2xs">
           <div className="flex items-center gap-2.5">
             <img 
               src="/apple-touch-icon.png" 
               alt="AkademiPanel" 
-              className="w-8 h-8 rounded-xl shadow-xs border border-white/15 shrink-0 object-cover" 
+              className="w-8 h-8 rounded-xl shadow-2xs border border-[#e6e2d3] dark:border-white/15 shrink-0 object-cover" 
             />
             <div>
-              <h1 className="font-serif text-sm italic font-bold tracking-tight text-white leading-none">AkademiPanel</h1>
+              <h1 className="font-serif text-sm italic font-bold tracking-tight text-[#2d2c25] dark:text-white leading-none">AkademiPanel</h1>
               {(() => {
                 const current = navItems.find(i => i.id === activeTab);
                 return current ? (
@@ -840,14 +846,40 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
           </div>
           
           <div className="flex items-center gap-1.5">
+            {/* Mobile Publish to Cloud Action */}
+            {userRole === 'admin' && (hasPendingChanges || syncStatus === 'pending_publish') && (
+              <button
+                onClick={async () => {
+                  setIsPublishing(true);
+                  try {
+                    await publishToCloud();
+                    setSaveFeedback("✓ Buluta aktarıldı");
+                    setTimeout(() => setSaveFeedback(null), 3000);
+                  } catch (e) {
+                    setSaveFeedback("⚠️ Hata oluştu");
+                    setTimeout(() => setSaveFeedback(null), 3000);
+                  } finally {
+                    setIsPublishing(false);
+                  }
+                }}
+                disabled={isPublishing}
+                aria-label="Buluta Yayınla"
+                title="Bekleyen Değişiklikleri Buluta Yayınla"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500 text-slate-950 font-bold text-[11px] shadow-xs active:scale-95 animate-pulse cursor-pointer disabled:opacity-50"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Yayınla ({pendingSyncCount})</span>
+              </button>
+            )}
+
             {/* Quick Guide Pill */}
             <button
               onClick={() => setIsGuideOpen(true)}
               aria-label="Nasıl Çalışır?"
               title="Kurum İçi Optik Deneme İş Akışı Rehberi"
-              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 active:scale-95 text-purple-300 border border-purple-500/30 transition-all cursor-pointer font-bold text-[11px]"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-100 dark:bg-purple-500/20 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30 transition-all cursor-pointer font-bold text-[11px]"
             >
-              <Zap className="w-3.5 h-3.5 text-amber-400 fill-current" />
+              <Zap className="w-3.5 h-3.5 text-amber-500 fill-current" />
               <span>Rehber</span>
             </button>
 
@@ -856,9 +888,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
               onClick={() => openNotificationModal()} 
               aria-label="Bildirimler"
               title="Anlık Bildirimler & Duyurular"
-              className="relative w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-white/80 border border-white/10 transition-all cursor-pointer"
+              className="relative w-8 h-8 flex items-center justify-center rounded-xl bg-white dark:bg-white/10 hover:bg-gray-100 text-[#5a5a40] dark:text-white/80 border border-[#e6e2d3] dark:border-white/10 transition-all cursor-pointer shadow-2xs"
             >
-              <Bell className="w-4 h-4 text-amber-400" />
+              <Bell className="w-4 h-4 text-amber-500" />
               {unreadNotificationsCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-[9px] font-black text-white flex items-center justify-center shadow-xs animate-pulse">
                   {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
@@ -870,22 +902,134 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
             <button 
               onClick={() => setIsDarkMode(!isDarkMode)} 
               aria-label="Temayı Değiştir"
-              className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-white/80 border border-white/10 transition-all cursor-pointer"
+              className="w-8 h-8 flex items-center justify-center rounded-xl bg-white dark:bg-white/10 hover:bg-gray-100 text-[#5a5a40] dark:text-white/80 border border-[#e6e2d3] dark:border-white/10 transition-all cursor-pointer shadow-2xs"
             >
-              {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-300" />}
+              {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-indigo-500" />}
             </button>
 
             {/* Profile / Menu Bottom Sheet Trigger */}
             <button 
               onClick={() => setIsMobileMenuOpen(true)} 
               aria-label="Hesap ve Menü"
-              className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 text-white border border-white/15 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-xl bg-white dark:bg-white/10 hover:bg-gray-100 text-[#2d2c25] dark:text-white border border-[#e6e2d3] dark:border-white/15 transition-all cursor-pointer shadow-2xs"
             >
               <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-brand-accent to-[#8d6f3e] text-white flex items-center justify-center text-[10px] font-bold">
                 {currentUser?.email ? currentUser.email.charAt(0).toUpperCase() : 'A'}
               </div>
-              <Sliders className="w-3.5 h-3.5 text-white/70" />
+              <Sliders className="w-3.5 h-3.5 text-[#737265] dark:text-white/70" />
             </button>
+          </div>
+        </header>
+
+        {/* 💻 Desktop Top Header: Hybrid Sync Status & Quick Actions */}
+        <header className="hidden md:flex items-center justify-between px-6 py-2.5 bg-[#FAF9F5]/95 dark:bg-[#18191d]/95 backdrop-blur-md border-b border-[#e6e2d3] dark:border-slate-800 shrink-0 sticky top-0 z-30 shadow-2xs transition-colors">
+          <div className="flex items-center gap-3">
+            {/* Active Tab Info */}
+            {(() => {
+              const current = navItems.find(i => i.id === activeTab);
+              return current ? (
+                <div className="flex items-center gap-2.5">
+                  <div className={cn("w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 shadow-2xs", current.activeIconBg)}>
+                    <current.icon className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xs font-bold font-serif tracking-tight text-[#2d2c25] dark:text-slate-100 leading-tight">{current.label}</h2>
+                    <p className="text-[10px] text-[#737265] dark:text-slate-400 font-medium leading-tight">Kırklareli Atatürk Ortaokulu • AkademiPanel</p>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {/* Hybrid Sync Status & Publish Button */}
+            {userRole === 'admin' && (
+              <>
+                {syncStatus === 'pending_publish' || hasPendingChanges ? (
+                  <button
+                    onClick={async () => {
+                      setIsPublishing(true);
+                      try {
+                        await publishToCloud();
+                        setSaveFeedback("✓ Tüm değişiklikler buluta yayınlandı");
+                        setTimeout(() => setSaveFeedback(null), 3500);
+                      } catch (e: any) {
+                        setSaveFeedback("⚠️ Buluta aktarılırken hata oluştu");
+                        setTimeout(() => setSaveFeedback(null), 3500);
+                      } finally {
+                        setIsPublishing(false);
+                      }
+                    }}
+                    disabled={isPublishing}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer animate-pulse"
+                    title="Yerel hafızadaki bekleyen değişiklikleri bulut sunucusuna hemen gönder"
+                  >
+                    <UploadCloud className={`w-3.5 h-3.5 ${isPublishing ? 'animate-bounce' : ''}`} />
+                    <span>{isPublishing ? 'Yayınlanıyor...' : `Buluta Yayınla (${pendingSyncCount})`}</span>
+                  </button>
+                ) : syncStatus === 'saving' || isPublishing ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 rounded-xl text-xs font-bold shadow-2xs">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                    <span>Buluta Aktarılıyor...</span>
+                  </div>
+                ) : syncStatus === 'quota_exceeded' ? (
+                  <div 
+                    onClick={() => setIsCloudBackupOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 rounded-xl text-xs font-bold cursor-pointer hover:bg-amber-100 transition-colors shadow-2xs"
+                    title="Spark kotası aşıldı. Verileriniz %100 yerel hafızada korunmaktadır. Google Drive yedeği alabilirsiniz."
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Kota Dolu (Yerel Koruma Aktif)</span>
+                  </div>
+                ) : (
+                  <div 
+                    onClick={() => setIsCloudBackupOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200/90 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold cursor-pointer hover:bg-emerald-100/70 transition-colors shadow-2xs"
+                    title={`Bulutla senkronize. Son eşitleme: ${lastSyncedAt || 'Güncel'}`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping" />
+                    <span>Bulutla Eşitlendi</span>
+                    {lastSyncedAt && <span className="text-[10px] text-emerald-600/80 font-normal">({lastSyncedAt})</span>}
+                  </div>
+                )}
+
+                {/* Google Drive 30s Auto-Sync Indicator & Quick Trigger */}
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await syncToDriveNow();
+                      if (res.success) {
+                        setSaveFeedback("✓ Drive canlı kütüğü eşitlendi");
+                        setTimeout(() => setSaveFeedback(null), 3000);
+                      }
+                    } catch {}
+                  }}
+                  disabled={isDriveAutoSyncing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer hover:bg-emerald-100/70"
+                  title="Google Drive 30 saniyede bir canlı otomatik yedeklenir. Tüm adminler ortak kütük ile eşitlenir."
+                >
+                  <FolderCheck className={`w-3.5 h-3.5 text-emerald-600 ${isDriveAutoSyncing ? 'animate-bounce' : ''}`} />
+                  <span>{isDriveAutoSyncing ? 'Drive 30sn...' : (lastDriveSyncedAt ? `Drive Canlı: ${lastDriveSyncedAt}` : 'Drive: 30sn Canlı')}</span>
+                </button>
+
+                {/* Google Drive / Bulut Yedekleme Quick Trigger */}
+                <button
+                  onClick={() => setIsCloudBackupOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-slate-800/90 border border-[#e6e2d3] dark:border-slate-700 text-[#2d2c25] dark:text-slate-100 hover:text-emerald-700 hover:bg-emerald-50/50 hover:border-emerald-300 rounded-xl text-xs font-bold active:scale-95 transition-all cursor-pointer shadow-2xs"
+                  title="Google Drive & Bulut Yedekleme Merkezini Aç"
+                >
+                  <Cloud className="w-3.5 h-3.5 text-[#B08D57] shrink-0" />
+                  <span>Yedekleme Merkezi</span>
+                </button>
+              </>
+            )}
+
+            {/* Quick Feedback Toast */}
+            {saveFeedback && (
+              <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 shadow-2xs animate-fade-in">
+                {saveFeedback}
+              </span>
+            )}
           </div>
         </header>
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Cloud, 
   CloudDownload, 
@@ -20,11 +20,34 @@ import {
   Eye,
   Info,
   Lock,
-  ExternalLink
+  ExternalLink,
+  FolderCheck,
+  Share2,
+  FileText,
+  UploadCloud,
+  Check
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { auth, firebaseConfig, FIRESTORE_UPGRADE_URL, db, doc, getDoc, collection, getDocs } from '../lib/firebase';
+import { 
+  auth, 
+  firebaseConfig, 
+  FIRESTORE_UPGRADE_URL, 
+  db, 
+  doc, 
+  getDoc, 
+  collection, 
+  getDocs,
+  getCachedAccessToken,
+  connectGoogleDrive
+} from '../lib/firebase';
 import { CloudBackupRecord } from '../types';
+import { 
+  uploadBackupToGoogleDrive, 
+  listBackupsFromGoogleDrive, 
+  downloadBackupFromGoogleDrive, 
+  deleteBackupFromGoogleDrive, 
+  DriveBackupItem 
+} from '../lib/googleDrive';
 
 interface CloudBackupModalProps {
   isOpen: boolean;
@@ -37,6 +60,12 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     userRole, 
     syncStatus, 
     syncErrorMessage, 
+    pendingSyncCount,
+    hasPendingChanges,
+    lastSyncedAt,
+    lastDriveSyncedAt,
+    isDriveAutoSyncing,
+    syncToDriveNow,
     cloudBackups, 
     isLoadingBackups, 
     createCloudBackup, 
@@ -44,11 +73,12 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     deleteCloudBackup, 
     saveLocalBackupToCloud,
     syncFromCloudStorage,
+    restoreBackup,
     saveNow,
     retrySync
   } = useAppContext();
 
-  const [activeTab, setActiveTab] = useState<'backups' | 'sync'>('backups');
+  const [activeTab, setActiveTab] = useState<'backups' | 'sync' | 'drive'>('backups');
   const [isCreating, setIsCreating] = useState(false);
   const [isSyncingNow, setIsSyncingNow] = useState(false);
   const [isTestingCloud, setIsTestingCloud] = useState(false);
@@ -74,7 +104,22 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
   const [confirmRestoreBackup, setConfirmRestoreBackup] = useState<CloudBackupRecord | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  if (!isOpen || (userRole !== 'admin' && userRole !== 'teacher')) return null;
+  // Google Drive State
+  const [driveBackups, setDriveBackups] = useState<DriveBackupItem[]>([]);
+  const [isLoadingDriveBackups, setIsLoadingDriveBackups] = useState(false);
+  const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
+  const [driveCustomName, setDriveCustomName] = useState('');
+  const [confirmRestoreDriveItem, setConfirmRestoreDriveItem] = useState<DriveBackupItem | null>(null);
+  const [confirmDeleteDriveItem, setConfirmDeleteDriveItem] = useState<DriveBackupItem | null>(null);
+  const [isDriveConnected, setIsDriveConnected] = useState<boolean>(() => !!getCachedAccessToken());
+  const [isConnectingDrive, setIsConnectingDrive] = useState<boolean>(false);
+  const [autoDriveBackup, setAutoDriveBackup] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('akademi_auto_drive_backup') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   const isAdmin = userRole === 'admin';
   const currentUser = auth.currentUser;
@@ -115,9 +160,44 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     setFeedback(null);
     try {
       await saveNow();
+
+      let driveMsg = '';
+      if (autoDriveBackup && getCachedAccessToken()) {
+        try {
+          const now = new Date();
+          const dateStr = now.toISOString().split('T')[0];
+          const timeStr = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }).replace(':', '-');
+          const backupPayload = {
+            appName: "AkademiPanel",
+            storageType: "google_drive_cloud_backup",
+            version: state.version || 2,
+            backupDate: now.toISOString(),
+            school: "Kırklareli Atatürk Ortaokulu",
+            exportedBy: currentEmail,
+            summary: {
+              studentCount: state.students?.length || 0,
+              examCount: state.exams?.length || 0,
+              resultCount: state.results?.length || 0,
+              hallCount: state.examHalls?.length || 0,
+              budgetIncomesCount: state.budget?.incomes?.length || 0,
+              budgetExpensesCount: state.budget?.expenses?.length || 0,
+              budgetDebtsCount: state.budget?.debts?.length || 0,
+            },
+            data: state
+          };
+          const driveRes = await uploadBackupToGoogleDrive(backupPayload, `AkademiPanel_OtoYedek_${dateStr}_${timeStr}.json`);
+          if (driveRes.success) {
+            driveMsg = ' ve Google Drive yedeği oluşturuldu';
+            fetchDriveBackupsList().catch(() => {});
+          }
+        } catch (dErr) {
+          console.warn('Auto drive backup error:', dErr);
+        }
+      }
+
       setFeedback({ 
         type: 'success', 
-        message: 'Tüm sistem verileri başarıyla bulut veritabanına eşitlendi!' 
+        message: `Tüm sistem verileri başarıyla bulut veritabanına eşitlendi${driveMsg}!` 
       });
     } catch (err: any) {
       try {
@@ -341,6 +421,236 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     e.target.value = '';
   };
 
+  const handleDownloadDriveBackup = () => {
+    const s = state;
+    const dateStr = new Date().toISOString().split('T')[0];
+    const timeStr = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }).replace(':', '-');
+    const driveBackupPayload = {
+      appName: "AkademiPanel",
+      storageType: "google_drive_hybrid_backup",
+      version: s.version || 2,
+      backupDate: new Date().toISOString(),
+      school: "Kırklareli Atatürk Ortaokulu",
+      exportedBy: currentEmail,
+      summary: {
+        studentCount: s.students?.length || 0,
+        examCount: s.exams?.length || 0,
+        resultCount: s.results?.length || 0,
+        hallCount: s.examHalls?.length || 0,
+        budgetIncomesCount: s.budget?.incomes?.length || 0,
+        budgetExpensesCount: s.budget?.expenses?.length || 0,
+        budgetDebtsCount: s.budget?.debts?.length || 0,
+      },
+      data: s
+    };
+
+    const str = JSON.stringify(driveBackupPayload, null, 2);
+    const blob = new Blob([str], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `AkademiPanel_GoogleDrive_Yedek_${dateStr}_${timeStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setFeedback({
+      type: 'success',
+      message: 'Google Drive uyumlu tam okul veri tabanı yedeği (.json) başarıyla indirildi.'
+    });
+  };
+
+  const handleRestoreDriveFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) {
+      setFeedback({ type: 'error', message: 'Yedek yükleme yetkisi yalnızca İdarecilere aittir.' });
+      return;
+    }
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = event.target?.result as string;
+        const parsed = JSON.parse(content);
+        const targetData = parsed.data || parsed;
+        const res = await restoreBackup(targetData);
+        if (res.success && res.summary) {
+          setFeedback({
+            type: 'success',
+            message: `Google Drive yedeği başarıyla geri yüklendi! (${res.summary.studentCount} Öğrenci, ${res.summary.examCount} Sınav, ${res.summary.resultCount} Sonuç)`
+          });
+        } else {
+          setFeedback({ type: 'error', message: res.message || 'Yedek geri yüklenemedi.' });
+        }
+      } catch (err: any) {
+        setFeedback({ type: 'error', message: 'Geçersiz JSON yedek dosyası seçildi!' });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const fetchDriveBackupsList = async () => {
+    if (!getCachedAccessToken()) {
+      setIsDriveConnected(false);
+      return;
+    }
+    setIsLoadingDriveBackups(true);
+    try {
+      const items = await listBackupsFromGoogleDrive();
+      setDriveBackups(items);
+      setIsDriveConnected(true);
+    } catch (err) {
+      console.warn('Drive backup fetch error:', err);
+    } finally {
+      setIsLoadingDriveBackups(false);
+    }
+  };
+
+  const handleConnectDrive = async () => {
+    setIsConnectingDrive(true);
+    setFeedback(null);
+    try {
+      const token = await connectGoogleDrive();
+      if (token) {
+        setIsDriveConnected(true);
+        setFeedback({
+          type: 'success',
+          message: 'Google Drive bağlantısı başarıyla kuruldu! AkademiPanel yedekleriniz taranıyor.'
+        });
+        await fetchDriveBackupsList();
+      }
+    } catch (err: any) {
+      if (err?.code === 'auth/popup-closed-by-user') {
+        setFeedback({ type: 'error', message: 'Google oturum açma penceresi kapatıldı.' });
+      } else {
+        setFeedback({ type: 'error', message: err?.message || 'Google Drive bağlantısı kurulamadı.' });
+      }
+    } finally {
+      setIsConnectingDrive(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'drive') {
+      if (getCachedAccessToken()) {
+        setIsDriveConnected(true);
+        fetchDriveBackupsList();
+      } else {
+        setIsDriveConnected(false);
+      }
+    }
+  }, [isOpen, activeTab]);
+
+  const handleUploadDirectlyToDrive = async () => {
+    if (!isAdmin) {
+      setFeedback({ type: 'error', message: 'Google Drive üzerine yedek yükleme yetkisi yalnızca İdarecilere aittir.' });
+      return;
+    }
+    setIsUploadingToDrive(true);
+    setFeedback(null);
+    try {
+      if (!getCachedAccessToken()) {
+        const token = await connectGoogleDrive();
+        if (!token) {
+          setFeedback({ type: 'error', message: 'Google Drive bağlantısı onaylanmadı.' });
+          setIsUploadingToDrive(false);
+          return;
+        }
+        setIsDriveConnected(true);
+      }
+
+      const s = state;
+      const dateStr = new Date().toISOString().split('T')[0];
+      const timeStr = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }).replace(':', '-');
+      const backupPayload = {
+        appName: "AkademiPanel",
+        storageType: "google_drive_cloud_backup",
+        version: s.version || 2,
+        backupDate: new Date().toISOString(),
+        school: "Kırklareli Atatürk Ortaokulu",
+        exportedBy: currentEmail,
+        summary: {
+          studentCount: s.students?.length || 0,
+          examCount: s.exams?.length || 0,
+          resultCount: s.results?.length || 0,
+          hallCount: s.examHalls?.length || 0,
+          budgetIncomesCount: s.budget?.incomes?.length || 0,
+          budgetExpensesCount: s.budget?.expenses?.length || 0,
+          budgetDebtsCount: s.budget?.debts?.length || 0,
+        },
+        data: s
+      };
+
+      const res = await uploadBackupToGoogleDrive(backupPayload, driveCustomName);
+      if (res.success) {
+        setIsDriveConnected(true);
+        setFeedback({
+          type: 'success',
+          message: `"${res.fileName}" başarıyla doğrudan Google Drive hesabınıza yüklendi!`
+        });
+        setDriveCustomName('');
+        await fetchDriveBackupsList();
+      } else {
+        setFeedback({
+          type: 'error',
+          message: res.error || 'Google Drive üzerine yedek yüklenemedi.'
+        });
+      }
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err?.message || 'Google Drive bağlantı hatası oluştu.'
+      });
+    } finally {
+      setIsUploadingToDrive(false);
+    }
+  };
+
+  const handleRestoreFromDrive = async (item: DriveBackupItem) => {
+    if (!isAdmin) return;
+    setActionLoadingId(item.id);
+    setFeedback(null);
+    try {
+      const rawData = await downloadBackupFromGoogleDrive(item.id);
+      const targetData = rawData.data || rawData;
+      const res = await restoreBackup(targetData);
+      if (res.success && res.summary) {
+        setFeedback({
+          type: 'success',
+          message: `"${item.name}" Google Drive'dan başarıyla geri yüklendi! (${res.summary.studentCount} Öğrenci, ${res.summary.examCount} Sınav, ${res.summary.resultCount} Sonuç)`
+        });
+        setConfirmRestoreDriveItem(null);
+      } else {
+        setFeedback({ type: 'error', message: res.message || 'Yedek geri yüklenemedi.' });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Google Drive yedeği indirilemedi.' });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleDeleteFromDrive = async (item: DriveBackupItem) => {
+    if (!isAdmin) return;
+    setActionLoadingId(item.id);
+    setFeedback(null);
+    try {
+      const ok = await deleteBackupFromGoogleDrive(item.id);
+      if (ok) {
+        setFeedback({ type: 'success', message: `"${item.name}" Google Drive'dan başarıyla silindi.` });
+        setDriveBackups(prev => prev.filter(b => b.id !== item.id));
+        setConfirmDeleteDriveItem(null);
+      } else {
+        setFeedback({ type: 'error', message: 'Yedek Google Drive üzerinden silinemedi.' });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Silme işlemi sırasında hata oluştu.' });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const formatDate = (isoString: string) => {
     try {
       const d = new Date(isoString);
@@ -357,6 +667,8 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
   };
 
   const isHealthy = syncStatus === 'synced';
+
+  if (!isOpen || (userRole !== 'admin' && userRole !== 'teacher')) return null;
 
   return (
     <div 
@@ -466,6 +778,18 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
           >
             <Database className="w-4 h-4" />
             <span>Canlı Senkronizasyon & Tanı</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('drive')}
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'drive' 
+                ? 'border-[#B08D57] text-[#B08D57]' 
+                : 'border-transparent text-[#8e8d82] hover:text-[#5a5a40]'
+            }`}
+          >
+            <FolderCheck className="w-4 h-4 text-emerald-600" />
+            <span>Google Drive Hibrit Yedekleme</span>
           </button>
         </div>
 
@@ -1047,6 +1371,520 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                   <RefreshCw className={`w-4 h-4 ${isSyncingNow ? 'animate-spin' : ''}`} />
                   {isSyncingNow ? 'Doğrulanıyor & Eşitleniyor...' : 'Şimdi Doğrula & Buluta Gönder'}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: GOOGLE DRIVE HİBRİT YEDEKLEME & İLETİM */}
+          {activeTab === 'drive' && (
+            <div className="space-y-4 animate-fade-in">
+              {/* Info Card */}
+              <div className="bg-gradient-to-br from-emerald-50 via-teal-50/60 to-white rounded-2xl p-4 sm:p-5 border border-emerald-200/80 shadow-xs">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+                    <FolderCheck className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-sm sm:text-base font-bold text-emerald-950 font-serif">
+                      Google Drive Hibrit Depolama & Kullanıcı İletim Merkezi
+                    </h3>
+                    <p className="text-xs text-emerald-800/90 leading-relaxed">
+                      Firebase Spark plan kotalarını sıfırlamak ve okul verilerini 15 GB ücretsiz Google Drive alanınızda güvenle saklamak için tasarlanmıştır. Bu panel üzerinden tek tıkla standart yedek alabilir veya paylaşılan Drive yedeğini sisteme yükleyebilirsiniz.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Database Metrics Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4 pt-3.5 border-t border-emerald-200/60">
+                  <div className="bg-white/85 rounded-xl p-2.5 border border-emerald-200/50">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Kayıtlı Öğrenci</span>
+                    <span className="text-lg font-serif font-bold text-emerald-950">{state.students?.length || 0}</span>
+                  </div>
+                  <div className="bg-white/85 rounded-xl p-2.5 border border-emerald-200/50">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Deneme Sınavı</span>
+                    <span className="text-lg font-serif font-bold text-emerald-950">{state.exams?.length || 0}</span>
+                  </div>
+                  <div className="bg-white/85 rounded-xl p-2.5 border border-emerald-200/50">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Optik / Sonuçlar</span>
+                    <span className="text-lg font-serif font-bold text-emerald-950">{state.results?.length || 0}</span>
+                  </div>
+                  <div className="bg-white/85 rounded-xl p-2.5 border border-emerald-200/50">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Yerel Koruma</span>
+                    <span className="text-xs font-bold text-emerald-600 mt-1 block">✓ %100 Aktif</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Connection Status Card */}
+              {!isDriveConnected ? (
+                <div className="bg-amber-50/90 border border-amber-300/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xs">
+                  <div className="space-y-1 text-center sm:text-left">
+                    <div className="flex items-center justify-center sm:justify-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <h4 className="text-xs sm:text-sm font-bold text-amber-950 font-serif">Google Drive Bağlantısı Bekleniyor</h4>
+                    </div>
+                    <p className="text-[11px] text-amber-800 leading-relaxed max-w-xl">
+                      Google Drive API izinleri projenizde başarıyla etkinleştirildi. Veritabanı kopyanızı doğrudan Google Drive alanınıza yüklemek ve Drive'daki yedeklerinizi görüntülemek için Google hesabınızla yetkilendirme yapınız.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleConnectDrive}
+                    disabled={isConnectingDrive}
+                    className="px-4 py-2.5 bg-white hover:bg-gray-50 active:scale-[0.98] text-gray-800 font-bold text-xs rounded-xl border border-gray-300 shadow-xs flex items-center gap-2.5 shrink-0 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                    </svg>
+                    <span>{isConnectingDrive ? 'Drive\'a Bağlanıyor...' : 'Google ile Drive\'a Bağlan'}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-emerald-50/90 border border-emerald-300/80 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-emerald-950">Google Drive Bağlantısı Aktif</h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-semibold">Yetkili</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800">
+                        Hesap: <span className="font-semibold">{currentEmail}</span> • 15 GB Drive depolamanız yedekleme için hazır.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleConnectDrive}
+                    disabled={isConnectingDrive}
+                    className="px-3 py-1.5 bg-white hover:bg-emerald-100/60 text-emerald-900 border border-emerald-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isConnectingDrive ? 'animate-spin' : ''}`} />
+                    <span>Yeniden Yetkilendir</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 30-Second Google Drive Live Sync Card */}
+              <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50/50 rounded-2xl p-4 sm:p-5 border border-emerald-300 shadow-xs space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                      <RefreshCw className={`w-4 h-4 ${isDriveAutoSyncing ? 'animate-spin' : ''}`} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-xs sm:text-sm font-bold text-emerald-950 font-serif">
+                          Google Drive Canlı Master Kütük (30 Saniyede Bir Otomatik)
+                        </h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-bold">
+                          0 Firebase Kotası
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 leading-relaxed">
+                        Tüm öğrenci, sınav ve bütçe kayıtları yerel hafızaya anında yazılır; her 30 saniyede bir Drive'daki <code className="bg-emerald-100 text-emerald-900 px-1 py-0.5 rounded font-mono font-bold text-[10px]">AkademiPanel_Canli_Kutuk.json</code> dosyasına otomatik aktarılır.
+                      </p>
+                    </div>
+                  </div>
+
+                  {isAdmin && (
+                    <button
+                      onClick={async () => {
+                        setFeedback(null);
+                        try {
+                          const res = await syncToDriveNow();
+                          if (res.success) {
+                            setFeedback({ type: 'success', message: 'Google Drive canlı master kütüğü başarıyla güncellendi!' });
+                            fetchDriveBackupsList();
+                          } else {
+                            setFeedback({ type: 'error', message: res.error || 'Drive senkronizasyon hatası' });
+                          }
+                        } catch (e: any) {
+                          setFeedback({ type: 'error', message: e?.message || 'Drive bağlantı hatası' });
+                        }
+                      }}
+                      disabled={isDriveAutoSyncing}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      <UploadCloud className={`w-3.5 h-3.5 ${isDriveAutoSyncing ? 'animate-bounce' : ''}`} />
+                      <span>{isDriveAutoSyncing ? 'Drive Eşitleniyor...' : 'Şimdi Drive Master\'ı Güncelle'}</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-200/60 text-xs">
+                  <div className="bg-white/90 p-2 rounded-xl border border-emerald-200/50">
+                    <span className="text-[10px] text-emerald-700 font-semibold block">Eşitleme Modu</span>
+                    <span className="font-bold text-emerald-950">30 Saniyede Bir Canlı</span>
+                  </div>
+                  <div className="bg-white/90 p-2 rounded-xl border border-emerald-200/50">
+                    <span className="text-[10px] text-emerald-700 font-semibold block">Son Drive Eşitleme</span>
+                    <span className="font-bold text-emerald-950">{lastDriveSyncedAt || 'Beklemede (İlk kayıtla başlar)'}</span>
+                  </div>
+                  <div className="bg-white/90 p-2 rounded-xl border border-emerald-200/50 col-span-2 sm:col-span-1">
+                    <span className="text-[10px] text-emerald-700 font-semibold block">Çoklu Admin Durumu</span>
+                    <span className="font-bold text-emerald-950">Ortak Master Eşitliği Aktif</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action 1: DIRECT GOOGLE DRIVE CLOUD BACKUP (Real-Time API Upload) */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#e6e2d3] shadow-xs space-y-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold shrink-0">
+                      <UploadCloud className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-[#2d2c25]">Google Drive'a Doğrudan Yedek Al</h4>
+                      <p className="text-[11px] text-[#737265]">
+                        Okul veritabanınızı tek tıkla doğrudan Google Drive hesabınıza dosya olarak yükler.
+                      </p>
+                    </div>
+                  </div>
+
+                  <a
+                    href="https://drive.google.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-[#5a5a40] text-xs font-bold rounded-xl transition-all border border-[#e6e2d3] flex items-center gap-1.5 shrink-0"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-gray-600" />
+                    <span>Drive'ı Aç</span>
+                  </a>
+                </div>
+
+                {isAdmin ? (
+                  <div className="space-y-2.5 pt-1">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input 
+                        type="text" 
+                        value={driveCustomName}
+                        onChange={(e) => setDriveCustomName(e.target.value)}
+                        placeholder="Özel yedek adı (İsteğe bağlı, örn: 1. Dönem Final Kütük Yedeği)"
+                        className="flex-1 bg-white border border-[#e6e2d3] rounded-xl px-3 py-2 text-xs font-medium text-[#2d2c25] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                      />
+                      <button
+                        onClick={handleUploadDirectlyToDrive}
+                        disabled={isUploadingToDrive}
+                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        <UploadCloud className={`w-4 h-4 ${isUploadingToDrive ? 'animate-bounce' : ''}`} />
+                        <span>{isUploadingToDrive ? 'Drive\'a Yükleniyor...' : 'Google Drive\'a Şimdi Yükle'}</span>
+                      </button>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input 
+                          type="checkbox" 
+                          checked={autoDriveBackup} 
+                          onChange={(e) => {
+                            setAutoDriveBackup(e.target.checked);
+                            try {
+                              localStorage.setItem('akademi_auto_drive_backup', e.target.checked ? 'true' : 'false');
+                            } catch {}
+                          }}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4" 
+                        />
+                        <span className="text-xs text-[#2d2c25] font-medium">
+                          Buluta Yayınla & Eşitle yapıldığında Google Drive'a da otomatik yedek gönder (Çifte Güvence)
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-500 font-medium">
+                    Google Drive üzerine yedek yükleme yetkisi yalnızca İdareci kullanıcılara aittir.
+                  </div>
+                )}
+              </div>
+
+              {/* Confirm Restore Drive Item Dialog */}
+              {confirmRestoreDriveItem && (
+                <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-3 animate-fade-in">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-sm text-amber-900 font-serif">
+                        Google Drive Yedeğini Sisteme Geri Yüklemek Üzeresiniz
+                      </h4>
+                      <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                        <strong>"{confirmRestoreDriveItem.name}"</strong> ({formatDate(confirmRestoreDriveItem.createdTime)}) tarihli Google Drive yedeği sisteme aktarılacaktır. Mevcut verileriniz bu yedekteki verilerle eşitlenecektir. Devam etmek istiyor musunuz?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => setConfirmRestoreDriveItem(null)}
+                      className="px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 rounded-xl cursor-pointer"
+                    >
+                      İptal
+                    </button>
+                    <button
+                      onClick={() => handleRestoreFromDrive(confirmRestoreDriveItem)}
+                      disabled={actionLoadingId === confirmRestoreDriveItem.id}
+                      className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${actionLoadingId === confirmRestoreDriveItem.id ? 'animate-spin' : ''}`} />
+                      {actionLoadingId === confirmRestoreDriveItem.id ? 'Geri Yükleniyor...' : 'Evet, Drive Yedeğini Geri Yükle'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirm Delete Drive Item Dialog (Workspace Safety Requirement) */}
+              {confirmDeleteDriveItem && (
+                <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl space-y-3 animate-fade-in">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-sm text-rose-900 font-serif">
+                        Bu Yedeği Google Drive'dan Silmek İstediğinize Emin Misiniz?
+                      </h4>
+                      <p className="text-xs text-rose-800 mt-1 leading-relaxed">
+                        <strong>"{confirmDeleteDriveItem.name}"</strong> dosyası Google Drive hesabınızdan kalıcı olarak silinecektir. Bu işlem geri alınamaz.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => setConfirmDeleteDriveItem(null)}
+                      className="px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-100 rounded-xl cursor-pointer"
+                    >
+                      İptal
+                    </button>
+                    <button
+                      onClick={() => handleDeleteFromDrive(confirmDeleteDriveItem)}
+                      disabled={actionLoadingId === confirmDeleteDriveItem.id}
+                      className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {actionLoadingId === confirmDeleteDriveItem.id ? 'Siliniyor...' : 'Evet, Drive\'dan Sil'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Action 2: LIVE GOOGLE DRIVE BACKUPS LIST */}
+              <div className="bg-white rounded-2xl border border-[#e6e2d3] shadow-xs overflow-hidden">
+                <div className="p-4 bg-[#fcfbf7] border-b border-[#e6e2d3] flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <FolderCheck className="w-4 h-4 text-emerald-600" />
+                    <h4 className="text-xs font-bold text-[#2d2c25]">
+                      Google Drive'daki AkademiPanel Yedekleriniz ({driveBackups.length})
+                    </h4>
+                  </div>
+                  <button
+                    onClick={fetchDriveBackupsList}
+                    disabled={isLoadingDriveBackups}
+                    className="p-1.5 rounded-lg hover:bg-gray-200/60 text-gray-600 transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold"
+                    title="Listeyi Yenile"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDriveBackups ? 'animate-spin' : ''}`} />
+                    <span className="hidden sm:inline">Yenile</span>
+                  </button>
+                </div>
+
+                <div className="divide-y divide-[#e6e2d3]/60 max-h-72 overflow-y-auto">
+                  {isLoadingDriveBackups ? (
+                    <div className="py-8 text-center text-xs text-gray-500">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-600" />
+                      <span>Google Drive yedekleri taranıyor...</span>
+                    </div>
+                  ) : driveBackups.length > 0 ? (
+                    driveBackups.map((item) => (
+                      <div key={item.id} className="p-3 sm:p-4 hover:bg-gray-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs text-[#2d2c25] truncate">{item.name}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">
+                              Google Drive
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#737265] flex items-center gap-2">
+                            <span>{formatDate(item.createdTime)}</span>
+                            {item.size && (
+                              <>
+                                <span>•</span>
+                                <span>{(parseInt(item.size) / 1024).toFixed(1)} KB</span>
+                              </>
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                          {item.webViewLink && (
+                            <a
+                              href={item.webViewLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl border border-gray-300 transition-all flex items-center gap-1"
+                              title="Google Drive'da Görüntüle"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>Drive'da Aç</span>
+                            </a>
+                          )}
+
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={() => setConfirmRestoreDriveItem(item)}
+                                disabled={actionLoadingId === item.id}
+                                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                title="Bu yedeği sisteme yükle"
+                              >
+                                <CloudDownload className="w-3.5 h-3.5" />
+                                <span>Geri Yükle</span>
+                              </button>
+
+                              <button
+                                onClick={() => setConfirmDeleteDriveItem(item)}
+                                disabled={actionLoadingId === item.id}
+                                className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-xl transition-all cursor-pointer"
+                                title="Google Drive'dan Sil"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-8 text-center text-xs text-gray-500 space-y-1">
+                      <FolderCheck className="w-8 h-8 text-gray-300 mx-auto mb-1" />
+                      <p className="font-semibold text-gray-700">Google Drive'ınızda henüz AkademiPanel yedeği bulunamadı.</p>
+                      <p className="text-[11px] text-gray-400">Yukarıdaki "Google Drive'a Şimdi Yükle" butonuna basarak ilk yedeğinizi hemen alabilirsiniz.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons: Download JSON & Restore JSON */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Download Backup for Drive */}
+                <div className="bg-white rounded-2xl p-4 border border-[#e6e2d3] shadow-xs flex flex-col justify-between space-y-3">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                        <Download className="w-4 h-4" />
+                      </div>
+                      <h4 className="text-xs font-bold text-[#2d2c25]">Yedek Dosyası İndir (.json)</h4>
+                    </div>
+                    <p className="text-[11px] text-[#737265] leading-normal">
+                      Google Drive'a elle de aktarabilmeniz veya harici diskte saklamanız için veritabanınızı JSON dosyası olarak indirir.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleDownloadDriveBackup}
+                    className="w-full px-3.5 py-2.5 bg-gray-100 hover:bg-gray-200 active:scale-[0.98] text-[#5a5a40] text-xs font-bold rounded-xl transition-all border border-[#e6e2d3] flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Cihaza İndir (.json)</span>
+                  </button>
+                </div>
+
+                {/* Restore Backup from Drive */}
+                <div className="bg-white rounded-2xl p-4 border border-[#e6e2d3] shadow-xs flex flex-col justify-between space-y-3">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                        <UploadCloud className="w-4 h-4" />
+                      </div>
+                      <h4 className="text-xs font-bold text-[#2d2c25]">Yerel JSON Dosyasından Yükle</h4>
+                    </div>
+                    <p className="text-[11px] text-[#737265] leading-normal">
+                      Bilgisayarınızda veya Drive'dan daha önce indirdiğiniz herhangi bir `.json` dosyasını seçerek anında kütüğü güncelleyin.
+                    </p>
+                  </div>
+
+                  {isAdmin ? (
+                    <label className="w-full px-3.5 py-2.5 bg-gray-100 hover:bg-gray-200 active:scale-[0.98] text-[#5a5a40] text-xs font-bold rounded-xl transition-all border border-[#e6e2d3] flex items-center justify-center gap-1.5 cursor-pointer text-center">
+                      <UploadCloud className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Dosyadan Seç ve Geri Yükle</span>
+                      <input 
+                        type="file" 
+                        accept=".json" 
+                        className="hidden" 
+                        onChange={handleRestoreDriveFile} 
+                      />
+                    </label>
+                  ) : (
+                    <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-center text-xs text-gray-500 font-medium">
+                      Yedek geri yükleme yetkisi İdarecilere aittir.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* How to distribute to teachers/other users guide */}
+              <div className="bg-[#fcfbf7] rounded-2xl p-4 sm:p-5 border border-[#e6e2d3] space-y-3">
+                <h4 className="text-xs font-bold text-[#5a5a40] uppercase tracking-wider flex items-center gap-1.5">
+                  <Share2 className="w-4 h-4 text-emerald-600" />
+                  <span>Öğretmenlere ve Diğer Cihazlara Veri İletimi Rehberi</span>
+                </h4>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-white p-3 rounded-xl border border-[#e6e2d3] space-y-1">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[10px]">1</span>
+                    <p className="font-bold text-[#2d2c25]">Drive'a Şimdi Yükle</p>
+                    <p className="text-[11px] text-[#737265]">
+                      "Google Drive'a Şimdi Yükle" butonuna bastığınızda dosya doğrudan Google Drive'ınıza kaydedilir ve listede belirir.
+                    </p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-[#e6e2d3] space-y-1">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[10px]">2</span>
+                    <p className="font-bold text-[#2d2c25]">Klasörü / Dosyayı Paylaşın</p>
+                    <p className="text-[11px] text-[#737265]">
+                      Google Drive'da dosyanın paylaşım ayarını <em>"Bağlantıya sahip olan herkes görüntüleyebilir"</em> veya öğretmenlerin e-postalarına yetkili yapın.
+                    </p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-[#e6e2d3] space-y-1">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[10px]">3</span>
+                    <p className="font-bold text-[#2d2c25]">0 Kota ile Anında Eşitleyin</p>
+                    <p className="text-[11px] text-[#737265]">
+                      Diğer idareciler veya öğretmenler listeden veya indirilen dosyadan yükleme yaparak tüm verilere sıfır Firebase kotasıyla erişir.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Hybrid Sync Status & Manual Cloud Publish */}
+              <div className="bg-white rounded-2xl p-4 border border-[#e6e2d3] flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-700 flex items-center justify-center font-bold shrink-0">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-[#2d2c25]">
+                      {hasPendingChanges ? 'Bekleyen Yerel Değişiklikler Mevcut' : 'Tüm Değişiklikler Eşitlendi'}
+                    </p>
+                    <p className="text-[11px] text-[#737265]">
+                      {hasPendingChanges 
+                        ? `${pendingSyncCount} adet işlem yerel hafızada güvende. Dilediğiniz an buluta toplu gönderebilirsiniz.`
+                        : `Son bulut eşitleme: ${lastSyncedAt || 'Güncel'}`}
+                    </p>
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <button
+                    onClick={handleSyncNow}
+                    disabled={isSyncingNow}
+                    className="w-full sm:w-auto px-4 py-2 bg-[#B08D57] hover:bg-[#9c7b48] active:scale-[0.98] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNow ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingNow ? 'Yayınlanıyor...' : 'Buluta Yayınla & Eşitle'}</span>
+                  </button>
+                )}
               </div>
             </div>
           )}

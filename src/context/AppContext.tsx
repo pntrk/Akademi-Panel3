@@ -38,6 +38,12 @@ import {
   registerNotificationServiceWorker, 
   publishCloudNotification 
 } from '../lib/notifications';
+import { 
+  syncLiveMasterToGoogleDrive, 
+  fetchLiveMasterFromGoogleDriveIfNewer, 
+  LIVE_MASTER_FILE_NAME 
+} from '../lib/googleDrive';
+import { getCachedAccessToken } from '../lib/firebase';
 
 interface AppState {
   students: Student[];
@@ -59,10 +65,16 @@ interface AppState {
 interface AppContextType {
   state: AppState;
   userRole: 'admin' | 'teacher' | 'guest';
-  syncStatus: 'synced' | 'saving' | 'quota_exceeded' | 'offline' | 'error';
+  syncStatus: 'synced' | 'saving' | 'quota_exceeded' | 'offline' | 'error' | 'pending_publish';
   syncErrorMessage?: string | null;
   pendingSyncCount: number;
   lastSyncedAt?: string | null;
+  lastDriveSyncedAt?: string | null;
+  isDriveAutoSyncing?: boolean;
+  syncToDriveNow: () => Promise<{ success: boolean; modifiedTime?: string; error?: string }>;
+  hasPendingChanges: boolean;
+  publishToCloud: () => Promise<void>;
+  batchUpdateState: (updater: (currentState: AppState) => AppState) => void;
   cloudBackups: CloudBackupRecord[];
   isLoadingBackups: boolean;
   createCloudBackup: (backupName?: string, note?: string) => Promise<{ success: boolean; message: string; backupId?: string }>;
@@ -396,14 +408,27 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<'admin' | 'teacher' | 'guest'>(initialRole);
-  const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'quota_exceeded' | 'offline' | 'error'>(
+  const [syncStatus, setSyncStatus] = useState<AppContextType['syncStatus']>(
     isInitialQuotaExceeded ? 'quota_exceeded' : 'synced'
   );
+  const [hasPendingChanges, setHasPendingChanges] = useState<boolean>(false);
+  const hasUnsavedLocalEditsRef = useRef<boolean>(false);
+  const lastFocusSyncRef = useRef<number>(Date.now());
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(
     isInitialQuotaExceeded ? 'Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz bu cihazda kesintisiz ve %100 güvenle saklanmaktadır.' : null
   );
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [lastDriveSyncedAt, setLastDriveSyncedAt] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('akademi_last_drive_sync_time');
+    } catch {
+      return null;
+    }
+  });
+  const [isDriveAutoSyncing, setIsDriveAutoSyncing] = useState<boolean>(false);
+  const driveSyncTimerRef = useRef<any>(null);
+  const lastKnownDriveModifiedTimeRef = useRef<string | null>(null);
   const [cloudBackups, setCloudBackups] = useState<CloudBackupRecord[]>([]);
   const [isLoadingBackups, setIsLoadingBackups] = useState(false);
 
@@ -696,13 +721,15 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   };
 
-  // Real-time Firestore listener & periodic check
+  // Real-time Firestore listener (anti-echo protected) & throttled focus check
   useEffect(() => {
     // Initial fetch from Firebase Cloud
     syncFromCloudStorage().catch(() => {});
 
     // Real-time Firestore Meta listener for instant multi-admin synchronization
     let unsubMeta: (() => void) | null = null;
+    const cleanUserEmail = (user?.email || '').trim().toLowerCase();
+
     if (firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
       try {
         const metaDocRef = doc(db, 'schools', 'main', 'modules', 'meta');
@@ -710,7 +737,19 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           if (snap.exists()) {
             const remoteMeta = snap.data();
             const remoteVer = Number(remoteMeta?.version) || 0;
+            const remoteAuthor = (remoteMeta?.lastPublishedBy || '').trim().toLowerCase();
             const localVer = Number((stateRef.current as any).version) || 0;
+
+            // Disarm echo loop: Ignore if this client/user authored this update
+            if (remoteAuthor && remoteAuthor === cleanUserEmail && remoteVer <= localVer) {
+              return;
+            }
+
+            // Do not clobber pending local edits with equal or older version
+            if (hasUnsavedLocalEditsRef.current && remoteVer <= localVer) {
+              return;
+            }
+
             if (remoteVer > localVer) {
               syncFromCloudStorage(true).catch(() => {});
             }
@@ -721,21 +760,19 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       } catch (e) {}
     }
 
-    // Sync on tab focus so teachers/admins see updates when they switch back
+    // Sync on tab focus so teachers/admins see updates when they switch back, throttled to max once per 60 seconds
     const handleFocus = () => {
-      syncFromCloudStorage().catch(() => {});
+      const now = Date.now();
+      if (now - lastFocusSyncRef.current > 60000) {
+        lastFocusSyncRef.current = now;
+        syncFromCloudStorage().catch(() => {});
+      }
     };
     window.addEventListener('focus', handleFocus);
-
-    // Periodic check every 35 seconds as background fallback
-    const interval = setInterval(() => {
-      syncFromCloudStorage().catch(() => {});
-    }, 35000);
 
     return () => {
       if (unsubMeta) unsubMeta();
       window.removeEventListener('focus', handleFocus);
-      clearInterval(interval);
     };
   }, [user?.email]);
 
@@ -747,6 +784,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setSyncStatus('synced');
       setSyncErrorMessage(null);
       setPendingSyncCount(0);
+      setHasPendingChanges(false);
+      hasUnsavedLocalEditsRef.current = false;
       return;
     }
 
@@ -769,6 +808,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       if (payloadString === lastSavedPayloadRef.current && !forceRetry) {
         setSyncStatus('synced');
         setPendingSyncCount(0);
+        setHasPendingChanges(false);
+        hasUnsavedLocalEditsRef.current = false;
         return;
       }
 
@@ -792,6 +833,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           ) {
             markQuotaExceededToday();
             isQuotaExceededRef.current = true;
+            setSyncStatus('quota_exceeded');
+            setSyncErrorMessage('Firestore günlük ücretsiz yazma kotası doldu (Spark Plan). Verileriniz yerel hafızada (%100) kesintisiz ve güvende saklanmaktadır.');
+            return;
           }
         }
       }
@@ -803,9 +847,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
       // 3. Guaranteed state update: Local Mirror & Sync Status
       lastSavedPayloadRef.current = payloadString;
+      hasUnsavedLocalEditsRef.current = false;
       stateRef.current = cleanState;
       setState(cleanState);
       setPendingSyncCount(0);
+      setHasPendingChanges(false);
       const currentTimeStr = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
       setLastSyncedAt(currentTimeStr);
       setSyncStatus('synced');
@@ -816,44 +862,132 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setSyncStatus('synced');
       setSyncErrorMessage(null);
       setPendingSyncCount(0);
+      setHasPendingChanges(false);
+      hasUnsavedLocalEditsRef.current = false;
     }
   };
 
-  const updateFirebase = (newState: AppState, bufferDelayMs = 4000) => {
+  // Google Drive Live Master Sync (30-second automatic debounce sync)
+  const syncToDriveNow = async (): Promise<{ success: boolean; modifiedTime?: string; error?: string }> => {
+    if (userRole !== 'admin') return { success: false, error: 'Yetkisiz işlem' };
+    const token = getCachedAccessToken();
+    if (!token) {
+      return { success: false, error: 'Google Drive bağlantısı henüz aktif değil' };
+    }
+    setIsDriveAutoSyncing(true);
+    try {
+      const res = await syncLiveMasterToGoogleDrive(stateRef.current, user?.email);
+      if (res.success) {
+        const timeStr = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        setLastDriveSyncedAt(timeStr);
+        lastKnownDriveModifiedTimeRef.current = res.modifiedTime || new Date().toISOString();
+        try {
+          localStorage.setItem('akademi_last_drive_sync_time', timeStr);
+        } catch {}
+      }
+      return res;
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Google Drive senkronizasyon hatası' };
+    } finally {
+      setIsDriveAutoSyncing(false);
+    }
+  };
+
+  // Multi-Admin Google Drive Auto-Sync: Polls remote changes every 45s & on window focus
+  useEffect(() => {
+    if (userRole !== 'admin') return;
+
+    const checkDriveRemoteUpdate = async () => {
+      // Don't overwrite if local user is currently typing/has pending unsaved edits
+      if (hasUnsavedLocalEditsRef.current) return;
+      if (!getCachedAccessToken()) return;
+
+      try {
+        const updateCheck = await fetchLiveMasterFromGoogleDriveIfNewer(lastKnownDriveModifiedTimeRef.current);
+        if (updateCheck.hasUpdate && updateCheck.data) {
+          lastKnownDriveModifiedTimeRef.current = updateCheck.modifiedTime || null;
+          stateRef.current = updateCheck.data;
+          setState(updateCheck.data);
+          try {
+            localStorage.setItem('okulYonetimState', JSON.stringify(updateCheck.data));
+          } catch {}
+          const timeStr = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+          setLastDriveSyncedAt(timeStr);
+        }
+      } catch (e) {}
+    };
+
+    const driveInterval = setInterval(checkDriveRemoteUpdate, 45000);
+    window.addEventListener('focus', checkDriveRemoteUpdate);
+
+    return () => {
+      clearInterval(driveInterval);
+      window.removeEventListener('focus', checkDriveRemoteUpdate);
+    };
+  }, [userRole]);
+
+  // Local state update with 30-second Google Drive auto-sync (Firebase is ONLY written via manual saveNow)
+  const updateFirebase = (newState: AppState, _bufferDelayMs?: number) => {
     stateRef.current = newState;
     setState(newState);
 
-    // 1. Instant local persistence so data is never lost regardless of network/quota
+    // 1. Instant local persistence so data is never lost regardless of network/quota (0ms lag)
     try {
       localStorage.setItem('okulYonetimState', JSON.stringify(newState));
     } catch (e) {
       console.warn('LocalStorage save error:', e);
     }
 
-    // 2. Increment pending buffer count
+    // 2. Mark pending changes for manual Firebase publishing
+    hasUnsavedLocalEditsRef.current = true;
+    setHasPendingChanges(true);
     setPendingSyncCount(prev => prev + 1);
 
-    // 3. Debounce cloud writes (4 seconds smart buffer) to prevent spamming
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
+    if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
+      setSyncStatus('pending_publish');
     }
 
-    debounceTimerRef.current = setTimeout(() => {
-      executeFirestoreWrite(newState);
-    }, bufferDelayMs);
+    // 3. AUTOMATIC GOOGLE DRIVE 30-SECOND SYNC
+    // (Firebase write quota is NEVER consumed automatically; only via manual saveNow button!)
+    if (driveSyncTimerRef.current) {
+      clearTimeout(driveSyncTimerRef.current);
+    }
+
+    driveSyncTimerRef.current = setTimeout(() => {
+      if (getCachedAccessToken() && userRole === 'admin') {
+        syncToDriveNow().catch(() => {});
+      }
+    }, 30000); // 30 seconds
   };
 
+  const batchUpdateState = (updater: (currentState: AppState) => AppState) => {
+    if (userRole !== 'admin') return;
+    const current = stateRef.current;
+    const updated = updater(current);
+    updateFirebase(updated);
+  };
+
+  // MANUAL FIREBASE CLOUD PUBLISH & IMMEDIATE GOOGLE DRIVE BACKUP
   const saveNow = async () => {
     if (userRole !== 'admin') return;
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
+    }
+    if (driveSyncTimerRef.current) {
+      clearTimeout(driveSyncTimerRef.current);
     }
     // Always persist to localStorage
     try {
       localStorage.setItem('okulYonetimState', JSON.stringify(stateRef.current));
     } catch (e) {}
 
+    // 1. Manual Firebase Write (Schools/main/modules/*)
     await executeFirestoreWrite(stateRef.current, true);
+
+    // 2. Immediate Google Drive Sync
+    if (getCachedAccessToken()) {
+      syncToDriveNow().catch(() => {});
+    }
   };
 
   const retrySync = async () => {
@@ -861,6 +995,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     clearQuotaExceeded();
     isQuotaExceededRef.current = false;
     await executeFirestoreWrite(stateRef.current, true);
+    if (getCachedAccessToken()) {
+      syncToDriveNow().catch(() => {});
+    }
   };
 
   const setStudents = (students: Student[]) => { if (userRole !== 'admin') return; _setStudents(students); };
@@ -1803,6 +1940,12 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       syncErrorMessage, 
       pendingSyncCount,
       lastSyncedAt,
+      lastDriveSyncedAt,
+      isDriveAutoSyncing,
+      syncToDriveNow,
+      hasPendingChanges,
+      publishToCloud: saveNow,
+      batchUpdateState,
       cloudBackups,
       isLoadingBackups,
       createCloudBackup,

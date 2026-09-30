@@ -35,13 +35,26 @@ import {
 } from 'firebase/storage';
 import rawFirebaseConfig from '../../firebase-applet-config.json';
 
-export const firebaseConfig = rawFirebaseConfig;
+export interface FirebaseAppConfig {
+  projectId: string;
+  appId: string;
+  apiKey: string;
+  authDomain: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  measurementId?: string;
+  oAuthClientId?: string;
+  recaptchaSiteKey?: string;
+  firestoreDatabaseId?: string;
+}
+
+export const firebaseConfig: FirebaseAppConfig = rawFirebaseConfig as FirebaseAppConfig;
 
 // Initialize Firebase App
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // Initialize Firestore with custom database ID from config
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 
 // Initialize Firebase Storage
 export const storage: FirebaseStorage = getStorage(app);
@@ -54,7 +67,7 @@ try {
 // Initialize Firebase Auth
 export const auth = getAuth(app);
 
-export const FIRESTORE_UPGRADE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/databases/${firebaseConfig.firestoreDatabaseId}/data?openUpgradeDialog=true`;
+export const FIRESTORE_UPGRADE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/databases/${firebaseConfig.firestoreDatabaseId || '(default)'}/data?openUpgradeDialog=true`;
 export const FIREBASE_STORAGE_ACTIVATE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/storage`;
 
 export const getTodayDateStr = () => new Date().toISOString().slice(0, 10);
@@ -233,15 +246,50 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Google Auth Provider setup
+// Google Auth Provider setup with Google Drive Scopes
+export const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+SCOPES.forEach(scope => googleProvider.addScope(scope));
+
+// In-memory token cache (never stored in localStorage)
+let cachedAccessToken: string | null = null;
+
+export const setCachedAccessToken = (token: string | null) => {
+  cachedAccessToken = token;
+};
+
+export const getCachedAccessToken = (): string | null => {
+  return cachedAccessToken;
+};
 
 export const loginWithGoogle = async () => {
-  return await signInWithPopup(auth, googleProvider);
+  const result = await signInWithPopup(auth, googleProvider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  if (credential?.accessToken) {
+    cachedAccessToken = credential.accessToken;
+  }
+  return result;
+};
+
+export const connectGoogleDrive = async (): Promise<string | null> => {
+  if (cachedAccessToken) return cachedAccessToken;
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      cachedAccessToken = credential.accessToken;
+      return cachedAccessToken;
+    }
+  } catch (error) {
+    console.error('Drive connection error:', error);
+    throw error;
+  }
+  return null;
 };
 
 export const logout = async () => {
+  cachedAccessToken = null;
   return await signOut(auth);
 };
 
@@ -520,7 +568,7 @@ export const writeModularSchoolState = async (
 
     for (const [modKey, modPayload] of Object.entries(modulesData)) {
       const payloadStr = JSON.stringify(modPayload);
-      if (lastHashes[modKey] !== payloadStr || modKey === 'meta') {
+      if (lastHashes[modKey] !== payloadStr) {
         const modDocRef = doc(dbInstance, 'schools', schoolId, 'modules', modKey);
         promises.push(setDoc(modDocRef, modPayload));
         updatedModules.push(modKey);

@@ -71,7 +71,7 @@ export const getDisplayFeeForReg = (
 };
 
 export const StudentsView = () => {
-  const { state, setStudents, setResults, updateBudget, setExamHalls, userRole } = useAppContext();
+  const { state, setStudents, setResults, updateBudget, setExamHalls, userRole, batchUpdateState } = useAppContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Search & filter states
@@ -728,56 +728,64 @@ export const StudentsView = () => {
     const oldStudent = state.students.find(s => s.id === id);
     if (!oldStudent) return;
     
-    setStudents(state.students.map(s => s.id === id ? { ...s, [field]: value } : s));
-    
-    // Eğer öğrenci numarası veya adı güncelleniyorsa, bağlı sonuçlara da yansıt (atardamar mantığı)
-    if (field === 'no' && oldStudent.no !== value) {
-      setResults(state.results.map(r => {
-        if (r.studentNo === oldStudent.no) {
-          return { ...r, studentNo: value as number, studentId: id };
-        }
-        return r;
-      }));
-    } else if (field === 'name' && oldStudent.name !== value) {
-      setResults(state.results.map(r => {
-        if (r.studentNo === oldStudent.no) {
-          return { ...r, studentName: value as string, studentId: id };
-        }
-        return r;
-      }));
-    } else if (field === 'className' && oldStudent.className !== value) {
-      setResults(state.results.map(r => {
-        if (r.studentNo === oldStudent.no) {
-          return { ...r, studentClass: value as string, studentId: id };
-        }
-        return r;
-      }));
-    }
+    batchUpdateState((prev) => {
+      const updatedStudents = prev.students.map(s => s.id === id ? { ...s, [field]: value } : s);
+      
+      let updatedResults = prev.results;
+      if (field === 'no' && oldStudent.no !== value) {
+        updatedResults = prev.results.map(r => {
+          if (r.studentNo === oldStudent.no) {
+            return { ...r, studentNo: value as number, studentId: id };
+          }
+          return r;
+        });
+      } else if (field === 'name' && oldStudent.name !== value) {
+        updatedResults = prev.results.map(r => {
+          if (r.studentNo === oldStudent.no) {
+            return { ...r, studentName: value as string, studentId: id };
+          }
+          return r;
+        });
+      } else if (field === 'className' && oldStudent.className !== value) {
+        updatedResults = prev.results.map(r => {
+          if (r.studentNo === oldStudent.no) {
+            return { ...r, studentClass: value as string, studentId: id };
+          }
+          return r;
+        });
+      }
 
-    // Salon oturma planlarındaki öğrenci bilgilerini senkronize et
-    if (field === 'no' || field === 'name' || field === 'className') {
-      const updatedHalls = state.examHalls.map(h => {
-        const seatingPlan = h.seatingPlan || [];
-        if (seatingPlan.some(sp => sp.studentId === id)) {
-          return {
-            ...h,
-            seatingPlan: seatingPlan.map(sp => {
-              if (sp.studentId === id) {
-                return {
-                  ...sp,
-                  studentNo: field === 'no' ? (value as number) : sp.studentNo,
-                  studentName: field === 'name' ? (value as string) : sp.studentName,
-                  studentClass: field === 'className' ? (value as string) : sp.studentClass,
-                };
-              }
-              return sp;
-            })
-          };
-        }
-        return h;
-      });
-      setExamHalls(updatedHalls);
-    }
+      let updatedHalls = prev.examHalls;
+      if (field === 'no' || field === 'name' || field === 'className') {
+        updatedHalls = prev.examHalls.map(h => {
+          const seatingPlan = h.seatingPlan || [];
+          if (seatingPlan.some(sp => sp.studentId === id)) {
+            return {
+              ...h,
+              seatingPlan: seatingPlan.map(sp => {
+                if (sp.studentId === id) {
+                  return {
+                    ...sp,
+                    studentNo: field === 'no' ? (value as number) : sp.studentNo,
+                    studentName: field === 'name' ? (value as string) : sp.studentName,
+                    studentClass: field === 'className' ? (value as string) : sp.studentClass,
+                  };
+                }
+                return sp;
+              })
+            };
+          }
+          return h;
+        });
+      }
+
+      return {
+        ...prev,
+        students: updatedStudents,
+        results: updatedResults,
+        examHalls: updatedHalls
+      };
+    });
   };
 
   const removeStudent = (id: string) => {
