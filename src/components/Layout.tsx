@@ -951,10 +951,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                       setIsPublishing(true);
                       try {
                         await publishToCloud();
-                        setSaveFeedback("✓ Tüm değişiklikler buluta yayınlandı");
+                        setSaveFeedback("✓ Değişiklikler öğretmenlere başarıyla yayınlandı");
                         setTimeout(() => setSaveFeedback(null), 3500);
                       } catch (e: any) {
-                        setSaveFeedback("⚠️ Buluta aktarılırken hata oluştu");
+                        setSaveFeedback("⚠️ Yayında hata oluştu");
                         setTimeout(() => setSaveFeedback(null), 3500);
                       } finally {
                         setIsPublishing(false);
@@ -962,15 +962,15 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     }}
                     disabled={isPublishing}
                     className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer animate-pulse"
-                    title="Yerel hafızadaki bekleyen değişiklikleri bulut sunucusuna hemen gönder"
+                    title="Tüm değişiklikleri Firebase'e aktar ve öğretmenlerin panellerine anında yansıt"
                   >
                     <UploadCloud className={`w-3.5 h-3.5 ${isPublishing ? 'animate-bounce' : ''}`} />
-                    <span>{isPublishing ? 'Yayınlanıyor...' : `Buluta Yayınla (${pendingSyncCount})`}</span>
+                    <span>{isPublishing ? 'Yayınlanıyor...' : `Öğretmenlere Yayınla (${pendingSyncCount})`}</span>
                   </button>
                 ) : syncStatus === 'saving' || isPublishing ? (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 rounded-xl text-xs font-bold shadow-2xs">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
-                    <span>Buluta Aktarılıyor...</span>
+                    <span>Öğretmenlere Aktarılıyor...</span>
                   </div>
                 ) : syncStatus === 'quota_exceeded' ? (
                   <div 
@@ -985,10 +985,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   <div 
                     onClick={() => setIsCloudBackupOpen(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200/90 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold cursor-pointer hover:bg-emerald-100/70 transition-colors shadow-2xs"
-                    title={`Bulutla senkronize. Son eşitleme: ${lastSyncedAt || 'Güncel'}`}
+                    title={`Öğretmenler güncel kütük ile eşitlendi. Son yayın: ${lastSyncedAt || 'Güncel'}`}
                   >
                     <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping" />
-                    <span>Bulutla Eşitlendi</span>
+                    <span>Öğretmenler Güncel</span>
                     {lastSyncedAt && <span className="text-[10px] text-emerald-600/80 font-normal">({lastSyncedAt})</span>}
                   </div>
                 )}
@@ -1009,39 +1009,39 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   title="Google Drive 30 saniyede bir canlı otomatik yedeklenir. Tüm adminler ortak kütük ile eşitlenir."
                 >
                   <FolderCheck className={`w-3.5 h-3.5 text-emerald-600 ${isDriveAutoSyncing ? 'animate-bounce' : ''}`} />
-                  <span>{isDriveAutoSyncing ? 'Drive 30sn...' : (lastDriveSyncedAt ? `Drive Canlı: ${lastDriveSyncedAt}` : 'Drive: 30sn Canlı')}</span>
+                  <span>{isDriveAutoSyncing ? 'Drive 30sn...' : (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : 'Drive: 30sn Canlı')}</span>
                 </button>
 
                 {/* Google Drive / Bulut Yedekleme Quick Trigger */}
                 <button
                   onClick={() => setIsCloudBackupOpen(true)}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-slate-800/90 border border-[#e6e2d3] dark:border-slate-700 text-[#2d2c25] dark:text-slate-100 hover:text-emerald-700 hover:bg-emerald-50/50 hover:border-emerald-300 rounded-xl text-xs font-bold active:scale-95 transition-all cursor-pointer shadow-2xs"
-                  title="Google Drive & Bulut Yedekleme Merkezini Aç"
+                  title="Bulut Senkronizasyon & Yayın Merkezini Aç"
                 >
                   <Cloud className="w-3.5 h-3.5 text-[#B08D57] shrink-0" />
-                  <span>Yedekleme Merkezi</span>
+                  <span>Bulut Merkezi</span>
                 </button>
               </>
             ) : userRole === 'teacher' ? (
               <>
-                {/* Teacher View: Synced Status & View Cloud Backups */}
+                {/* Teacher View: Synced Status & View Published Data */}
                 <div 
                   onClick={() => setIsCloudBackupOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200/90 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold cursor-pointer hover:bg-emerald-100/70 transition-colors shadow-2xs"
-                  title="Firebase üzerinden en son yayınlanmış okul verileri cihazınızla eşitlendi"
+                  title="Yönetim tarafından yayınlanan en güncel kütük ekranınıza yansıtıldı"
                 >
                   <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping" />
-                  <span>Bulutla Eşitlendi</span>
+                  <span>Yönetimle Eşitlendi</span>
                   {lastSyncedAt && <span className="text-[10px] text-emerald-600/80 font-normal">({lastSyncedAt})</span>}
                 </div>
 
                 <button
                   onClick={() => setIsCloudBackupOpen(true)}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-slate-800/90 border border-[#e6e2d3] dark:border-slate-700 text-[#2d2c25] dark:text-slate-100 hover:text-sky-700 hover:bg-sky-50/50 hover:border-sky-300 rounded-xl text-xs font-bold active:scale-95 transition-all cursor-pointer shadow-2xs"
-                  title="Firebase üzerindeki manuel yayınlanmış sistem yedeklerini görüntüle"
+                  title="Yönetim tarafından yayınlanmış kütük bilgilerini incele"
                 >
                   <Eye className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                  <span>Bulut Yedekleri ({cloudBackups.length})</span>
+                  <span>Yayınlanan Kütük</span>
                 </button>
               </>
             ) : null}

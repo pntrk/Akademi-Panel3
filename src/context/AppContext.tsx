@@ -754,8 +754,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
               syncFromCloudStorage(true).catch(() => {});
             }
           }
-        }, (err) => {
-          console.warn('Realtime cloud meta listener notice:', err);
+        }, (err: any) => {
+          // Gracefully suppress temporary offline/unavailable notice since client works in local offline mode
+          if (err?.code !== 'unavailable') {
+            console.warn('Realtime cloud meta listener notice:', err?.message || err);
+          }
         });
       } catch (e) {}
     }

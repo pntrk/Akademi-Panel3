@@ -9,6 +9,8 @@ import {
 } from 'firebase/auth';
 import { 
   getFirestore, 
+  initializeFirestore,
+  setLogLevel,
   doc, 
   getDoc, 
   setDoc, 
@@ -53,8 +55,21 @@ export const firebaseConfig: FirebaseAppConfig = rawFirebaseConfig as FirebaseAp
 // Initialize Firebase App
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize Firestore with custom database ID from config
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+// Suppress non-critical transient network drop warnings in development
+try {
+  setLogLevel('error');
+} catch (e) {}
+
+// Initialize Firestore with custom database ID and robust network connection (auto-detect long-polling fallback)
+export const db = (() => {
+  try {
+    return initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    }, firebaseConfig.firestoreDatabaseId || '(default)');
+  } catch {
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+  }
+})();
 
 // Initialize Firebase Storage
 export const storage: FirebaseStorage = getStorage(app);
@@ -247,24 +262,74 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 // Standard Google Auth Provider for App Login (Clean, non-sensitive scopes: email & profile only)
-// NEVER add sensitive scopes like Google Drive here so all teachers/users can log in without OAuth 403 blocks.
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// Dedicated Google Drive Provider (Only used when an admin explicitly links Google Drive)
+// Dedicated Google Drive Provider
+// CRITICAL: We DO NOT pass prompt: 'consent'. This allows Google to remember user consent
+// so admins are NEVER asked for permissions again once granted!
 export const googleDriveProvider = new GoogleAuthProvider();
-googleDriveProvider.setCustomParameters({ prompt: 'consent select_account' });
+googleDriveProvider.setCustomParameters({ prompt: 'select_account' });
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
 
-// In-memory token cache (never stored in localStorage)
-let cachedAccessToken: string | null = null;
+// Token keys for persistent session/local storage
+const DRIVE_TOKEN_KEY = 'akademi_drive_access_token';
+const DRIVE_EXPIRES_KEY = 'akademi_drive_token_expires_at';
+const DRIVE_APPROVED_PREFIX = 'akademi_drive_approved_';
 
-export const setCachedAccessToken = (token: string | null) => {
-  cachedAccessToken = token;
+let inMemoryAccessToken: string | null = null;
+
+export const isDrivePreApproved = (email?: string | null): boolean => {
+  const e = (email || auth.currentUser?.email || '').trim().toLowerCase();
+  if (!e) return false;
+  try {
+    return localStorage.getItem(DRIVE_APPROVED_PREFIX + e) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+export const markDrivePreApproved = (email?: string | null) => {
+  const e = (email || auth.currentUser?.email || '').trim().toLowerCase();
+  if (!e) return;
+  try {
+    localStorage.setItem(DRIVE_APPROVED_PREFIX + e, 'true');
+  } catch {}
+};
+
+export const setCachedAccessToken = (token: string | null, expiresInSeconds = 3500) => {
+  inMemoryAccessToken = token;
+  try {
+    if (token) {
+      const expiresAt = Date.now() + (expiresInSeconds * 1000);
+      sessionStorage.setItem(DRIVE_TOKEN_KEY, token);
+      sessionStorage.setItem(DRIVE_EXPIRES_KEY, expiresAt.toString());
+      localStorage.setItem(DRIVE_TOKEN_KEY, token);
+      localStorage.setItem(DRIVE_EXPIRES_KEY, expiresAt.toString());
+      if (auth.currentUser?.email) {
+        markDrivePreApproved(auth.currentUser.email);
+      }
+    } else {
+      sessionStorage.removeItem(DRIVE_TOKEN_KEY);
+      sessionStorage.removeItem(DRIVE_EXPIRES_KEY);
+      localStorage.removeItem(DRIVE_TOKEN_KEY);
+      localStorage.removeItem(DRIVE_EXPIRES_KEY);
+    }
+  } catch {}
 };
 
 export const getCachedAccessToken = (): string | null => {
-  return cachedAccessToken;
+  if (inMemoryAccessToken) return inMemoryAccessToken;
+  try {
+    const stored = sessionStorage.getItem(DRIVE_TOKEN_KEY) || localStorage.getItem(DRIVE_TOKEN_KEY);
+    const expiresAt = Number(sessionStorage.getItem(DRIVE_EXPIRES_KEY) || localStorage.getItem(DRIVE_EXPIRES_KEY) || 0);
+    // Token is valid if expires in the future with at least 60s buffer
+    if (stored && expiresAt > Date.now() + 60000) {
+      inMemoryAccessToken = stored;
+      return stored;
+    }
+  } catch {}
+  return null;
 };
 
 export const loginWithGoogle = async () => {
@@ -273,17 +338,24 @@ export const loginWithGoogle = async () => {
   return result;
 };
 
-export const connectGoogleDrive = async (): Promise<string | null> => {
-  if (cachedAccessToken) return cachedAccessToken;
+export const connectGoogleDrive = async (silentOnly = false): Promise<string | null> => {
+  const existing = getCachedAccessToken();
+  if (existing) return existing;
+
   try {
-    // Only requests Drive scope when explicitly connecting Google Drive
+    // Prompt without 'consent' -> Google automatically reuses prior consent without showing permission dialogs!
     const result = await signInWithPopup(auth, googleDriveProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
-      cachedAccessToken = credential.accessToken;
-      return cachedAccessToken;
+      setCachedAccessToken(credential.accessToken);
+      markDrivePreApproved(result.user?.email || auth.currentUser?.email);
+      return credential.accessToken;
     }
-  } catch (error) {
+  } catch (error: any) {
+    if (silentOnly) {
+      console.warn('Silent drive connection notice:', error?.message);
+      return null;
+    }
     console.error('Drive connection error:', error);
     throw error;
   }
@@ -291,7 +363,7 @@ export const connectGoogleDrive = async (): Promise<string | null> => {
 };
 
 export const logout = async () => {
-  cachedAccessToken = null;
+  setCachedAccessToken(null);
   return await signOut(auth);
 };
 
