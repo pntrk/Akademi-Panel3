@@ -263,6 +263,8 @@ export interface AppState {
   lastPublishedAt?: string;
   lastPublishedBy?: string;
   examCalendarPrintSettings?: any;
+  canonicalDriveFileId?: string;
+  canonicalDriveFileLink?: string;
 }
 
 export interface FullBackupData {
@@ -283,6 +285,8 @@ export interface FullBackupData {
   admins?: string[];
   teachers?: string[];
   examCalendarPrintSettings?: any;
+  canonicalDriveFileId?: string;
+  canonicalDriveFileLink?: string;
 }
 
 export interface CloudBackupRecord {

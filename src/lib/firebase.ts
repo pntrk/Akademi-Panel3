@@ -266,10 +266,10 @@ export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // Dedicated Google Drive Provider
-// CRITICAL: We DO NOT pass prompt: 'consent'. This allows Google to remember user consent
-// so admins are NEVER asked for permissions again once granted!
+// Includes both drive and drive.file scopes so shared files can be accessed seamlessly across all admins
 export const googleDriveProvider = new GoogleAuthProvider();
 googleDriveProvider.setCustomParameters({ prompt: 'select_account' });
+googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
 
 // Token keys for persistent session/local storage
@@ -338,9 +338,13 @@ export const loginWithGoogle = async () => {
   return result;
 };
 
-export const connectGoogleDrive = async (silentOnly = false): Promise<string | null> => {
-  const existing = getCachedAccessToken();
-  if (existing) return existing;
+export const connectGoogleDrive = async (silentOnly = false, forceRefresh = false): Promise<string | null> => {
+  if (!forceRefresh) {
+    const existing = getCachedAccessToken();
+    if (existing) return existing;
+  } else {
+    setCachedAccessToken(null);
+  }
 
   try {
     // Prompt without 'consent' -> Google automatically reuses prior consent without showing permission dialogs!
@@ -575,6 +579,8 @@ export const fetchModularSchoolState = async (
           if (Array.isArray(d.admins) && d.admins.length > 0) merged.admins = d.admins;
           if (Array.isArray(d.teachers)) merged.teachers = d.teachers;
           if (d.examCalendarPrintSettings) merged.examCalendarPrintSettings = d.examCalendarPrintSettings;
+          if (d.canonicalDriveFileId) merged.canonicalDriveFileId = d.canonicalDriveFileId;
+          if (d.canonicalDriveFileLink) merged.canonicalDriveFileLink = d.canonicalDriveFileLink;
         }
       });
 
@@ -591,6 +597,26 @@ export const fetchModularSchoolState = async (
   } catch (err: any) {
     console.warn('fetchModularSchoolState notice:', err);
     return null;
+  }
+};
+
+export const saveCanonicalDriveFileToFirestore = async (fileId: string, fileLink?: string) => {
+  try {
+    if (!firebaseConfig.projectId) return;
+    const cleanId = fileId.trim();
+    const cleanLink = fileLink || `https://drive.google.com/file/d/${cleanId}/view`;
+    await setDoc(doc(db, 'schools', 'main'), {
+      canonicalDriveFileId: cleanId,
+      canonicalDriveFileLink: cleanLink,
+      lastDriveFileUpdatedAt: new Date().toISOString()
+    }, { merge: true });
+    await setDoc(doc(db, 'schools', 'main', 'modules', 'meta'), {
+      canonicalDriveFileId: cleanId,
+      canonicalDriveFileLink: cleanLink,
+      lastDriveFileUpdatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (e) {
+    console.warn('Could not save canonical drive file to firestore:', e);
   }
 };
 
@@ -620,7 +646,9 @@ export const writeModularSchoolState = async (
       lastPublishedBy: cleanState.lastPublishedBy || 'admin',
       admins: cleanState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
       teachers: cleanState.teachers || [],
-      examCalendarPrintSettings: cleanState.examCalendarPrintSettings
+      examCalendarPrintSettings: cleanState.examCalendarPrintSettings,
+      canonicalDriveFileId: cleanState.canonicalDriveFileId || undefined,
+      canonicalDriveFileLink: cleanState.canonicalDriveFileLink || undefined
     }
   };
 
@@ -637,7 +665,9 @@ export const writeModularSchoolState = async (
       admins: cleanState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
       teachers: cleanState.teachers || [],
       studentCount: cleanState.students?.length || 0,
-      examCount: cleanState.exams?.length || 0
+      examCount: cleanState.exams?.length || 0,
+      canonicalDriveFileId: cleanState.canonicalDriveFileId || undefined,
+      canonicalDriveFileLink: cleanState.canonicalDriveFileLink || undefined
     }, { merge: true }));
 
     for (const [modKey, modPayload] of Object.entries(modulesData)) {

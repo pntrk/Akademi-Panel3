@@ -232,36 +232,36 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#e6e2d3] bg-[#fcfbf7] sticky top-0 z-20">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-600/10 flex items-center justify-center text-emerald-700 shadow-sm border border-emerald-200/60 shrink-0">
-              <ShieldCheck className="w-5 h-5" />
+        <div className="flex items-center justify-between p-3 sm:p-6 border-b border-[#e6e2d3] bg-[#fcfbf7] sticky top-0 z-20">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-emerald-600/10 flex items-center justify-center text-emerald-700 shadow-sm border border-emerald-200/60 shrink-0">
+              <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-serif font-bold text-[#5a5a40]">Kullanıcı & Yetki Yönetimi</h2>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-xl font-serif font-bold text-[#5a5a40] truncate">Kullanıcı & Yetki Yönetimi</h2>
                 {pendingUsers.length > 0 && (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse shrink-0">
                     {pendingUsers.length} Bekleyen
                   </span>
                 )}
               </div>
-              <p className="text-xs text-[#8e8d82] mt-0.5">
-                Uygulamaya giriş yapmış tüm kayıtlı üyeleri görüntüleyin, tek tıkla Öğretmen veya İdareci yetkisi tanımlayın.
+              <p className="text-[10.5px] sm:text-xs text-[#8e8d82] mt-0.5 truncate sm:whitespace-normal">
+                Kayıtlı üyeleri görüntüleyin, tek tıkla Öğretmen veya İdareci yetkisi tanımlayın.
               </p>
             </div>
           </div>
           <button 
             onClick={onClose} 
-            className="p-2 text-[#8e8d82] hover:bg-[#e6e2d3] hover:text-[#5a5a40] rounded-full transition-colors cursor-pointer active:scale-95"
+            className="p-1.5 sm:p-2 text-[#8e8d82] hover:bg-[#e6e2d3] hover:text-[#5a5a40] rounded-full transition-colors cursor-pointer active:scale-95 shrink-0"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Feedback Toast */}
         {feedback && (
-          <div className={`mx-4 sm:mx-6 mt-4 p-3 rounded-xl border text-xs font-bold flex items-center gap-2 animate-fade-in ${
+          <div className={`mx-3 sm:mx-6 mt-3 sm:mt-4 p-2.5 sm:p-3 rounded-xl border text-xs font-bold flex items-center gap-2 animate-fade-in ${
             feedback.type === 'error' 
               ? 'bg-rose-50 border-rose-200 text-rose-800' 
               : feedback.type === 'info'
@@ -274,123 +274,123 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
         )}
 
         {/* Search Bar & Quick Stats */}
-        <div className="p-4 sm:px-6 sm:pt-4 sm:pb-2 bg-[#faf9f5] border-b border-[#e6e2d3] flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="p-3 sm:px-6 sm:pt-4 sm:pb-3 bg-[#faf9f5] border-b border-[#e6e2d3] flex flex-col sm:flex-row gap-2.5 sm:gap-3 items-stretch sm:items-center justify-between">
           <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-[#8e8d82] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#8e8d82] absolute left-3 sm:left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="İsim veya e-posta ile ara..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3.5 py-2 bg-white border border-[#e6e2d3] rounded-xl text-xs sm:text-sm focus:outline-none focus:border-[#B08D57] focus:ring-1 focus:ring-[#B08D57]"
+              className="w-full pl-8 sm:pl-9 pr-3 py-2 sm:py-2.5 bg-white border border-[#e6e2d3] rounded-xl text-xs sm:text-sm focus:outline-none focus:border-[#B08D57] shadow-2xs"
             />
           </div>
 
-          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end text-xs font-medium text-[#8e8d82]">
-            <span className="px-2.5 py-1 bg-amber-50 rounded-lg border border-amber-200 text-amber-800 font-bold">
-              {pendingUsers.length} Onay Bekleyen
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-start sm:justify-end text-xs font-medium text-[#8e8d82]">
+            <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-amber-50 rounded-lg border border-amber-200 text-amber-800 font-bold text-[10px] sm:text-xs">
+              {pendingUsers.length} Bekleyen
             </span>
-            <span className="px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 font-bold">
+            <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 font-bold text-[10px] sm:text-xs">
               {teachers.length} Öğretmen
             </span>
-            <span className="px-2.5 py-1 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-800 font-bold">
+            <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-800 font-bold text-[10px] sm:text-xs">
               {admins.length} İdareci
             </span>
           </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1">
 
           {/* SECTION 1: BEKLEYEN & YENİ KAYITLI KULLANICILAR */}
-          <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-4 sm:p-5 rounded-2xl border-2 border-amber-300/80 shadow-sm space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center font-bold">
-                  <Clock className="w-4 h-4" />
+          <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-amber-300/80 shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2.5">
+              <div className="flex items-start gap-2 min-w-0">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center font-bold shrink-0 mt-0.5">
+                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-amber-950 uppercase tracking-wider">
-                    Giriş Yapmış Yeni Kayıtlı Kullanıcılar (Onay Bekleyenler)
+                <div className="min-w-0">
+                  <h3 className="text-xs sm:text-sm font-bold text-amber-950 uppercase tracking-wider">
+                    Giriş Yapmış Yeni Kullanıcılar (Onay Bekleyenler)
                   </h3>
-                  <p className="text-xs text-amber-900/80">
-                    Google ile uygulamaya giriş yapmış veya kaydolmuş kullanıcılar aşağıda listelenmektedir. Tek tıkla yetki atayabilirsiniz.
+                  <p className="text-[10.5px] sm:text-xs text-amber-900/80">
+                    Google ile kaydolan kullanıcılar. Tek tıkla yetkilendirin.
                   </p>
                 </div>
               </div>
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-200 text-amber-900 shadow-xs shrink-0">
+              <span className="px-2.5 py-0.5 rounded-full text-[10.5px] sm:text-xs font-bold bg-amber-200 text-amber-900 shadow-2xs shrink-0 self-start sm:self-auto">
                 {pendingUsers.length} Hesap
               </span>
             </div>
 
             {filteredPending.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {filteredPending.map((user) => {
                   const isCurProcessing = isProcessing === user.email;
 
                   return (
                     <div 
                       key={user.id || user.email}
-                      className="p-4 bg-white rounded-2xl border border-amber-200/90 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 transition-all hover:border-amber-400"
+                      className="p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-amber-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3.5 transition-all hover:border-amber-400"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
                         {user.photoURL ? (
                           <img 
                             src={user.photoURL} 
                             alt={user.name || 'User'} 
-                            className="w-10 h-10 rounded-2xl object-cover border border-amber-300 shrink-0 shadow-xs"
+                            className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl object-cover border border-amber-300 shrink-0 shadow-2xs mt-0.5 sm:mt-0"
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-100 to-amber-200 border border-amber-300 flex items-center justify-center text-amber-900 font-bold text-sm shrink-0">
+                          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-100 to-amber-200 border border-amber-300 flex items-center justify-center text-amber-900 font-bold text-xs sm:text-sm shrink-0 mt-0.5 sm:mt-0">
                             {user.name ? user.name.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : 'U')}
                           </div>
                         )}
 
                         <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-gray-900 truncate">{user.name || 'Kullanıcı'}</span>
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300/80">
-                              Kayıtlı Misafir
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs sm:text-sm font-bold text-gray-900 truncate">{user.name || 'Kullanıcı'}</span>
+                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-300/80">
+                              Misafir
                             </span>
                           </div>
-                          <span className="text-xs text-gray-500 font-mono truncate">{user.email}</span>
-                          <span className="text-[11px] text-amber-800/70 flex items-center gap-1 mt-0.5">
-                            <Calendar className="w-3 h-3 text-amber-600" />
-                            Son Giriş / Kayıt: {formatDate(user.lastLoginAt || user.timestamp)}
+                          <span className="text-[11px] sm:text-xs text-gray-500 font-mono truncate">{user.email}</span>
+                          <span className="text-[10px] text-amber-800/70 flex items-center gap-1 mt-0.5 truncate">
+                            <Calendar className="w-3 h-3 text-amber-600 shrink-0" />
+                            Son Giriş: {formatDate(user.lastLoginAt || user.timestamp)}
                           </span>
                         </div>
                       </div>
 
                       {/* Action Buttons: Grant Teacher, Grant Admin, Delete */}
-                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto">
                         <button
                           onClick={() => handleGrantRole(user.email, 'teacher', user.name)}
                           disabled={isCurProcessing}
-                          className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                          title="Öğretmen Yetkisi Ver (Sınav Sonuçları, Analiz ve Akademi Arena açılır)"
+                          className="flex-1 sm:flex-initial px-3 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[11px] sm:text-xs font-bold rounded-lg sm:rounded-xl shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                          title="Öğretmen Yetkisi Ver"
                         >
-                          <UserCheck className="w-4 h-4" />
-                          <span>Öğretmen Yetkisi Ver</span>
+                          <UserCheck className="w-3.5 h-3.5" />
+                          <span>Öğretmen Yap</span>
                         </button>
 
                         <button
                           onClick={() => handleGrantRole(user.email, 'admin', user.name)}
                           disabled={isCurProcessing}
-                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                          title="İdareci Yetkisi Ver (Tüm sisteme tam erişim)"
+                          className="flex-1 sm:flex-initial px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[11px] sm:text-xs font-bold rounded-lg sm:rounded-xl shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                          title="İdareci Yetkisi Ver"
                         >
-                          <ShieldCheck className="w-4 h-4" />
-                          <span>İdareci Yetkisi Ver</span>
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>İdareci Yap</span>
                         </button>
 
                         <button
                           onClick={() => handleDeleteRequest(user.email)}
                           disabled={isCurProcessing}
-                          className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl border border-rose-200 transition-colors cursor-pointer"
-                          title="İsteği / Kaydı Sil"
+                          className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg sm:rounded-xl border border-rose-200 transition-colors cursor-pointer active:scale-95 shrink-0"
+                          title="İsteği Sil"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -398,8 +398,8 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 })}
               </div>
             ) : (
-              <div className="p-5 bg-white/80 rounded-xl border border-amber-200 text-center text-amber-900/80 text-xs font-medium">
-                {searchQuery ? 'Aramanıza uygun onay bekleyen kullanıcı bulunamadı.' : 'Şu anda onay bekleyen yeni bir kayıtlı kullanıcı bulunmuyor. Yeni bir kullanıcı Google ile giriş yaptığında anında bu alana eklenecektir.'}
+              <div className="p-3.5 sm:p-5 bg-white/80 rounded-xl border border-amber-200 text-center text-amber-900/80 text-[11px] sm:text-xs font-medium">
+                {searchQuery ? 'Aramanıza uygun onay bekleyen kullanıcı bulunamadı.' : 'Onay bekleyen yeni bir kayıtlı kullanıcı bulunmuyor.'}
               </div>
             )}
           </div>
@@ -408,49 +408,49 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
           {/* SECTION 2: YETKİLİ ÖĞRETMENLER */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <h3 className="text-xs sm:text-sm font-bold text-blue-900 uppercase tracking-wider flex items-center gap-2">
-                <Users className="w-4 h-4 text-blue-600" /> Yetkili Öğretmenler ({teachers.length})
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5">
+              <h3 className="text-xs sm:text-sm font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" /> Yetkili Öğretmenler ({teachers.length})
               </h3>
-              <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 self-start sm:self-auto">
                 Sonuçlar, Analiz & Arena Yetkisi
               </span>
             </div>
-            <p className="text-[11px] text-[#8e8d82] mb-3">
-              Öğretmenler giriş yaptıklarında Nasıl Çalışır rehberini, Profil ayarlarını, Sınav Sonuçlarını, Sonuçlar Analizini ve Akademi Arena sekmelerini kullanabilir.
+            <p className="text-[10.5px] sm:text-[11px] text-[#8e8d82] mb-2.5">
+              Öğretmenler; Sınav Sonuçları, Madde Analizi ve Akademi Arena sekmelerini kullanabilir.
             </p>
 
-            <div className="space-y-2 mb-3">
+            <div className="space-y-1.5 sm:space-y-2 mb-2.5">
               {filteredTeachers.map(email => {
                 const userObj = registeredUsers.find(u => u.email === email);
                 return (
-                  <div key={email} className="flex items-center justify-between p-3 bg-blue-50/70 rounded-2xl border border-blue-100 hover:border-blue-200 transition-colors">
-                    <div className="flex items-center gap-2.5 min-w-0 mr-2">
-                      <div className="w-8 h-8 rounded-xl bg-blue-600/10 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
+                  <div key={email} className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:p-3 bg-blue-50/70 rounded-xl sm:rounded-2xl border border-blue-100 hover:border-blue-200 transition-colors gap-2">
+                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 mr-1">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-blue-600/10 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
                         {userObj?.name ? userObj.name.charAt(0).toUpperCase() : email.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex flex-col min-w-0">
                         <span className="text-xs sm:text-sm font-bold text-blue-950 truncate">
                           {userObj?.name || email.split('@')[0]}
                         </span>
-                        <span className="text-[11px] text-blue-700/80 font-mono truncate">{email}</span>
+                        <span className="text-[10.5px] sm:text-[11px] text-blue-700/80 font-mono truncate">{email}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                       <button 
                         onClick={() => handleGrantRole(email, 'admin', userObj?.name)}
-                        className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 hover:text-emerald-800 text-[11px] font-bold rounded-lg border border-emerald-200 transition-colors cursor-pointer"
+                        className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 hover:text-emerald-800 text-[10.5px] sm:text-[11px] font-bold rounded-lg border border-emerald-200 transition-colors cursor-pointer active:scale-95"
                         title="İdareci Yetkisine Yükselt"
                       >
                         İdareci Yap
                       </button>
                       <button 
                         onClick={() => handleRevokeRole(email)} 
-                        className="text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 active:scale-90 rounded-lg transition-all cursor-pointer"
+                        className="text-rose-500 hover:text-rose-700 p-1 hover:bg-rose-50 active:scale-90 rounded-lg transition-all cursor-pointer"
                         title="Yetkiyi Kaldır"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -458,7 +458,7 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
               })}
 
               {filteredTeachers.length === 0 && (
-                <p className="text-xs text-[#8e8d82] text-center py-4 bg-gray-50 rounded-xl border border-dashed border-[#e6e2d3]">
+                <p className="text-xs text-[#8e8d82] text-center py-3 bg-gray-50 rounded-xl border border-dashed border-[#e6e2d3]">
                   {searchQuery ? 'Aramanıza uygun öğretmen bulunamadı.' : 'Henüz yetkilendirilmiş öğretmen hesabı bulunmamaktadır.'}
                 </p>
               )}
@@ -472,13 +472,13 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 placeholder="Önceden Öğretmen E-postası Tanımla (@gmail.com)"
                 value={newTeacherEmail}
                 onChange={(e) => setNewTeacherEmail(e.target.value)}
-                className="flex-1 px-3.5 py-2 bg-white border border-[#e6e2d3] rounded-xl text-xs sm:text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                className="flex-1 px-3 py-2 bg-white border border-[#e6e2d3] rounded-xl text-xs sm:text-sm focus:outline-none focus:border-blue-500 shadow-2xs"
               />
               <button 
                 type="submit" 
-                className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl text-xs sm:text-sm hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0 shadow-xs cursor-pointer"
+                className="px-3.5 py-2 bg-blue-600 text-white font-bold rounded-xl text-xs sm:text-sm hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 shadow-2xs cursor-pointer"
               >
-                <UserPlus className="w-4 h-4" /> Öğretmen Olarak Ekle
+                <UserPlus className="w-3.5 h-3.5" /> Öğretmen Olarak Ekle
               </button>
             </form>
           </div>
@@ -487,59 +487,59 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
           {/* SECTION 3: YETKİLİ İDARECİLER & YÖNETİCİLER */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <h3 className="text-xs sm:text-sm font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-2">
-                <Shield className="w-4 h-4 text-emerald-600" /> Yetkili İdareciler / Yöneticiler ({admins.length})
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5">
+              <h3 className="text-xs sm:text-sm font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" /> Yetkili İdareciler / Yöneticiler ({admins.length})
               </h3>
-              <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 self-start sm:self-auto">
                 Tam Sistem Yetkisi
               </span>
             </div>
-            <p className="text-[11px] text-[#8e8d82] mb-3">
-              İdareciler tüm okul modüllerini yönetebilir, öğrenci/sınav ekleyebilir, bütçe yönetebilir ve kullanıcı yetkilerini düzenleyebilir.
+            <p className="text-[10.5px] sm:text-[11px] text-[#8e8d82] mb-2.5">
+              İdareciler tüm okul modüllerini, sınavları, bütçeyi ve kütüğü yönetebilir.
             </p>
 
-            <div className="space-y-2 mb-3">
+            <div className="space-y-1.5 sm:space-y-2 mb-2.5">
               {filteredAdmins.map(email => {
                 const isSuper = isSuperAdmin(email);
                 const userObj = registeredUsers.find(u => u.email === email);
 
                 return (
-                  <div key={email} className="flex items-center justify-between p-3 bg-emerald-50/70 rounded-2xl border border-emerald-100 hover:border-emerald-200 transition-colors">
-                    <div className="flex items-center gap-2.5 min-w-0 mr-2">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-600/10 text-emerald-700 font-bold flex items-center justify-center text-xs shrink-0">
+                  <div key={email} className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:p-3 bg-emerald-50/70 rounded-xl sm:rounded-2xl border border-emerald-100 hover:border-emerald-200 transition-colors gap-2">
+                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 mr-1">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-600/10 text-emerald-700 font-bold flex items-center justify-center text-xs shrink-0">
                         {userObj?.name ? userObj.name.charAt(0).toUpperCase() : email.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs sm:text-sm font-bold text-emerald-950 truncate">
                             {userObj?.name || email.split('@')[0]}
                           </span>
                           {isSuper && (
-                            <span className="text-[10px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded-md border border-amber-300/70">
+                            <span className="text-[9.5px] bg-amber-200 text-amber-900 font-bold px-1.5 py-0.2 rounded-md border border-amber-300/70">
                               Süper Admin
                             </span>
                           )}
                         </div>
-                        <span className="text-[11px] text-emerald-700/80 font-mono truncate">{email}</span>
+                        <span className="text-[10.5px] sm:text-[11px] text-emerald-700/80 font-mono truncate">{email}</span>
                       </div>
                     </div>
 
                     {!isSuper && (
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                         <button 
                           onClick={() => handleGrantRole(email, 'teacher', userObj?.name)}
-                          className="px-2.5 py-1.5 bg-white hover:bg-blue-50 text-blue-700 hover:text-blue-800 text-[11px] font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                          className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 hover:text-blue-800 text-[10.5px] sm:text-[11px] font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer active:scale-95"
                           title="Öğretmen Yetkisine Dönüştür"
                         >
                           Öğretmen Yap
                         </button>
                         <button 
                           onClick={() => handleRevokeRole(email)} 
-                          className="text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 active:scale-90 rounded-lg transition-all cursor-pointer"
+                          className="text-rose-500 hover:text-rose-700 p-1 hover:bg-rose-50 active:scale-90 rounded-lg transition-all cursor-pointer"
                           title="Yetkiyi Kaldır"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     )}
@@ -556,13 +556,13 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 placeholder="Önceden İdareci E-postası Tanımla (@gmail.com)"
                 value={newAdminEmail}
                 onChange={(e) => setNewAdminEmail(e.target.value)}
-                className="flex-1 px-3.5 py-2 bg-white border border-[#e6e2d3] rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                className="flex-1 px-3 py-2 bg-white border border-[#e6e2d3] rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500 shadow-2xs"
               />
               <button 
                 type="submit" 
-                className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs sm:text-sm hover:bg-emerald-700 active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0 shadow-xs cursor-pointer"
+                className="px-3.5 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs sm:text-sm hover:bg-emerald-700 active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 shadow-2xs cursor-pointer"
               >
-                <UserPlus className="w-4 h-4" /> İdareci Olarak Ekle
+                <UserPlus className="w-3.5 h-3.5" /> İdareci Olarak Ekle
               </button>
             </form>
           </div>
@@ -570,11 +570,11 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-[#e6e2d3] bg-[#fcfbf7] flex items-center justify-between text-xs text-[#8e8d82]">
-          <span>Toplam {registeredUsers.length} Kayıtlı Kullanıcı Hesabı</span>
+        <div className="p-3 sm:p-4 border-t border-[#e6e2d3] bg-[#fcfbf7] flex items-center justify-between text-[11px] sm:text-xs text-[#8e8d82]">
+          <span>Toplam {registeredUsers.length} Kayıtlı Kullanıcı</span>
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-[#B08D57] hover:bg-[#9a7b4a] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
+            className="px-4 py-1.5 sm:px-5 sm:py-2 bg-[#B08D57] hover:bg-[#9a7b4a] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
           >
             Kapat
           </button>

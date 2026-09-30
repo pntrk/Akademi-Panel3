@@ -6,6 +6,7 @@ export interface DriveBackupItem {
   createdTime: string;
   size?: string;
   webViewLink?: string;
+  owners?: { displayName?: string; emailAddress?: string }[];
 }
 
 export const ensureDriveAccessToken = async (): Promise<string> => {
@@ -54,7 +55,7 @@ export const uploadBackupToGoogleDrive = async (
       JSON.stringify(backupPayload, null, 2) +
       closeDelimiter;
 
-    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,createdTime,size', {
+    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,createdTime,size&supportsAllDrives=true', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -86,7 +87,7 @@ export const listBackupsFromGoogleDrive = async (): Promise<DriveBackupItem[]> =
   try {
     const token = await ensureDriveAccessToken();
     const query = "name contains 'AkademiPanel' and trashed = false";
-    const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,createdTime,size,webViewLink)&orderBy=createdTime desc&pageSize=30&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+    const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,createdTime,size,webViewLink,owners)&orderBy=createdTime desc&pageSize=30&supportsAllDrives=true&includeItemsFromAllDrives=true`;
 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` }
@@ -129,10 +130,41 @@ export const deleteBackupFromGoogleDrive = async (fileId: string): Promise<boole
 };
 
 // -------------------------------------------------------------
-// LIVE MASTER FILE SYNC (CANLI KÜTÜK - 30 SANİYEDE BİR GÜNCELLEME)
+// SINGLE CANONICAL MASTER FILE LOCK (TEK DOSYA KİLİDİ & EŞİTLEME)
 // -------------------------------------------------------------
 export const LIVE_MASTER_FILE_NAME = 'AkademiPanel_Canli_Kutuk.json';
 let cachedLiveFileId: string | null = null;
+let cachedLiveFileLink: string | null = null;
+
+/**
+ * Robustly extracts a Google Drive file or folder ID from ANY input format.
+ * Tolerates full links, sharing links, folder links, query params, quotes, spaces, or raw IDs.
+ */
+export const extractGoogleDriveFileId = (input: string): string | null => {
+  if (!input) return null;
+  // Clean surrounding quotes, angle brackets, parentheses, and spaces
+  let cleaned = input.trim().replace(/^["'<(\[]+|["'>)\]]+$/g, '').trim();
+
+  // 1. URL pattern: /file/d/{ID} or /d/{ID} or /folders/{ID} or /document/d/{ID} or /spreadsheets/d/{ID}
+  const matchPath = cleaned.match(/(?:file\/d|d|folders|document\/d|spreadsheets\/d|presentation\/d)\/([a-zA-Z0-9_-]{10,70})/i);
+  if (matchPath && matchPath[1]) {
+    return matchPath[1];
+  }
+
+  // 2. Query param: id={ID} or fileId={ID}
+  const matchQuery = cleaned.match(/[?&](?:id|fileId)=([a-zA-Z0-9_-]{10,70})/i);
+  if (matchQuery && matchQuery[1]) {
+    return matchQuery[1];
+  }
+
+  // 3. Raw alphanumeric Google Drive ID (typically 15-65 characters)
+  const matchRaw = cleaned.match(/\b([a-zA-Z0-9_-]{15,65})\b/);
+  if (matchRaw && matchRaw[1]) {
+    return matchRaw[1];
+  }
+
+  return null;
+};
 
 export const getLiveMasterFileId = (): string | null => {
   if (cachedLiveFileId) return cachedLiveFileId;
@@ -143,45 +175,221 @@ export const getLiveMasterFileId = (): string | null => {
   }
 };
 
-export const setLiveMasterFileId = (id: string | null) => {
+export const getLiveMasterFileLink = (): string | null => {
+  if (cachedLiveFileLink) return cachedLiveFileLink;
+  try {
+    return localStorage.getItem('akademi_live_drive_file_link');
+  } catch {
+    const id = getLiveMasterFileId();
+    return id ? `https://drive.google.com/file/d/${id}/view` : null;
+  }
+};
+
+export const setLiveMasterFileId = (id: string | null, link?: string | null) => {
   cachedLiveFileId = id;
+  const webLink = link || (id ? `https://drive.google.com/file/d/${id}/view` : null);
+  cachedLiveFileLink = webLink;
   try {
     if (id) {
       localStorage.setItem('akademi_live_drive_file_id', id);
+      if (webLink) localStorage.setItem('akademi_live_drive_file_link', webLink);
     } else {
       localStorage.removeItem('akademi_live_drive_file_id');
+      localStorage.removeItem('akademi_live_drive_file_link');
     }
   } catch {}
 };
 
 /**
- * Finds the canonical live master file in the user's Drive or shared Drive.
+ * Retrieves file metadata from Google Drive to check existence and edit permissions.
  */
-export const findLiveMasterDriveFile = async (token: string): Promise<{ id: string; modifiedTime?: string } | null> => {
+export const getDriveFileMetadata = async (fileId: string, token: string): Promise<{
+  id: string;
+  name: string;
+  trashed: boolean;
+  modifiedTime?: string;
+  webViewLink?: string;
+  canEdit?: boolean;
+  ownerEmail?: string;
+  ownerName?: string;
+} | null> => {
   try {
-    const knownId = getLiveMasterFileId();
-    if (knownId) {
-      const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${knownId}?fields=id,name,trashed,modifiedTime&supportsAllDrives=true`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (checkRes.ok) {
-        const fileData = await checkRes.json();
-        if (!fileData.trashed) {
-          return { id: fileData.id, modifiedTime: fileData.modifiedTime };
-        }
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,trashed,modifiedTime,webViewLink,owners(displayName,emailAddress),capabilities(canEdit)&supportsAllDrives=true`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      id: data.id,
+      name: data.name,
+      trashed: !!data.trashed,
+      modifiedTime: data.modifiedTime,
+      webViewLink: data.webViewLink,
+      canEdit: data.capabilities?.canEdit !== false,
+      ownerEmail: data.owners?.[0]?.emailAddress,
+      ownerName: data.owners?.[0]?.displayName
+    };
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
+ * Validates and locks the application to a user-specified canonical Drive file link/ID.
+ * If input is empty or invalid link, it automatically scans Google Drive for shared/owned master files.
+ */
+export const lockToCanonicalDriveFile = async (
+  fileIdOrLink?: string
+): Promise<{ success: boolean; fileId?: string; fileName?: string; webViewLink?: string; error?: string }> => {
+  let fileId = fileIdOrLink ? extractGoogleDriveFileId(fileIdOrLink) : null;
+
+  try {
+    let token = await ensureDriveAccessToken();
+
+    // If no direct ID could be extracted, perform an automatic search on Google Drive
+    if (!fileId) {
+      const autoFound = await findLiveMasterDriveFile(token);
+      if (autoFound?.id) {
+        const webLink = autoFound.webViewLink || `https://drive.google.com/file/d/${autoFound.id}/view`;
+        setLiveMasterFileId(autoFound.id, webLink);
+        return {
+          success: true,
+          fileId: autoFound.id,
+          fileName: LIVE_MASTER_FILE_NAME,
+          webViewLink: webLink
+        };
+      }
+      return { 
+        success: false, 
+        error: 'Geçerli bir Google Drive linki (örn: https://drive.google.com/file/d/.../view) bulunamadı. Lütfen 1. Süperadminin paylaştığı dosya linkini yapıştırın veya "Otomatik Bul" butonunu deneyin.' 
+      };
+    }
+    
+    // 1. Try reading metadata directly
+    let res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,trashed,modifiedTime,webViewLink,capabilities(canEdit)&supportsAllDrives=true`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    // If 401 (expired/invalid token), re-authenticate and retry
+    if (res.status === 401) {
+      const newToken = await connectGoogleDrive(false, true);
+      if (newToken) {
+        token = newToken;
+        res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,trashed,modifiedTime,webViewLink,capabilities(canEdit)&supportsAllDrives=true`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
       }
     }
 
-    const query = `(name = '${LIVE_MASTER_FILE_NAME}' or name contains 'AkademiPanel_Canli_Kutuk') and trashed = false`;
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+    if (res.ok) {
+      const meta = await res.json();
+      
+      // If user pasted a folder link instead of direct file link
+      if (meta.mimeType === 'application/vnd.google-apps.folder') {
+        const folderSearchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q='${fileId}'+in+parents+and+trashed=false&fields=files(id,name,webViewLink,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (folderSearchRes.ok) {
+          const folderFiles = await folderSearchRes.json();
+          const target = folderFiles.files?.find((f: any) => f.name.includes('Canli_Kutuk') || f.name.includes('AkademiPanel')) || folderFiles.files?.[0];
+          if (target) {
+            setLiveMasterFileId(target.id, target.webViewLink);
+            return {
+              success: true,
+              fileId: target.id,
+              fileName: target.name,
+              webViewLink: target.webViewLink
+            };
+          }
+        }
+      }
+
+      if (!meta.trashed) {
+        const webLink = meta.webViewLink || `https://drive.google.com/file/d/${meta.id}/view`;
+        setLiveMasterFileId(meta.id, webLink);
+        return {
+          success: true,
+          fileId: meta.id,
+          fileName: meta.name || LIVE_MASTER_FILE_NAME,
+          webViewLink: webLink
+        };
+      }
+    }
+
+    // 2. Direct media download verification fallback
+    const testDownload = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.files && data.files.length > 0) {
-        const found = data.files[0];
-        setLiveMasterFileId(found.id);
-        return { id: found.id, modifiedTime: found.modifiedTime };
+
+    if (testDownload.ok) {
+      const webLink = `https://drive.google.com/file/d/${fileId}/view`;
+      setLiveMasterFileId(fileId, webLink);
+      return {
+        success: true,
+        fileId: fileId,
+        fileName: LIVE_MASTER_FILE_NAME,
+        webViewLink: webLink
+      };
+    }
+
+    // Status-specific helpful guidance
+    if (res.status === 404 || testDownload.status === 404) {
+      return {
+        success: false,
+        error: `Dosya (${fileId}) bu Google hesabıyla bulunamadı. Lütfen dosya sahibi yöneticinin Google Drive'da bu dosyayı sizin Gmail adresinizle 'Düzenleyen (Editor)' olarak paylaştığından emin olun.`
+      };
+    }
+
+    if (res.status === 403 || testDownload.status === 403) {
+      return {
+        success: false,
+        error: `Bu dosyayı düzenleme yetkiniz yok (Hata 403). Lütfen dosya sahibi yöneticinin Google Drive üzerinde yetkinizi 'Görüntüleyen' yerine 'Düzenleyen' olarak ayarladığından emin olun.`
+      };
+    }
+
+    return {
+      success: false,
+      error: `Google Drive erişim hatası (Durum: ${res.status || testDownload.status}). Lütfen dosya paylaşım izinlerini kontrol edin.`
+    };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Google Drive dosyası doğrulanamadı.' };
+  }
+};
+
+/**
+ * Finds the canonical live master file.
+ * Prioritizes the locked canonical ID; if missing, searches shared & owned files across Google Drive.
+ */
+export const findLiveMasterDriveFile = async (token: string): Promise<{ id: string; modifiedTime?: string; webViewLink?: string } | null> => {
+  try {
+    // 1. Check known canonical File ID (Primary Lock)
+    const knownId = getLiveMasterFileId();
+    if (knownId) {
+      const meta = await getDriveFileMetadata(knownId, token);
+      if (meta && !meta.trashed) {
+        if (meta.webViewLink) setLiveMasterFileId(meta.id, meta.webViewLink);
+        return { id: meta.id, modifiedTime: meta.modifiedTime, webViewLink: meta.webViewLink };
+      }
+    }
+
+    // 2. Search owned or shared files across all drives
+    const queries = [
+      `(name = '${LIVE_MASTER_FILE_NAME}' or name contains 'AkademiPanel_Canli_Kutuk') and trashed = false`,
+      `sharedWithMe = true and (name contains 'AkademiPanel_Canli_Kutuk' or name contains 'Canli_Kutuk') and trashed = false`,
+      `name contains 'AkademiPanel' and trashed = false`
+    ];
+
+    for (const q of queries) {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime,webViewLink,owners)&orderBy=modifiedTime desc&pageSize=1&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.files && data.files.length > 0) {
+          const found = data.files[0];
+          setLiveMasterFileId(found.id, found.webViewLink);
+          return { id: found.id, modifiedTime: found.modifiedTime, webViewLink: found.webViewLink };
+        }
       }
     }
   } catch (e) {
@@ -191,8 +399,8 @@ export const findLiveMasterDriveFile = async (token: string): Promise<{ id: stri
 };
 
 /**
- * Synchronizes the state to the single canonical 'AkademiPanel_Canli_Kutuk.json' on Google Drive.
- * Updates in-place if existing (PATCH), or creates a new file if not (POST).
+ * Synchronizes the state to the SINGLE canonical 'AkademiPanel_Canli_Kutuk.json' on Google Drive.
+ * GUARANTEE: NEVER creates duplicate files if a master file is already known.
  */
 export const syncLiveMasterToGoogleDrive = async (
   liveState: any,
@@ -221,10 +429,10 @@ export const syncLiveMasterToGoogleDrive = async (
 
     const payloadJson = JSON.stringify(payload, null, 2);
 
+    // If an existing master file was found, ALWAYS update in-place (PATCH)
     if (existing?.id) {
-      // Update existing master file in-place (PATCH)
       const patchRes = await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=media&fields=id,name,modifiedTime`,
+        `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=media&fields=id,name,modifiedTime&supportsAllDrives=true`,
         {
           method: 'PATCH',
           headers: {
@@ -243,10 +451,26 @@ export const syncLiveMasterToGoogleDrive = async (
           fileId: patchData.id,
           modifiedTime: patchData.modifiedTime
         };
+      } else {
+        const err = await patchRes.json().catch(() => ({}));
+        return {
+          success: false,
+          error: `Ortak Google Drive dosyasına (${existing.id}) yazılamadı: ${err?.error?.message || patchRes.statusText}. Lütfen dosyanın 'Düzenleyen' yetkisiyle paylaşıldığından emin olun.`
+        };
       }
     }
 
-    // If no existing master file, create it with multipart POST
+    // If a canonical ID was configured previously but could not be found/accessed:
+    // DO NOT CREATE A NEW FILE! Report error to prevent duplicate files!
+    const knownId = getLiveMasterFileId();
+    if (knownId) {
+      return {
+        success: false,
+        error: `Ortak Google Drive ana dosyasına (${knownId}) erişilemedi. Çift dosya oluşmasını engellemek için yeni dosya açılmadı. Lütfen dosya sahibi yöneticinin bu dosyayı "Düzenleyen" yetkisiyle paylaştığından emin olun.`
+      };
+    }
+
+    // ONLY create a new file if completely uninitialized (first superadmin bootstrap)
     const metadata = {
       name: LIVE_MASTER_FILE_NAME,
       mimeType: 'application/json',
@@ -272,7 +496,7 @@ export const syncLiveMasterToGoogleDrive = async (
       closeDelimiter;
 
     const createRes = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime,webViewLink',
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime,webViewLink&supportsAllDrives=true',
       {
         method: 'POST',
         headers: {
@@ -289,7 +513,7 @@ export const syncLiveMasterToGoogleDrive = async (
     }
 
     const created = await createRes.json();
-    setLiveMasterFileId(created.id);
+    setLiveMasterFileId(created.id, created.webViewLink);
     return {
       success: true,
       fileId: created.id,
@@ -338,4 +562,3 @@ export const fetchLiveMasterFromGoogleDriveIfNewer = async (
     return { hasUpdate: false };
   }
 };
-

@@ -41,9 +41,13 @@ import {
 import { 
   syncLiveMasterToGoogleDrive, 
   fetchLiveMasterFromGoogleDriveIfNewer, 
+  downloadBackupFromGoogleDrive,
+  findLiveMasterDriveFile,
+  setLiveMasterFileId,
+  getLiveMasterFileId,
   LIVE_MASTER_FILE_NAME 
 } from '../lib/googleDrive';
-import { getCachedAccessToken } from '../lib/firebase';
+import { getCachedAccessToken, connectGoogleDrive, saveCanonicalDriveFileToFirestore } from '../lib/firebase';
 
 interface AppState {
   students: Student[];
@@ -60,6 +64,8 @@ interface AppState {
   lastPublishedAt?: string;
   lastPublishedBy?: string;
   examCalendarPrintSettings?: any;
+  canonicalDriveFileId?: string;
+  canonicalDriveFileLink?: string;
 }
 
 interface AppContextType {
@@ -387,8 +393,14 @@ export const sanitizeSchoolState = (data: any): AppState => {
     version: Number(data.version) || 1,
     lastPublishedAt: data.lastPublishedAt || new Date().toISOString(),
     lastPublishedBy: data.lastPublishedBy || 'admin',
-    examCalendarPrintSettings: data.examCalendarPrintSettings
+    examCalendarPrintSettings: data.examCalendarPrintSettings,
+    canonicalDriveFileId: data.canonicalDriveFileId || undefined,
+    canonicalDriveFileLink: data.canonicalDriveFileLink || undefined
   };
+
+  if (data.canonicalDriveFileId) {
+    setLiveMasterFileId(data.canonicalDriveFileId, data.canonicalDriveFileLink);
+  }
 
   safeData.budget = syncFinancials(safeData.students, safeData.exams, safeData.budget);
   return safeData;
@@ -609,6 +621,48 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     return currentRole;
   };
 
+  // Admin Startup Hydration: Automatically downloads the latest shared master backup from Google Drive
+  const syncFromGoogleDriveOnStartup = async (): Promise<boolean> => {
+    try {
+      let token = getCachedAccessToken();
+      if (!token) {
+        token = await connectGoogleDrive(true);
+      }
+      if (!token) return false;
+
+      const file = await findLiveMasterDriveFile(token);
+      if (!file?.id) return false;
+
+      const rawData = await downloadBackupFromGoogleDrive(file.id);
+      if (rawData) {
+        const targetData = rawData.data || rawData;
+        if (targetData && (targetData.students?.length > 0 || targetData.exams?.length > 0)) {
+          const safeData = sanitizeSchoolState(targetData);
+          setState(safeData);
+          stateRef.current = safeData;
+          try {
+            localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+            lastSavedPayloadRef.current = JSON.stringify(safeData);
+          } catch (e) {}
+
+          if (file.modifiedTime) {
+            const formatted = new Date(file.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            setLastDriveSyncedAt(formatted);
+            lastKnownDriveModifiedTimeRef.current = file.modifiedTime;
+            try {
+              localStorage.setItem('akademi_last_drive_sync_time', formatted);
+            } catch {}
+          }
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      console.warn('Google Drive startup sync notice:', e);
+      return false;
+    }
+  };
+
   // Storage-First State Hydration and Session Initializer
   useEffect(() => {
     if (!auth.currentUser || !firebaseConfig.projectId) {
@@ -621,21 +675,44 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       return;
     }
 
-    // 1. Initial hydration from Firebase Cloud Storage (Primary truth)
-    syncFromCloudStorage().finally(() => {
-      setLoading(false);
-      const cleanUserEmail = (user?.email || '').trim().toLowerCase();
-      const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
-      setUserRole(initialComputedRole);
-      setSyncStatus('synced');
-      setSyncErrorMessage(null);
-    });
-
-    // 2. Register user profile to access_requests once per daily session (throttled)
     const cleanUserEmail = (user?.email || '').trim().toLowerCase();
-    const computedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
-    setUserRole(computedRole);
+    const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+    setUserRole(initialComputedRole);
 
+    // 1. If Admin: Immediately download and hydrate the latest live master file from Google Drive!
+    if (initialComputedRole === 'admin') {
+      syncFromGoogleDriveOnStartup().then((syncedFromDrive) => {
+        if (syncedFromDrive) {
+          setLoading(false);
+          setSyncStatus('synced');
+          setSyncErrorMessage(null);
+        } else {
+          // Fallback to Firebase if Drive sync is still pending
+          syncFromCloudStorage().finally(() => {
+            setLoading(false);
+            setSyncStatus('synced');
+            setSyncErrorMessage(null);
+          });
+        }
+      }).catch(() => {
+        syncFromCloudStorage().finally(() => {
+          setLoading(false);
+          setSyncStatus('synced');
+          setSyncErrorMessage(null);
+        });
+      });
+    } else {
+      // 2. If Teacher: Hydrate from Firebase (Primary truth for teachers)
+      syncFromCloudStorage().finally(() => {
+        setLoading(false);
+        const computedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+        setUserRole(computedRole);
+        setSyncStatus('synced');
+        setSyncErrorMessage(null);
+      });
+    }
+
+    // Register user profile to access_requests once per daily session (throttled)
     const dailyRegKey = `access_request_daily_${cleanUserEmail}_${getTodayDateStr()}`;
     if (cleanUserEmail && !localStorage.getItem(dailyRegKey) && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
       localStorage.setItem(dailyRegKey, '1');
@@ -643,8 +720,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         email: cleanUserEmail,
         name: user.displayName || cleanUserEmail.split('@')[0],
         photoURL: user.photoURL || null,
-        role: computedRole,
-        status: computedRole === 'guest' ? 'pending' : 'approved',
+        role: initialComputedRole,
+        status: initialComputedRole === 'guest' ? 'pending' : 'approved',
         lastLoginAt: new Date().toISOString(),
         timestamp: new Date().toISOString()
       }, { merge: true }).catch(() => {});
@@ -881,11 +958,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     try {
       const res = await syncLiveMasterToGoogleDrive(stateRef.current, user?.email);
       if (res.success) {
-        const timeStr = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-        setLastDriveSyncedAt(timeStr);
+        const formattedTime = res.modifiedTime 
+          ? new Date(res.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+          : new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        setLastDriveSyncedAt(formattedTime);
         lastKnownDriveModifiedTimeRef.current = res.modifiedTime || new Date().toISOString();
         try {
-          localStorage.setItem('akademi_last_drive_sync_time', timeStr);
+          localStorage.setItem('akademi_last_drive_sync_time', formattedTime);
         } catch {}
       }
       return res;
@@ -957,7 +1036,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
 
     driveSyncTimerRef.current = setTimeout(() => {
-      if (getCachedAccessToken() && userRole === 'admin') {
+      if (userRole === 'admin') {
         syncToDriveNow().catch(() => {});
       }
     }, 30000); // 30 seconds

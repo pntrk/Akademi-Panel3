@@ -2374,7 +2374,7 @@ export function ResultsView() {
           </div>
 
           {/* Mobil Sınav Doğrudan Seçim Dropdown (Tek Tıkla Sınav Listesi Açılır) */}
-          <div className="relative shrink-0 max-w-[160px]">
+          <div className="relative shrink-0 max-w-[175px]">
             {state.exams.length > 1 ? (
               <div className="relative">
                 <select
@@ -2385,7 +2385,7 @@ export function ResultsView() {
                 >
                   {state.exams.map(e => (
                     <option key={e.id} value={e.id}>
-                      {e.examType === 'internal' ? '🎯 ' : '📚 '}{e.name}
+                      {e.examType === 'internal' ? '🎯 ' : '📚 '}{e.name}{e.date ? ` (${e.date})` : ''}
                     </option>
                   ))}
                 </select>
@@ -2395,20 +2395,20 @@ export function ResultsView() {
             ) : (
               <div className="px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 truncate">
                 <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                <span className="truncate text-[11px]">{exam.name}</span>
+                <span className="truncate text-[11px]">{exam.name}{exam.date ? ` (${exam.date})` : ''}</span>
               </div>
             )}
           </div>
         </div>
 
         {/* MASAÜSTÜ / TABLET GÖRÜNÜMÜ (hidden sm:flex) */}
-        <div className="hidden sm:flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Segmented Tab Switcher */}
-          <div className="flex items-center bg-slate-100/90 p-1.5 rounded-xl border border-slate-200/80 gap-1.5 overflow-x-auto custom-scrollbar shadow-inner">
+        <div className="hidden sm:flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Genişletilmiş Segmented Tab Switcher */}
+          <div className="flex-1 flex items-center bg-slate-100/90 p-1.5 rounded-xl border border-slate-200/80 gap-1.5 shadow-inner">
             <button
               type="button"
               onClick={() => setActiveMainTab('results')}
-              className={`flex items-center gap-2.5 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`flex-1 flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 activeMainTab === 'results'
                   ? 'bg-white text-slate-900 shadow-sm border border-slate-200/70 scale-[1.01]'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
@@ -2432,7 +2432,7 @@ export function ResultsView() {
             <button
               type="button"
               onClick={() => setActiveMainTab('analysis')}
-              className={`flex items-center gap-2.5 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`flex-1 flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 activeMainTab === 'analysis'
                   ? 'bg-white text-slate-900 shadow-sm border border-slate-200/70 scale-[1.01]'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
@@ -2454,45 +2454,30 @@ export function ResultsView() {
             </button>
           </div>
 
-          {/* Aktif Sınav Seçici ve Meta Rozetler */}
-          <div className="flex items-center gap-2 self-stretch lg:self-auto justify-between lg:justify-end flex-wrap sm:flex-nowrap">
-            {/* Sınav Tipi & Yayıncı Rozeti */}
-            <div className="hidden md:flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-200/80 px-2.5 py-1.5 rounded-xl shrink-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-slate-700 font-bold">{exam.publisher || 'Kurum İçi'}</span>
-              {exam.date && (
-                <>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-slate-500 font-mono text-[10px]">{exam.date}</span>
-                </>
-              )}
-            </div>
-
-            {/* Sınav Dropdown Seçici */}
-            <div className="relative flex-1 sm:flex-initial min-w-[200px] max-w-sm">
-              {state.exams.length > 1 ? (
-                <div className="relative">
-                  <select
-                    value={selectedExamId}
-                    onChange={(e) => setSelectedExamId(e.target.value)}
-                    className="w-full bg-slate-50 hover:bg-slate-100/90 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer transition-all truncate shadow-2xs appearance-none"
-                    aria-label="Sınav Seçiniz"
-                  >
-                    {state.exams.map(e => (
-                      <option key={e.id} value={e.id}>
-                        {e.examType === 'internal' ? '🎯 [Kurum İçi] ' : `📚 [${e.publisher || 'Yayın'}] `}{e.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-              ) : (
-                <div className="text-xs font-bold text-slate-800 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 truncate flex items-center gap-2">
-                  <BookOpen className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                  <span className="truncate">{exam.name}</span>
-                </div>
-              )}
-            </div>
+          {/* Aktif Sınav Seçici Dropdown (Her sınavın yanında tarihi gösterilir) */}
+          <div className="relative shrink-0 min-w-[240px] max-w-sm">
+            {state.exams.length > 1 ? (
+              <div className="relative">
+                <select
+                  value={selectedExamId}
+                  onChange={(e) => setSelectedExamId(e.target.value)}
+                  className="w-full bg-slate-50 hover:bg-slate-100/90 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-xl pl-3.5 pr-8 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer transition-all truncate shadow-2xs appearance-none"
+                  aria-label="Sınav Seçiniz"
+                >
+                  {state.exams.map(e => (
+                    <option key={e.id} value={e.id}>
+                      {e.examType === 'internal' ? '🎯 ' : `📚 [${e.publisher || 'Yayın'}] `}{e.name}{e.date ? ` (${e.date})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            ) : (
+              <div className="text-xs font-bold text-slate-800 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 truncate flex items-center gap-2 shadow-2xs">
+                <BookOpen className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                <span className="truncate">{exam.name}{exam.date ? ` (${exam.date})` : ''}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
