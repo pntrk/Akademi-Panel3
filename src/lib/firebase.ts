@@ -505,6 +505,19 @@ export const writeModularSchoolState = async (
   try {
     const promises: Promise<void>[] = [];
 
+    // Always keep root school document in sync with active administrators, teachers, and published timestamp
+    const rootSchoolRef = doc(dbInstance, 'schools', schoolId);
+    promises.push(setDoc(rootSchoolRef, {
+      name: "Kırklareli Atatürk Ortaokulu",
+      version: cleanState.version || 1,
+      lastPublishedAt: cleanState.lastPublishedAt || new Date().toISOString(),
+      lastPublishedBy: cleanState.lastPublishedBy || 'admin',
+      admins: cleanState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
+      teachers: cleanState.teachers || [],
+      studentCount: cleanState.students?.length || 0,
+      examCount: cleanState.exams?.length || 0
+    }, { merge: true }));
+
     for (const [modKey, modPayload] of Object.entries(modulesData)) {
       const payloadStr = JSON.stringify(modPayload);
       if (lastHashes[modKey] !== payloadStr || modKey === 'meta') {

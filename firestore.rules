@@ -26,17 +26,33 @@ service cloud.firestore {
 
     function isSchoolAdmin() {
       return isSuperAdmin() || (
-        isSignedIn() &&
-        exists(/databases/$(database)/documents/schools/main) &&
-        (userEmail() in get(/databases/$(database)/documents/schools/main).data.admins)
+        isSignedIn() && (
+          (exists(/databases/$(database)/documents/schools/main) && 
+           ('admins' in get(/databases/$(database)/documents/schools/main).data) &&
+           (userEmail() in get(/databases/$(database)/documents/schools/main).data.admins)) ||
+          (exists(/databases/$(database)/documents/schools/main/modules/meta) && 
+           ('admins' in get(/databases/$(database)/documents/schools/main/modules/meta).data) &&
+           (userEmail() in get(/databases/$(database)/documents/schools/main/modules/meta).data.admins)) ||
+          (exists(/databases/$(database)/documents/access_requests/$(userEmail())) && 
+           ('role' in get(/databases/$(database)/documents/access_requests/$(userEmail())).data) &&
+           (get(/databases/$(database)/documents/access_requests/$(userEmail())).data.role == 'admin'))
+        )
       );
     }
 
     function isSchoolTeacher() {
       return isSchoolAdmin() || (
-        isSignedIn() &&
-        exists(/databases/$(database)/documents/schools/main) &&
-        (userEmail() in get(/databases/$(database)/documents/schools/main).data.teachers)
+        isSignedIn() && (
+          (exists(/databases/$(database)/documents/schools/main) && 
+           ('teachers' in get(/databases/$(database)/documents/schools/main).data) &&
+           (userEmail() in get(/databases/$(database)/documents/schools/main).data.teachers)) ||
+          (exists(/databases/$(database)/documents/schools/main/modules/meta) && 
+           ('teachers' in get(/databases/$(database)/documents/schools/main/modules/meta).data) &&
+           (userEmail() in get(/databases/$(database)/documents/schools/main/modules/meta).data.teachers)) ||
+          (exists(/databases/$(database)/documents/access_requests/$(userEmail())) && 
+           ('role' in get(/databases/$(database)/documents/access_requests/$(userEmail())).data) &&
+           (get(/databases/$(database)/documents/access_requests/$(userEmail())).data.role == 'teacher'))
+        )
       );
     }
 

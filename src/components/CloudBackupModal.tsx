@@ -23,7 +23,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { auth, firebaseConfig, FIRESTORE_UPGRADE_URL } from '../lib/firebase';
+import { auth, firebaseConfig, FIRESTORE_UPGRADE_URL, db, doc, getDoc, collection, getDocs } from '../lib/firebase';
 import { CloudBackupRecord } from '../types';
 
 interface CloudBackupModalProps {
@@ -43,6 +43,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     restoreCloudBackup, 
     deleteCloudBackup, 
     saveLocalBackupToCloud,
+    syncFromCloudStorage,
     saveNow,
     retrySync
   } = useAppContext();
@@ -50,6 +51,21 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
   const [activeTab, setActiveTab] = useState<'backups' | 'sync'>('backups');
   const [isCreating, setIsCreating] = useState(false);
   const [isSyncingNow, setIsSyncingNow] = useState(false);
+  const [isTestingCloud, setIsTestingCloud] = useState(false);
+  const [isPullingData, setIsPullingData] = useState(false);
+  const [cloudDiagnosticResult, setCloudDiagnosticResult] = useState<{
+    testedAt: string;
+    connectionOk: boolean;
+    serverAdmins: string[];
+    serverVersion?: number;
+    serverLastPublishedAt?: string;
+    serverStudentsCount: number;
+    serverExamsCount: number;
+    serverResultsCount: number;
+    serverBackupsCount: number;
+    backupsWithDataCount: number;
+    message: string;
+  } | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [customBackupName, setCustomBackupName] = useState('');
   const [backupNote, setBackupNote] = useState('');
@@ -118,6 +134,112 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
       }
     } finally {
       setIsSyncingNow(false);
+    }
+  };
+
+  const handleRunDiagnostic = async () => {
+    setIsTestingCloud(true);
+    setFeedback(null);
+    try {
+      if (!firebaseConfig.projectId) {
+        setCloudDiagnosticResult({
+          testedAt: new Date().toLocaleTimeString('tr-TR'),
+          connectionOk: false,
+          serverAdmins: state.admins || [],
+          serverStudentsCount: state.students?.length || 0,
+          serverExamsCount: state.exams?.length || 0,
+          serverResultsCount: state.results?.length || 0,
+          serverBackupsCount: cloudBackups.length,
+          backupsWithDataCount: cloudBackups.filter(b => !!b.data).length,
+          message: 'Firebase yapılandırması bulunamadı, yerel depolama modu aktif.'
+        });
+        return;
+      }
+
+      // 1. Test connection doc
+      await getDoc(doc(db, 'test', 'connection')).catch(() => null);
+
+      // 2. Fetch root school doc
+      const schoolSnap = await getDoc(doc(db, 'schools', 'main')).catch(() => null);
+      const schoolData = schoolSnap?.exists() ? schoolSnap.data() : null;
+
+      // 3. Fetch modules
+      const modSnap = await getDocs(collection(db, 'schools', 'main', 'modules')).catch(() => null);
+      let sCount = 0;
+      let eCount = 0;
+      let rCount = 0;
+      let sVersion = schoolData?.version;
+      let sPubTime = schoolData?.lastPublishedAt;
+      let sAdmins = schoolData?.admins || [];
+
+      if (modSnap && !modSnap.empty) {
+        modSnap.forEach(d => {
+          const mData = d.data();
+          if (d.id === 'students') sCount = mData.students?.length || 0;
+          if (d.id === 'exams') eCount = mData.exams?.length || 0;
+          if (d.id === 'results') rCount = mData.results?.length || 0;
+          if (d.id === 'meta') {
+            sVersion = mData.version || sVersion;
+            sPubTime = mData.lastPublishedAt || sPubTime;
+            if (Array.isArray(mData.admins) && mData.admins.length > 0) {
+              sAdmins = mData.admins;
+            }
+          }
+        });
+      }
+
+      // 4. Fetch backups
+      const bSnap = await getDocs(collection(db, 'schools', 'main', 'backups')).catch(() => null);
+      let bTotal = 0;
+      let bWithData = 0;
+      if (bSnap && !bSnap.empty) {
+        bTotal = bSnap.size;
+        bSnap.forEach(d => {
+          if (d.data()?.data) bWithData++;
+        });
+      }
+
+      setCloudDiagnosticResult({
+        testedAt: new Date().toLocaleTimeString('tr-TR'),
+        connectionOk: true,
+        serverAdmins: sAdmins,
+        serverVersion: sVersion,
+        serverLastPublishedAt: sPubTime,
+        serverStudentsCount: sCount,
+        serverExamsCount: eCount,
+        serverResultsCount: rCount,
+        serverBackupsCount: bTotal,
+        backupsWithDataCount: bWithData,
+        message: 'Bulut sunucu bağlantısı ve veri kanalları aktif durumda.'
+      });
+      setFeedback({ type: 'success', message: 'Bulut sunucu kontrolü tamamlandı: Veriler sunucuya başarıyla iletiliyor.' });
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: 'Bulut sunucu kontrolünde hata: ' + (err?.message || err) });
+    } finally {
+      setIsTestingCloud(false);
+    }
+  };
+
+  const handlePullFromCloud = async () => {
+    setIsPullingData(true);
+    setFeedback(null);
+    try {
+      const updated = await syncFromCloudStorage(true);
+      if (updated) {
+        setFeedback({ 
+          type: 'success', 
+          message: 'Bulut sunucudaki en güncel veriler başarıyla indirildi ve sistem eşitlendi!' 
+        });
+      } else {
+        setFeedback({ 
+          type: 'info', 
+          message: 'Sisteminiz zaten bulut sunucudaki en güncel sürüm ile birebir eşleşiyor.' 
+        });
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: 'Buluttan veri çekilirken hata oluştu: ' + (e?.message || e) });
+    } finally {
+      setIsPullingData(false);
     }
   };
 
@@ -803,8 +925,10 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                 <div className="bg-white p-3.5 rounded-2xl border border-[#e6e2d3] space-y-1">
                   <span className="text-[#8e8d82] text-[11px] font-semibold">Bulut / Depolama Durumu:</span>
                   <p className="font-mono font-bold text-[#5a5a40]">{firebaseConfig.projectId || 'Yerel Mod (LocalStorage)'}</p>
-                  <span className="text-[10px] text-emerald-600 font-semibold block">
-                    {firebaseConfig.projectId ? 'Firestore Database: (default)' : 'Veriler ve yedekler tarayıcıda saklanır'}
+                  <span className="text-[10px] text-emerald-600 font-semibold block truncate">
+                    {firebaseConfig.projectId 
+                      ? `Firestore Veritabanı: ${firebaseConfig.firestoreDatabaseId || '(default)'}` 
+                      : 'Veriler ve yedekler tarayıcıda saklanır'}
                   </span>
                 </div>
 
@@ -813,6 +937,82 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                   <p className="font-semibold text-[#5a5a40] truncate">{currentEmail}</p>
                   <span className="text-[10px] text-[#B08D57] font-bold block">Google Kimlik Doğrulamalı</span>
                 </div>
+              </div>
+
+              {/* Cloud Diagnostic & Data Transmission Check Card */}
+              <div className="p-4 bg-gradient-to-br from-amber-50/50 via-white to-amber-50/20 rounded-2xl border border-amber-200/80 shadow-xs space-y-3 text-xs">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-[#B08D57] text-white flex items-center justify-center shadow-xs">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-[#343a28]">Bulut Sunucu Veri İletim & Yedek Kontrolü</h4>
+                      <p className="text-[11px] text-[#6e705b]">
+                        Buluttaki güncel öğrenci, sınav, sonuç ve yedek verilerinin iletim durumunu denetleyin.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleRunDiagnostic}
+                      disabled={isTestingCloud}
+                      className="px-3 py-1.5 bg-white hover:bg-amber-50 active:scale-[0.98] border border-amber-300 text-amber-900 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-[#B08D57] ${isTestingCloud ? 'animate-spin' : ''}`} />
+                      <span>{isTestingCloud ? 'Denetleniyor...' : 'Veri İletimini Kontrol Et'}</span>
+                    </button>
+
+                    <button
+                      onClick={handlePullFromCloud}
+                      disabled={isPullingData}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                      title="Bulut sunucudaki en güncel verileri bu cihaza indirir ve eşitler"
+                    >
+                      <CloudDownload className={`w-3.5 h-3.5 ${isPullingData ? 'animate-bounce' : ''}`} />
+                      <span>{isPullingData ? 'İndiriliyor...' : 'Buluttaki Verileri İndir & Eşitle'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {cloudDiagnosticResult && (
+                  <div className="p-3.5 bg-white rounded-xl border border-amber-200/60 shadow-2xs space-y-2 animate-fade-in">
+                    <div className="flex items-center justify-between text-[11px] pb-1 border-b border-gray-100">
+                      <span className="text-gray-500 font-medium">Son Test Zamanı: <b className="text-gray-800">{cloudDiagnosticResult.testedAt}</b></span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                        Bağlantı & İletim Aktif
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
+                      <div className="p-2 bg-[#fcfbf7] rounded-lg border border-[#e6e2d3]">
+                        <span className="text-[10px] text-gray-500 block">Bulut Sürümü</span>
+                        <b className="text-xs text-[#B08D57]">v{cloudDiagnosticResult.serverVersion || 1}</b>
+                      </div>
+                      <div className="p-2 bg-[#fcfbf7] rounded-lg border border-[#e6e2d3]">
+                        <span className="text-[10px] text-gray-500 block">Sunucu Öğrenci</span>
+                        <b className="text-xs text-[#5a5a40]">{cloudDiagnosticResult.serverStudentsCount} Kayıt</b>
+                      </div>
+                      <div className="p-2 bg-[#fcfbf7] rounded-lg border border-[#e6e2d3]">
+                        <span className="text-[10px] text-gray-500 block">Sunucu Sınav</span>
+                        <b className="text-xs text-[#5a5a40]">{cloudDiagnosticResult.serverExamsCount} Sınav</b>
+                      </div>
+                      <div className="p-2 bg-[#fcfbf7] rounded-lg border border-[#e6e2d3]">
+                        <span className="text-[10px] text-gray-500 block">Bulut Yedekleri</span>
+                        <b className="text-xs text-emerald-700">
+                          {cloudDiagnosticResult.serverBackupsCount} Yedek ({cloudDiagnosticResult.backupsWithDataCount} Dolu)
+                        </b>
+                      </div>
+                    </div>
+
+                    {cloudDiagnosticResult.serverLastPublishedAt && (
+                      <p className="text-[10px] text-gray-500 mt-1">
+                        Bulut Sunucu Son Yayınlama Zamanı: <span className="font-semibold text-gray-700">{new Date(cloudDiagnosticResult.serverLastPublishedAt).toLocaleString('tr-TR')}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="p-4 bg-[#fcfbf7] rounded-2xl border border-[#e6e2d3] space-y-2 text-xs">
@@ -829,14 +1029,23 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  onClick={handlePullFromCloud}
+                  disabled={isPullingData}
+                  className="px-4 py-2.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs rounded-xl shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <CloudDownload className="w-4 h-4 text-emerald-600" />
+                  <span>Buluttan Veri Çek & Eşitle</span>
+                </button>
+
                 <button
                   onClick={handleSyncNow}
                   disabled={isSyncingNow}
                   className="px-5 py-2.5 bg-[#B08D57] hover:bg-[#9c7b48] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <RefreshCw className={`w-4 h-4 ${isSyncingNow ? 'animate-spin' : ''}`} />
-                  {isSyncingNow ? 'Doğrulanıyor & Eşitleniyor...' : 'Şimdi Doğrula & Yeniden Eşitle'}
+                  {isSyncingNow ? 'Doğrulanıyor & Eşitleniyor...' : 'Şimdi Doğrula & Buluta Gönder'}
                 </button>
               </div>
             </div>

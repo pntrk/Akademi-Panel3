@@ -248,6 +248,23 @@ export interface FullBackupSummary {
   approvedTransferCount?: number;
 }
 
+export interface AppState {
+  students: Student[];
+  exams: Exam[];
+  results: ExamResult[];
+  budget: BudgetData;
+  examHalls: ExamHall[];
+  leagueMentors?: Record<string, string>;
+  leagueTeamPoints?: Record<string, number>;
+  approvedTransfers?: { studentNo: number; examName: string; toTeam: string }[];
+  admins?: string[];
+  teachers?: string[];
+  version?: number;
+  lastPublishedAt?: string;
+  lastPublishedBy?: string;
+  examCalendarPrintSettings?: any;
+}
+
 export interface FullBackupData {
   appName: string;
   version: string;

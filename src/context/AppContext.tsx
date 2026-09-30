@@ -50,6 +50,10 @@ interface AppState {
   approvedTransfers?: { studentNo: number; examName: string; toTeam: string }[];
   admins?: string[];
   teachers?: string[];
+  version?: number;
+  lastPublishedAt?: string;
+  lastPublishedBy?: string;
+  examCalendarPrintSettings?: any;
 }
 
 interface AppContextType {
@@ -66,6 +70,7 @@ interface AppContextType {
   restoreCloudBackup: (backupId: string) => Promise<{ success: boolean; message: string; summary?: any }>;
   deleteCloudBackup: (backupId: string) => Promise<{ success: boolean; message: string }>;
   saveLocalBackupToCloud: (backupData: any, customName?: string) => Promise<{ success: boolean; message: string; backupId?: string }>;
+  syncFromCloudStorage: (force?: boolean) => Promise<boolean>;
   updateUsers: (admins: string[], teachers: string[]) => Promise<void>;
   setUserAccountRole: (targetEmail: string, newRole: 'admin' | 'teacher' | 'guest') => Promise<void>;
   setStudents: (students: Student[]) => void;
@@ -255,7 +260,11 @@ const loadInitialState = (): AppState => {
         leagueTeamPoints: parsed.leagueTeamPoints || {},
         approvedTransfers: parsed.approvedTransfers || [],
         admins: parsed.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
-        teachers: parsed.teachers || []
+        teachers: parsed.teachers || [],
+        version: Number(parsed.version) || 1,
+        lastPublishedAt: parsed.lastPublishedAt,
+        lastPublishedBy: parsed.lastPublishedBy,
+        examCalendarPrintSettings: parsed.examCalendarPrintSettings
       };
     }
   } catch (e) {
@@ -362,7 +371,11 @@ export const sanitizeSchoolState = (data: any): AppState => {
     leagueTeamPoints: data.leagueTeamPoints || {},
     approvedTransfers: data.approvedTransfers || [],
     admins: cleanAdmins,
-    teachers: cleanTeachers
+    teachers: cleanTeachers,
+    version: Number(data.version) || 1,
+    lastPublishedAt: data.lastPublishedAt || new Date().toISOString(),
+    lastPublishedBy: data.lastPublishedBy || 'admin',
+    examCalendarPrintSettings: data.examCalendarPrintSettings
   };
 
   safeData.budget = syncFinancials(safeData.students, safeData.exams, safeData.budget);
@@ -510,6 +523,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       let snapshot;
       try {
         snapshot = await getDoc(docRef);
+        if (!snapshot.exists()) {
+          snapshot = await getDoc(doc(db, 'schools', 'main', 'modules', 'meta'));
+        }
       } catch (err: any) {
         console.warn('Error fetching role from cloud:', err);
         throw err;
@@ -611,7 +627,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   }, [user.uid, user.email]);
 
   // Sync state from Modular Firestore (schools/main/modules/*) with fallback to Storage and Legacy docs
-  const syncFromCloudStorage = async (): Promise<boolean> => {
+  const syncFromCloudStorage = async (force = false): Promise<boolean> => {
     try {
       let remoteData: (AppState & { version?: number; lastPublishedAt?: string }) | null = null;
       
@@ -639,9 +655,22 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
       const remoteVer = Number(remoteData.version) || 0;
       const localVer = Number((stateRef.current as any).version) || 0;
+      const hasRealRemoteData = (remoteData.students?.length || 0) > 0 || (remoteData.exams?.length || 0) > 0;
+      const isLocalEmptyOrDefault = !stateRef.current.students || stateRef.current.students.length <= 1;
+      const isRemoteTimeNewer = Boolean(
+        remoteData.lastPublishedAt && 
+        (!stateRef.current.lastPublishedAt || new Date(remoteData.lastPublishedAt).getTime() > new Date(stateRef.current.lastPublishedAt).getTime())
+      );
 
-      // Update if remote version is newer, or if we haven't saved any payload yet and remote has data
-      if (remoteVer > localVer || (remoteVer > 0 && !lastSavedPayloadRef.current)) {
+      // Update if remote version is newer, or forced, or if remote has populated data while local is empty/initial
+      const shouldUpdate = 
+        force || 
+        remoteVer > localVer || 
+        (hasRealRemoteData && isLocalEmptyOrDefault) || 
+        (!lastSavedPayloadRef.current && hasRealRemoteData) ||
+        isRemoteTimeNewer;
+
+      if (shouldUpdate) {
         const safeData = sanitizeSchoolState(remoteData);
         setState(safeData);
         stateRef.current = safeData;
@@ -667,10 +696,30 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   };
 
-  // Cloud Storage snapshot listener & periodic check
+  // Real-time Firestore listener & periodic check
   useEffect(() => {
-    // Initial fetch from Firebase Cloud Storage
+    // Initial fetch from Firebase Cloud
     syncFromCloudStorage().catch(() => {});
+
+    // Real-time Firestore Meta listener for instant multi-admin synchronization
+    let unsubMeta: (() => void) | null = null;
+    if (firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
+      try {
+        const metaDocRef = doc(db, 'schools', 'main', 'modules', 'meta');
+        unsubMeta = onSnapshot(metaDocRef, (snap) => {
+          if (snap.exists()) {
+            const remoteMeta = snap.data();
+            const remoteVer = Number(remoteMeta?.version) || 0;
+            const localVer = Number((stateRef.current as any).version) || 0;
+            if (remoteVer > localVer) {
+              syncFromCloudStorage(true).catch(() => {});
+            }
+          }
+        }, (err) => {
+          console.warn('Realtime cloud meta listener notice:', err);
+        });
+      } catch (e) {}
+    }
 
     // Sync on tab focus so teachers/admins see updates when they switch back
     const handleFocus = () => {
@@ -678,12 +727,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     };
     window.addEventListener('focus', handleFocus);
 
-    // Periodic check every 35 seconds
+    // Periodic check every 35 seconds as background fallback
     const interval = setInterval(() => {
       syncFromCloudStorage().catch(() => {});
     }, 35000);
 
     return () => {
+      if (unsubMeta) unsubMeta();
       window.removeEventListener('focus', handleFocus);
       clearInterval(interval);
     };
@@ -1437,7 +1487,12 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       const list: CloudBackupRecord[] = [...localList];
       snapshot.forEach(docSnap => {
         const data = docSnap.data() as CloudBackupRecord;
-        if (!list.some(b => b.id === data.id)) {
+        const existingIdx = list.findIndex(b => b.id === data.id);
+        if (existingIdx >= 0) {
+          if (data.data) {
+            list[existingIdx] = { ...list[existingIdx], ...data };
+          }
+        } else {
           list.push(data);
         }
       });
@@ -1526,21 +1581,28 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setCloudBackups(prev => [backupPayload, ...prev.filter(b => b.id !== backupId)]);
 
       if (firebaseConfig.projectId) {
-        // Upload backup JSON snapshot to Firebase Cloud Storage (bypasses Firestore 1MB limits)
+        if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
+          try {
+            const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
+            const payloadStr = JSON.stringify(backupPayload);
+            // Save full backup with data directly in Firestore document if < 850KB
+            if (payloadStr.length < 850000) {
+              await setDoc(backupRef, backupPayload);
+            } else {
+              const { data, ...metaOnly } = backupPayload;
+              await setDoc(backupRef, metaOnly);
+              await setDoc(doc(db, 'schools', 'main', 'backups', backupId, 'modules', 'data'), { data: backupPayload.data });
+            }
+          } catch (e) {
+            console.warn('Could not write backup to Firestore:', e);
+          }
+        }
+
+        // Upload backup JSON snapshot to Firebase Cloud Storage for redundancy
         try {
           await uploadBackupToStorage(backupId, backupPayload);
         } catch (e) {
           console.warn('Could not write backup to Cloud Storage:', e);
-        }
-
-        if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
-          try {
-            const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
-            const { data, ...metaOnly } = backupPayload;
-            await setDoc(backupRef, metaOnly);
-          } catch (e) {
-            console.warn('Could not write backup meta to Firestore:', e);
-          }
         }
       }
 
@@ -1599,20 +1661,26 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setCloudBackups(prev => [backupPayload, ...prev.filter(b => b.id !== backupId)]);
 
       if (firebaseConfig.projectId) {
+        if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
+          try {
+            const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
+            const payloadStr = JSON.stringify(backupPayload);
+            if (payloadStr.length < 850000) {
+              await setDoc(backupRef, backupPayload);
+            } else {
+              const { data, ...metaOnly } = backupPayload;
+              await setDoc(backupRef, metaOnly);
+              await setDoc(doc(db, 'schools', 'main', 'backups', backupId, 'modules', 'data'), { data: backupPayload.data });
+            }
+          } catch (e) {
+            console.warn('Could not write backup meta to Firestore:', e);
+          }
+        }
+
         try {
           await uploadBackupToStorage(backupId, backupPayload);
         } catch (e) {
           console.warn('Could not write backup to Cloud Storage:', e);
-        }
-
-        if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
-          try {
-            const backupRef = doc(db, 'schools', 'main', 'backups', backupId);
-            const { data, ...metaOnly } = backupPayload;
-            await setDoc(backupRef, metaOnly);
-          } catch (e) {
-            console.warn('Could not write backup meta to Firestore:', e);
-          }
         }
       }
 
@@ -1634,7 +1702,35 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     try {
       let targetBackup = cloudBackups.find(b => b.id === backupId);
       
-      // If data is not present in local list, try fetching full JSON from Cloud Storage first
+      // 1. Direct Firestore check: get full document with data
+      if ((!targetBackup || !targetBackup.data) && firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
+        try {
+          const snap = await getDoc(doc(db, 'schools', 'main', 'backups', backupId));
+          if (snap.exists()) {
+            const snapData = snap.data() as CloudBackupRecord;
+            if (snapData.data) {
+              targetBackup = snapData;
+            }
+          }
+        } catch (err: any) {
+          console.warn('Backup direct fetch notice:', err);
+        }
+      }
+
+      // 2. Subcollection check for large modular backups
+      if ((!targetBackup || !targetBackup.data) && firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
+        try {
+          const subSnap = await getDoc(doc(db, 'schools', 'main', 'backups', backupId, 'modules', 'data'));
+          if (subSnap.exists() && subSnap.data()?.data) {
+            targetBackup = {
+              ...(targetBackup || { id: backupId, name: 'Bulut Yedeği', createdAt: new Date().toISOString(), createdByEmail: 'admin', summary: {} as any }),
+              data: subSnap.data().data
+            };
+          }
+        } catch (subErr) {}
+      }
+
+      // 3. Fallback: try fetching full JSON from Cloud Storage if bucket exists
       if ((!targetBackup || !targetBackup.data) && firebaseConfig.storageBucket) {
         try {
           const storageRef = ref(storage, `backups/${backupId}.json`);
@@ -1646,15 +1742,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         }
       }
 
-      // Fallback check in Firestore if needed
-      if ((!targetBackup || !targetBackup.data) && firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
-        try {
-          const snap = await getDoc(doc(db, 'schools', 'main', 'backups', backupId));
-          if (snap.exists()) {
-            targetBackup = snap.data() as CloudBackupRecord;
-          }
-        } catch (err: any) {
-          console.warn('Backup fetch notice:', err);
+      // 4. Local storage fallback
+      if (!targetBackup || !targetBackup.data) {
+        const localListRaw = localStorage.getItem('akademi_cloud_backups_local');
+        const localList: CloudBackupRecord[] = localListRaw ? JSON.parse(localListRaw) : [];
+        const localMatch = localList.find(b => b.id === backupId);
+        if (localMatch && localMatch.data) {
+          targetBackup = localMatch;
         }
       }
 
@@ -1716,6 +1810,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       restoreCloudBackup,
       deleteCloudBackup,
       saveLocalBackupToCloud,
+      syncFromCloudStorage,
       setStudents, 
       setExams, 
       setResults, 
