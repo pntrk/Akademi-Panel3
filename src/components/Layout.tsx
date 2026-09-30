@@ -5,7 +5,7 @@ import {
   LogOut, Shield, Download, Globe, HardDriveDownload, Cloud, 
   Bell, Camera, Printer, TrendingUp, HelpCircle, ChevronRight, 
   Sparkles, Zap, CheckCircle2, User as UserIcon, RefreshCw,
-  Sliders, AlertCircle, AlertTriangle, ExternalLink, FolderCheck
+  Sliders, AlertCircle, AlertTriangle, ExternalLink, FolderCheck, Eye
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAppContext } from '../context/AppContext';
@@ -942,8 +942,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Hybrid Sync Status & Publish Button */}
-            {userRole === 'admin' && (
+            {/* Hybrid Sync Status & Publish Button (Admin) / View Backups (Teacher) */}
+            {userRole === 'admin' ? (
               <>
                 {syncStatus === 'pending_publish' || hasPendingChanges ? (
                   <button
@@ -1022,7 +1022,29 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   <span>Yedekleme Merkezi</span>
                 </button>
               </>
-            )}
+            ) : userRole === 'teacher' ? (
+              <>
+                {/* Teacher View: Synced Status & View Cloud Backups */}
+                <div 
+                  onClick={() => setIsCloudBackupOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200/90 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold cursor-pointer hover:bg-emerald-100/70 transition-colors shadow-2xs"
+                  title="Firebase üzerinden en son yayınlanmış okul verileri cihazınızla eşitlendi"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping" />
+                  <span>Bulutla Eşitlendi</span>
+                  {lastSyncedAt && <span className="text-[10px] text-emerald-600/80 font-normal">({lastSyncedAt})</span>}
+                </div>
+
+                <button
+                  onClick={() => setIsCloudBackupOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-slate-800/90 border border-[#e6e2d3] dark:border-slate-700 text-[#2d2c25] dark:text-slate-100 hover:text-sky-700 hover:bg-sky-50/50 hover:border-sky-300 rounded-xl text-xs font-bold active:scale-95 transition-all cursor-pointer shadow-2xs"
+                  title="Firebase üzerindeki manuel yayınlanmış sistem yedeklerini görüntüle"
+                >
+                  <Eye className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                  <span>Bulut Yedekleri ({cloudBackups.length})</span>
+                </button>
+              </>
+            ) : null}
 
             {/* Quick Feedback Toast */}
             {saveFeedback && (

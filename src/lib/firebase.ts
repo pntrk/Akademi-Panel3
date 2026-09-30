@@ -246,11 +246,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Google Auth Provider setup with Google Drive Scopes
-export const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+// Standard Google Auth Provider for App Login (Clean, non-sensitive scopes: email & profile only)
+// NEVER add sensitive scopes like Google Drive here so all teachers/users can log in without OAuth 403 blocks.
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
-SCOPES.forEach(scope => googleProvider.addScope(scope));
+
+// Dedicated Google Drive Provider (Only used when an admin explicitly links Google Drive)
+export const googleDriveProvider = new GoogleAuthProvider();
+googleDriveProvider.setCustomParameters({ prompt: 'consent select_account' });
+googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
 
 // In-memory token cache (never stored in localStorage)
 let cachedAccessToken: string | null = null;
@@ -264,18 +268,16 @@ export const getCachedAccessToken = (): string | null => {
 };
 
 export const loginWithGoogle = async () => {
+  // Uses clean standard provider without Drive scope
   const result = await signInWithPopup(auth, googleProvider);
-  const credential = GoogleAuthProvider.credentialFromResult(result);
-  if (credential?.accessToken) {
-    cachedAccessToken = credential.accessToken;
-  }
   return result;
 };
 
 export const connectGoogleDrive = async (): Promise<string | null> => {
   if (cachedAccessToken) return cachedAccessToken;
   try {
-    const result = await signInWithPopup(auth, googleProvider);
+    // Only requests Drive scope when explicitly connecting Google Drive
+    const result = await signInWithPopup(auth, googleDriveProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
       cachedAccessToken = credential.accessToken;
