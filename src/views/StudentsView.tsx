@@ -17,6 +17,20 @@ export const formatCleanFee = (val: number): string => {
   return clean.toString();
 };
 
+export const distributeAmountToExams = (totalAmount: number, count: number): number[] => {
+  if (count <= 0) return [];
+  if (totalAmount <= 0) return new Array(count).fill(0);
+
+  const totalCents = Math.round(totalAmount * 100);
+  const baseCents = Math.floor(totalCents / count);
+  const remainderCents = totalCents % count;
+
+  return Array.from({ length: count }, (_, idx) => {
+    const cents = idx < remainderCents ? baseCents + 1 : baseCents;
+    return cents / 100;
+  });
+};
+
 export const getDisplayFeeForReg = (
   reg: { examId: string; fee: number; isPaid?: boolean; installment?: string },
   studentRegs: { examId: string; fee: number; isPaid?: boolean; installment?: string }[] = [],
@@ -40,17 +54,17 @@ export const getDisplayFeeForReg = (
   const debtHalf = Math.round((totalPkgFee - paidHalf) * 100) / 100;
 
   if (isT1 && t1List.length > 0) {
-    const idx = t1List.findIndex(t1 => t1.examId === reg.examId);
-    const perExam = Math.round((paidHalf / t1List.length) * 100) / 100;
-    return idx === t1List.length - 1
-      ? Math.max(0, Math.round((paidHalf - (perExam * (t1List.length - 1))) * 100) / 100)
-      : perExam;
+    const pIdx = t1List.findIndex(t1 => t1.examId === reg.examId);
+    if (pIdx !== -1) {
+      const fees = distributeAmountToExams(paidHalf, t1List.length);
+      return fees[pIdx];
+    }
   } else if (!isT1 && t2List.length > 0) {
-    const idx = t2List.findIndex(t2 => t2.examId === reg.examId);
-    const perExam = Math.round((debtHalf / t2List.length) * 100) / 100;
-    return idx === t2List.length - 1
-      ? Math.max(0, Math.round((debtHalf - (perExam * (t2List.length - 1))) * 100) / 100)
-      : perExam;
+    const uIdx = t2List.findIndex(t2 => t2.examId === reg.examId);
+    if (uIdx !== -1) {
+      const fees = distributeAmountToExams(debtHalf, t2List.length);
+      return fees[uIdx];
+    }
   }
 
   return Number(reg.fee) || 0;
@@ -226,32 +240,21 @@ export const StudentsView = () => {
       const term1Exams = exams.filter(isExamInTerm1);
       const term2Exams = exams.filter(e => !isExamInTerm1(e));
 
-      const hasBothTerms = term1Exams.length > 0 && term2Exams.length > 0;
-      const paidHalf = hasBothTerms 
-        ? Math.round((totalLumpSumFee / 2) * 100) / 100 
-        : (term1Exams.length > 0 ? totalLumpSumFee : Math.round((totalLumpSumFee / 2) * 100) / 100);
+      const paidHalf = Math.round((totalLumpSumFee / 2) * 100) / 100;
       const debtHalf = Math.round((totalLumpSumFee - paidHalf) * 100) / 100;
 
-      const paidExamsList = hasBothTerms ? term1Exams : (term1Exams.length > 0 ? term1Exams : exams.slice(0, Math.ceil(exams.length / 2)));
+      const paidExamsList = term1Exams.length > 0 ? term1Exams : exams.slice(0, Math.ceil(exams.length / 2));
       const unpaidExamsList = exams.filter(e => !paidExamsList.some(pe => pe.id === e.id));
 
-      const paidFeePerExam = paidExamsList.length > 0 ? Math.round((paidHalf / paidExamsList.length) * 100) / 100 : 0;
-      const unpaidFeePerExam = unpaidExamsList.length > 0 ? Math.round((debtHalf / unpaidExamsList.length) * 100) / 100 : 0;
+      const paidFees = distributeAmountToExams(paidHalf, paidExamsList.length);
+      const unpaidFees = distributeAmountToExams(debtHalf, unpaidExamsList.length);
 
       exams.forEach((exam) => {
-        const isPaidPortion = paidExamsList.some(pe => pe.id === exam.id);
-        let examFee = 0;
-        if (isPaidPortion) {
-          const pIdx = paidExamsList.findIndex(pe => pe.id === exam.id);
-          examFee = pIdx === paidExamsList.length - 1
-            ? Math.max(0, Math.round((paidHalf - (paidFeePerExam * (paidExamsList.length - 1))) * 100) / 100)
-            : paidFeePerExam;
-        } else {
-          const uIdx = unpaidExamsList.findIndex(ue => ue.id === exam.id);
-          examFee = uIdx === unpaidExamsList.length - 1
-            ? Math.max(0, Math.round((debtHalf - (unpaidFeePerExam * (unpaidExamsList.length - 1))) * 100) / 100)
-            : unpaidFeePerExam;
-        }
+        const pIdx = paidExamsList.findIndex(pe => pe.id === exam.id);
+        const isPaidPortion = pIdx !== -1;
+        const examFee = isPaidPortion 
+          ? paidFees[pIdx] 
+          : (unpaidExamsList.findIndex(ue => ue.id === exam.id) !== -1 ? unpaidFees[unpaidExamsList.findIndex(ue => ue.id === exam.id)] : 0);
 
         updatedStudents = updatedStudents.map(s => {
           if (selectedStudentIds.includes(s.id)) {
@@ -361,20 +364,43 @@ export const StudentsView = () => {
   };
 
   const handlePayTerm1Registrations = (studentId: string) => {
+    const student = state.students.find(s => s.id === studentId);
+    if (!student) return;
+
+    const regs = student.examRegistrations || [];
+    if (regs.length === 0) return;
+
+    const totalFee = regs.reduce((sum, r) => sum + (Number(r.fee) || 0), 0);
+    const paidHalf = Math.round((totalFee / 2) * 100) / 100;
+    const debtHalf = Math.round((totalFee - paidHalf) * 100) / 100;
+
+    const term1Regs = regs.filter(r => isExamInTerm1(state.exams.find(e => e.id === r.examId) || {}));
+    const paidExamsList = term1Regs.length > 0 ? term1Regs : regs.slice(0, Math.ceil(regs.length / 2));
+    const unpaidExamsList = regs.filter(r => !paidExamsList.some(pe => pe.examId === r.examId));
+
+    const paidFees = distributeAmountToExams(paidHalf, paidExamsList.length);
+    const unpaidFees = distributeAmountToExams(debtHalf, unpaidExamsList.length);
+
     const updatedStudents = state.students.map(s => {
       if (s.id === studentId) {
-        const regs = s.examRegistrations || [];
         const updatedRegs = regs.map(r => {
-          const examObj = state.exams.find(e => e.id === r.examId);
-          const isTerm1 = examObj ? isExamInTerm1(examObj) : false;
-          if (isTerm1 && !r.isPaid) {
+          const pIdx = paidExamsList.findIndex(pe => pe.examId === r.examId);
+          if (pIdx !== -1) {
             return {
               ...r,
+              fee: paidFees[pIdx],
               isPaid: true,
               installment: '1. Taksit (Ödendi)'
             };
+          } else {
+            const uIdx = unpaidExamsList.findIndex(ue => ue.examId === r.examId);
+            return {
+              ...r,
+              fee: uIdx !== -1 ? unpaidFees[uIdx] : r.fee,
+              isPaid: false,
+              installment: '2. Taksit (Kalan Borç)'
+            };
           }
-          return r;
         });
         return {
           ...s,
@@ -433,35 +459,41 @@ export const StudentsView = () => {
 
     if (newRegPaymentMode === 'installment' && totalLumpSumFee > 0) {
       // 1. Taksit Ödendi: 1. Dönem sınavları "Ödendi" (Bütçeye Gelir), 2. Dönem sınavları "Borç" olarak kaydedilir
-      const term1Exams = exams.filter(isExamInTerm1);
-      const term2Exams = exams.filter(e => !isExamInTerm1(e));
+      let regExams = [...exams];
+      const hasTerm2 = regExams.some(e => !isExamInTerm1(e));
+      if (!hasTerm2 && student) {
+        // 2. dönem sınavları seçilmemişse öğrencinin sınıf seviyesine uygun 2. dönem sınavlarını otomatik ekle
+        const studentRegisteredIds = (student.examRegistrations || []).map(r => r.examId);
+        const studentGrade = student.className ? (student.className.trim().match(/^(\d+)/)?.[1] || 'Diğer') : 'Diğer';
+        const availableTerm2 = state.exams.filter(ex => {
+          if (studentRegisteredIds.includes(ex.id)) return false;
+          if (isExamInTerm1(ex)) return false;
+          if (!ex.participatingClasses || ex.participatingClasses.length === 0) return true;
+          return ex.participatingClasses.includes(studentGrade);
+        });
+        if (availableTerm2.length > 0) {
+          regExams = [...regExams, ...availableTerm2];
+        }
+      }
 
-      const hasBothTerms = term1Exams.length > 0 && term2Exams.length > 0;
-      const paidHalf = hasBothTerms 
-        ? Math.round((totalLumpSumFee / 2) * 100) / 100 
-        : (term1Exams.length > 0 ? totalLumpSumFee : Math.round((totalLumpSumFee / 2) * 100) / 100);
+      const term1Exams = regExams.filter(isExamInTerm1);
+      const term2Exams = regExams.filter(e => !isExamInTerm1(e));
+
+      const paidHalf = Math.round((totalLumpSumFee / 2) * 100) / 100;
       const debtHalf = Math.round((totalLumpSumFee - paidHalf) * 100) / 100;
 
-      const paidExamsList = hasBothTerms ? term1Exams : (term1Exams.length > 0 ? term1Exams : exams.slice(0, Math.ceil(exams.length / 2)));
-      const unpaidExamsList = exams.filter(e => !paidExamsList.some(pe => pe.id === e.id));
+      const paidExamsList = term1Exams.length > 0 ? term1Exams : regExams.slice(0, Math.ceil(regExams.length / 2));
+      const unpaidExamsList = regExams.filter(e => !paidExamsList.some(pe => pe.id === e.id));
 
-      const paidFeePerExam = paidExamsList.length > 0 ? Math.round((paidHalf / paidExamsList.length) * 100) / 100 : 0;
-      const unpaidFeePerExam = unpaidExamsList.length > 0 ? Math.round((debtHalf / unpaidExamsList.length) * 100) / 100 : 0;
+      const paidFees = distributeAmountToExams(paidHalf, paidExamsList.length);
+      const unpaidFees = distributeAmountToExams(debtHalf, unpaidExamsList.length);
 
-      exams.forEach((exam) => {
-        const isPaidPortion = paidExamsList.some(pe => pe.id === exam.id);
-        let examFee = 0;
-        if (isPaidPortion) {
-          const pIdx = paidExamsList.findIndex(pe => pe.id === exam.id);
-          examFee = pIdx === paidExamsList.length - 1
-            ? Math.max(0, Math.round((paidHalf - (paidFeePerExam * (paidExamsList.length - 1))) * 100) / 100)
-            : paidFeePerExam;
-        } else {
-          const uIdx = unpaidExamsList.findIndex(ue => ue.id === exam.id);
-          examFee = uIdx === unpaidExamsList.length - 1
-            ? Math.max(0, Math.round((debtHalf - (unpaidFeePerExam * (unpaidExamsList.length - 1))) * 100) / 100)
-            : unpaidFeePerExam;
-        }
+      regExams.forEach((exam) => {
+        const pIdx = paidExamsList.findIndex(pe => pe.id === exam.id);
+        const isPaidPortion = pIdx !== -1;
+        const examFee = isPaidPortion 
+          ? paidFees[pIdx] 
+          : (unpaidExamsList.findIndex(ue => ue.id === exam.id) !== -1 ? unpaidFees[unpaidExamsList.findIndex(ue => ue.id === exam.id)] : 0);
 
         updatedStudents = updatedStudents.map(s => {
           if (s.id === studentId) {
@@ -1953,9 +1985,24 @@ export const StudentsView = () => {
                       const regs = student.examRegistrations || [];
                       const paidCount = regs.filter(r => r.isPaid).length;
                       const unpaidCount = regs.filter(r => !r.isPaid).length;
-                      const paidAmount = Math.round((regs.filter(r => r.isPaid).reduce((sum, r) => sum + (Number(r.fee) || 0), 0) + Number.EPSILON) * 100) / 100;
-                      const unpaidAmount = Math.round((regs.filter(r => !r.isPaid).reduce((sum, r) => sum + (Number(r.fee) || 0), 0) + Number.EPSILON) * 100) / 100;
-                      const totalAmount = Math.round(((paidAmount + unpaidAmount) + Number.EPSILON) * 100) / 100;
+                      const rawPaidAmount = regs.filter(r => r.isPaid).reduce((sum, r) => sum + (Number(r.fee) || 0), 0);
+                      const rawUnpaidAmount = regs.filter(r => !r.isPaid).reduce((sum, r) => sum + (Number(r.fee) || 0), 0);
+                      const rawTotalAmount = rawPaidAmount + rawUnpaidAmount;
+
+                      let paidAmount = Math.round(rawPaidAmount * 100) / 100;
+                      let unpaidAmount = Math.round(rawUnpaidAmount * 100) / 100;
+                      let totalAmount = Math.round(rawTotalAmount * 100) / 100;
+
+                      const hasInstallment = regs.some(r => r.installment);
+                      if (hasInstallment && paidCount > 0 && unpaidCount > 0) {
+                        const roundTotal = Math.round(totalAmount);
+                        if (Math.abs(totalAmount - roundTotal) < 0.15) {
+                          totalAmount = roundTotal;
+                        }
+                        const half = Math.round((totalAmount / 2) * 100) / 100;
+                        paidAmount = half;
+                        unpaidAmount = Math.round((totalAmount - half) * 100) / 100;
+                      }
 
                       return (
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
