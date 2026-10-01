@@ -333,9 +333,24 @@ export const getCachedAccessToken = (): string | null => {
 };
 
 export const loginWithGoogle = async () => {
-  // Uses clean standard provider without Drive scope
-  const result = await signInWithPopup(auth, googleProvider);
-  return result;
+  try {
+    // Primary: Login with Google Drive scope included so admins get Drive token seamlessly
+    const result = await signInWithPopup(auth, googleDriveProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      setCachedAccessToken(credential.accessToken);
+      markDrivePreApproved(result.user?.email || auth.currentUser?.email);
+    }
+    return result;
+  } catch (err: any) {
+    if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+      throw err;
+    }
+    // Fallback: If drive scopes prompt failed, login with standard provider
+    console.warn('Google Drive login provider notice, falling back to standard login:', err?.message);
+    const fallbackResult = await signInWithPopup(auth, googleProvider);
+    return fallbackResult;
+  }
 };
 
 export const connectGoogleDrive = async (silentOnly = false, forceRefresh = false): Promise<string | null> => {

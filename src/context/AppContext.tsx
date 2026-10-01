@@ -71,6 +71,8 @@ interface AppState {
 interface AppContextType {
   state: AppState;
   userRole: 'admin' | 'teacher' | 'guest';
+  loading: boolean;
+  isInitialHydrating: boolean;
   syncStatus: 'synced' | 'saving' | 'quota_exceeded' | 'offline' | 'error' | 'pending_publish';
   syncErrorMessage?: string | null;
   pendingSyncCount: number;
@@ -418,7 +420,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   const initialRole = evaluateUserRole(user?.email || '', state.admins, state.teachers);
 
-  const [loading, setLoading] = useState(false);
+  // KESİN KURAL: Açılışta Google Drive / Bulut yedeği indirilmeden tarayıcı hafızasındaki eski veriler yedeklenemez!
+  const isInitialCloudHydrationDoneRef = useRef<boolean>(false);
+  const [isInitialHydrating, setIsInitialHydrating] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [userRole, setUserRole] = useState<'admin' | 'teacher' | 'guest'>(initialRole);
   const [syncStatus, setSyncStatus] = useState<AppContextType['syncStatus']>(
     isInitialQuotaExceeded ? 'quota_exceeded' : 'synced'
@@ -621,22 +626,28 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     return currentRole;
   };
 
-  // Admin Startup Hydration: Automatically downloads the latest shared master backup from Google Drive
+  // Admin Startup Hydration: FIRST & FOREMOST downloads the latest shared master backup from Google Drive
   const syncFromGoogleDriveOnStartup = async (): Promise<boolean> => {
     try {
       let token = getCachedAccessToken();
       if (!token) {
         token = await connectGoogleDrive(true);
       }
-      if (!token) return false;
+      if (!token) {
+        console.warn('Google Drive açılış kontrolü: Erişim belirteci (token) henüz aktif değil.');
+        return false;
+      }
 
       const file = await findLiveMasterDriveFile(token);
-      if (!file?.id) return false;
+      if (!file?.id) {
+        console.warn('Google Drive açılış kontrolü: Canlı kütük dosyası bulunamadı.');
+        return false;
+      }
 
       const rawData = await downloadBackupFromGoogleDrive(file.id);
       if (rawData) {
         const targetData = rawData.data || rawData;
-        if (targetData && (targetData.students?.length > 0 || targetData.exams?.length > 0)) {
+        if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget || targetData.admins)) {
           const safeData = sanitizeSchoolState(targetData);
           setState(safeData);
           stateRef.current = safeData;
@@ -653,6 +664,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
               localStorage.setItem('akademi_last_drive_sync_time', formatted);
             } catch {}
           }
+          isInitialCloudHydrationDoneRef.current = true;
+          hasUnsavedLocalEditsRef.current = false;
+          setHasPendingChanges(false);
+          setPendingSyncCount(0);
           return true;
         }
       }
@@ -663,8 +678,21 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   };
 
-  // Storage-First State Hydration and Session Initializer
+  // Cloud-First State Hydration and Session Initializer
+  // KESİN KURAL: Tarayıcı hafızasındaki eski veriler yedeklemeye GÖNDERİLMEZ; ilk iş bulut yedeğinin indirilmesidir!
   useEffect(() => {
+    hasUnsavedLocalEditsRef.current = false;
+    setHasPendingChanges(false);
+    setPendingSyncCount(0);
+    if (driveSyncTimerRef.current) {
+      clearTimeout(driveSyncTimerRef.current);
+      driveSyncTimerRef.current = null;
+    }
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
     if (!auth.currentUser || !firebaseConfig.projectId) {
       const cleanUserEmail = (user?.email || '').trim().toLowerCase();
       const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
@@ -672,38 +700,50 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setSyncStatus('synced');
       setSyncErrorMessage(null);
       setLoading(false);
+      setIsInitialHydrating(false);
+      isInitialCloudHydrationDoneRef.current = true;
       return;
     }
 
     const cleanUserEmail = (user?.email || '').trim().toLowerCase();
     const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
     setUserRole(initialComputedRole);
+    setLoading(true);
+    setIsInitialHydrating(true);
 
-    // 1. If Admin: Immediately download and hydrate the latest live master file from Google Drive!
+    // 1. If Admin: FIRST and FOREMOST download the latest live master backup from Google Drive!
     if (initialComputedRole === 'admin') {
       syncFromGoogleDriveOnStartup().then((syncedFromDrive) => {
         if (syncedFromDrive) {
+          isInitialCloudHydrationDoneRef.current = true;
+          setIsInitialHydrating(false);
           setLoading(false);
           setSyncStatus('synced');
           setSyncErrorMessage(null);
         } else {
-          // Fallback to Firebase if Drive sync is still pending
-          syncFromCloudStorage().finally(() => {
+          // Fallback to Modular Cloud Storage if Google Drive file is not found
+          syncFromCloudStorage(true).finally(() => {
+            isInitialCloudHydrationDoneRef.current = true;
+            setIsInitialHydrating(false);
             setLoading(false);
             setSyncStatus('synced');
             setSyncErrorMessage(null);
           });
         }
       }).catch(() => {
-        syncFromCloudStorage().finally(() => {
+        syncFromCloudStorage(true).finally(() => {
+          isInitialCloudHydrationDoneRef.current = true;
+          setIsInitialHydrating(false);
           setLoading(false);
           setSyncStatus('synced');
           setSyncErrorMessage(null);
         });
       });
     } else {
-      // 2. If Teacher: Hydrate from Firebase (Primary truth for teachers)
-      syncFromCloudStorage().finally(() => {
+      // 2. If Teacher: Hydrate directly from Firebase Modular Storage
+      syncFromCloudStorage(true).finally(() => {
+        isInitialCloudHydrationDoneRef.current = true;
+        setIsInitialHydrating(false);
         setLoading(false);
         const computedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
         setUserRole(computedRole);
@@ -800,9 +840,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   // Real-time Firestore listener (anti-echo protected) & throttled focus check
   useEffect(() => {
-    // Initial fetch from Firebase Cloud
-    syncFromCloudStorage().catch(() => {});
-
     // Real-time Firestore Meta listener for instant multi-admin synchronization
     let unsubMeta: (() => void) | null = null;
     const cleanUserEmail = (user?.email || '').trim().toLowerCase();
@@ -843,7 +880,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     // Sync on tab focus so teachers/admins see updates when they switch back, throttled to max once per 60 seconds
     const handleFocus = () => {
       const now = Date.now();
-      if (now - lastFocusSyncRef.current > 60000) {
+      if (now - lastFocusSyncRef.current > 60000 && isInitialCloudHydrationDoneRef.current) {
         lastFocusSyncRef.current = now;
         syncFromCloudStorage().catch(() => {});
       }
@@ -859,6 +896,12 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   // Performs cloud sync using Modular Firestore (schools/main/modules/*) with smart diff updates
   const executeFirestoreWrite = async (newState: AppState, forceRetry = false) => {
     if (userRole !== 'admin') return;
+
+    // KESİN GÜVENLİK KİLİDİ: Açılışta bulut yedeği indirilmeden asla tarayıcı hafızasını buluta yükleme!
+    if (!isInitialCloudHydrationDoneRef.current && !forceRetry) {
+      console.warn('Firebase yazma işlemi engellendi: Açılışta henüz bulut yedeği indirilmedi.');
+      return;
+    }
 
     if (!auth.currentUser || !firebaseConfig.projectId) {
       setSyncStatus('synced');
@@ -950,6 +993,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   // Google Drive Live Master Sync (30-second automatic debounce sync)
   const syncToDriveNow = async (): Promise<{ success: boolean; modifiedTime?: string; error?: string }> => {
     if (userRole !== 'admin') return { success: false, error: 'Yetkisiz işlem' };
+
+    // KESİN GÜVENLİK KİLİDİ: Açılışta Google Drive / bulut yedeği indirilmeden asla tarayıcı hafızasını buluta yükleme!
+    if (!isInitialCloudHydrationDoneRef.current) {
+      console.warn('Google Drive senkronizasyonu engellendi: Açılışta bulut yedeği henüz indirilmedi.');
+      return { success: false, error: 'Açılışta bulut yedeği henüz indirilmedi.' };
+    }
+
     const token = getCachedAccessToken();
     if (!token) {
       return { success: false, error: 'Google Drive bağlantısı henüz aktif değil' };
@@ -980,7 +1030,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     if (userRole !== 'admin') return;
 
     const checkDriveRemoteUpdate = async () => {
-      // Don't overwrite if local user is currently typing/has pending unsaved edits
+      // Don't overwrite if local user is currently typing/has pending unsaved edits or not hydrated yet
+      if (!isInitialCloudHydrationDoneRef.current) return;
       if (hasUnsavedLocalEditsRef.current) return;
       if (!getCachedAccessToken()) return;
 
@@ -1020,6 +1071,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       console.warn('LocalStorage save error:', e);
     }
 
+    // Açılış bulut indirmesi tamamlanmadan dışa aktarım veya Google Drive eşitleme tetiklenmez
+    if (!isInitialCloudHydrationDoneRef.current) {
+      return;
+    }
+
     // 2. Mark pending changes for manual Firebase publishing
     hasUnsavedLocalEditsRef.current = true;
     setHasPendingChanges(true);
@@ -1036,7 +1092,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
 
     driveSyncTimerRef.current = setTimeout(() => {
-      if (userRole === 'admin') {
+      if (userRole === 'admin' && isInitialCloudHydrationDoneRef.current) {
         syncToDriveNow().catch(() => {});
       }
     }, 30000); // 30 seconds
@@ -2018,6 +2074,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     <AppContext.Provider value={{ 
       state, 
       userRole, 
+      loading,
+      isInitialHydrating,
       syncStatus, 
       syncErrorMessage, 
       pendingSyncCount,

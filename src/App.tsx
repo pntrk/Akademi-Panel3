@@ -17,7 +17,7 @@ import { KeysAndPrintView } from './views/KeysAndPrintView';
 import { OmrSetupView } from './views/OmrSetupView';
 import { AnalysisView } from './views/AnalysisView';
 import { auth, loginWithGoogle, logout, firebaseConfig, onAuthStateChanged, User, createSyntheticUser, db, doc, setDoc } from './lib/firebase';
-import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck } from 'lucide-react';
+import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck, Database } from 'lucide-react';
 import { useAppContext, checkIsQuotaExceededToday, markQuotaExceededToday } from './context/AppContext';
 
 // Record user login into access_requests collection so administrators see all registered users (throttled to once/day)
@@ -50,7 +50,7 @@ const syncUserRegistration = async (targetUser: User) => {
 };
 
 function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const { userRole, checkAndRefreshRole } = useAppContext();
+  const { userRole, checkAndRefreshRole, loading: appLoading, isInitialHydrating } = useAppContext();
   const [activeTab, setActiveTab] = useState<'students' | 'halls' | 'results' | 'scan' | 'keys_print' | 'omr-setup' | 'analysis' | 'exams' | 'league' | 'budget'>(
     'results'
   );
@@ -83,6 +83,29 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
       return;
     }
   }, [userRole, activeTab]);
+
+  // Açılışta öncelikle Google Drive / Bulut canlı yedeği indirilir
+  if (appLoading || isInitialHydrating) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF9F5] dark:bg-[#121316] p-6 text-center font-sans">
+        <div className="relative mb-5">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-400/30 flex items-center justify-center shadow-md">
+            <Database className="w-8 h-8 text-amber-500 animate-pulse" />
+          </div>
+          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+          </span>
+        </div>
+        <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-white mb-1.5">
+          Canlı Kütük İndiriliyor...
+        </h3>
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed">
+          Google Drive üzerindeki en güncel canlı okul kütüğü taranıyor ve sisteme yükleniyor. Tarayıcı hafızasındaki eski veriler yedeklenmez.
+        </p>
+      </div>
+    );
+  }
 
   if (userRole === 'guest') {
     const handleCheckStatus = async () => {
