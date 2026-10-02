@@ -73,6 +73,11 @@ interface AppContextType {
   userRole: 'admin' | 'teacher' | 'guest';
   loading: boolean;
   isInitialHydrating: boolean;
+  isWaitingForDriveAuth: boolean;
+  isConnectingDriveStartup: boolean;
+  driveStartupStatusText: string;
+  connectDriveAndHydrateOnStartup: () => Promise<boolean>;
+  skipDriveAndUseCloudStorage: () => Promise<void>;
   syncStatus: 'synced' | 'saving' | 'quota_exceeded' | 'offline' | 'error' | 'pending_publish';
   syncErrorMessage?: string | null;
   pendingSyncCount: number;
@@ -424,6 +429,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   const isInitialCloudHydrationDoneRef = useRef<boolean>(false);
   const [isInitialHydrating, setIsInitialHydrating] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isWaitingForDriveAuth, setIsWaitingForDriveAuth] = useState<boolean>(false);
+  const [isConnectingDriveStartup, setIsConnectingDriveStartup] = useState<boolean>(false);
+  const [driveStartupStatusText, setDriveStartupStatusText] = useState<string>(
+    'Google Drive üzerindeki en güncel canlı okul kütüğü taranıyor ve sisteme yükleniyor...'
+  );
   const [userRole, setUserRole] = useState<'admin' | 'teacher' | 'guest'>(initialRole);
   const [syncStatus, setSyncStatus] = useState<AppContextType['syncStatus']>(
     isInitialQuotaExceeded ? 'quota_exceeded' : 'synced'
@@ -678,6 +688,63 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   };
 
+  const connectDriveAndHydrateOnStartup = async (): Promise<boolean> => {
+    setIsConnectingDriveStartup(true);
+    setDriveStartupStatusText('Google Drive hesabına bağlanılıyor...');
+    try {
+      const token = await connectGoogleDrive(false, true);
+      if (!token) {
+        setDriveStartupStatusText('Google Drive bağlantısı onaylanamadı. Lütfen tekrar deneyiniz.');
+        setIsConnectingDriveStartup(false);
+        return false;
+      }
+      setDriveStartupStatusText('Canlı okul kütüğü Google Drive üzerinden taranıyor ve indiriliyor...');
+      const synced = await syncFromGoogleDriveOnStartup();
+      if (synced) {
+        setIsWaitingForDriveAuth(false);
+        isInitialCloudHydrationDoneRef.current = true;
+        setIsInitialHydrating(false);
+        setLoading(false);
+        setSyncStatus('synced');
+        setSyncErrorMessage(null);
+        setIsConnectingDriveStartup(false);
+        return true;
+      } else {
+        setDriveStartupStatusText('Drive canlı kütük dosyası bulunamadı, bulut yedeği indiriliyor...');
+        await syncFromCloudStorage(true);
+        setIsWaitingForDriveAuth(false);
+        isInitialCloudHydrationDoneRef.current = true;
+        setIsInitialHydrating(false);
+        setLoading(false);
+        setSyncStatus('synced');
+        setSyncErrorMessage(null);
+        setIsConnectingDriveStartup(false);
+        return true;
+      }
+    } catch (e: any) {
+      console.warn('Connect drive and hydrate error:', e);
+      setDriveStartupStatusText('Bağlantı hatası: ' + (e?.message || 'Drive bağlantısı kurulamadı.'));
+      setIsConnectingDriveStartup(false);
+      return false;
+    }
+  };
+
+  const skipDriveAndUseCloudStorage = async () => {
+    setIsConnectingDriveStartup(true);
+    setDriveStartupStatusText('Bulut veritabanı yedeği indiriliyor...');
+    try {
+      await syncFromCloudStorage(true);
+    } finally {
+      setIsWaitingForDriveAuth(false);
+      isInitialCloudHydrationDoneRef.current = true;
+      setIsInitialHydrating(false);
+      setLoading(false);
+      setSyncStatus('synced');
+      setSyncErrorMessage(null);
+      setIsConnectingDriveStartup(false);
+    }
+  };
+
   // Cloud-First State Hydration and Session Initializer
   // KESİN KURAL: Tarayıcı hafızasındaki eski veriler yedeklemeye GÖNDERİLMEZ; ilk iş bulut yedeğinin indirilmesidir!
   useEffect(() => {
@@ -701,6 +768,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setSyncErrorMessage(null);
       setLoading(false);
       setIsInitialHydrating(false);
+      setIsWaitingForDriveAuth(false);
       isInitialCloudHydrationDoneRef.current = true;
       return;
     }
@@ -713,15 +781,28 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
     // 1. If Admin: FIRST and FOREMOST download the latest live master backup from Google Drive!
     if (initialComputedRole === 'admin') {
-      syncFromGoogleDriveOnStartup().then((syncedFromDrive) => {
-        if (syncedFromDrive) {
-          isInitialCloudHydrationDoneRef.current = true;
-          setIsInitialHydrating(false);
-          setLoading(false);
-          setSyncStatus('synced');
-          setSyncErrorMessage(null);
-        } else {
-          // Fallback to Modular Cloud Storage if Google Drive file is not found
+      const cachedToken = getCachedAccessToken();
+      if (cachedToken) {
+        // Active Drive token exists -> download immediately from Google Drive!
+        setDriveStartupStatusText('Google Drive üzerindeki en güncel canlı okul kütüğü indiriliyor...');
+        syncFromGoogleDriveOnStartup().then((syncedFromDrive) => {
+          if (syncedFromDrive) {
+            isInitialCloudHydrationDoneRef.current = true;
+            setIsInitialHydrating(false);
+            setLoading(false);
+            setSyncStatus('synced');
+            setSyncErrorMessage(null);
+          } else {
+            // Fallback to Modular Cloud Storage if Google Drive file is not found
+            syncFromCloudStorage(true).finally(() => {
+              isInitialCloudHydrationDoneRef.current = true;
+              setIsInitialHydrating(false);
+              setLoading(false);
+              setSyncStatus('synced');
+              setSyncErrorMessage(null);
+            });
+          }
+        }).catch(() => {
           syncFromCloudStorage(true).finally(() => {
             isInitialCloudHydrationDoneRef.current = true;
             setIsInitialHydrating(false);
@@ -729,16 +810,40 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             setSyncStatus('synced');
             setSyncErrorMessage(null);
           });
-        }
-      }).catch(() => {
-        syncFromCloudStorage(true).finally(() => {
-          isInitialCloudHydrationDoneRef.current = true;
-          setIsInitialHydrating(false);
-          setLoading(false);
-          setSyncStatus('synced');
-          setSyncErrorMessage(null);
         });
-      });
+      } else {
+        // Token not found in memory/storage (e.g. refreshed page or session restored)
+        // Try silent background connect first:
+        connectGoogleDrive(true).then((silentToken) => {
+          if (silentToken) {
+            setDriveStartupStatusText('Google Drive üzerindeki en güncel canlı okul kütüğü indiriliyor...');
+            return syncFromGoogleDriveOnStartup().then((synced) => {
+              if (synced) {
+                isInitialCloudHydrationDoneRef.current = true;
+                setIsInitialHydrating(false);
+                setLoading(false);
+                setSyncStatus('synced');
+                setSyncErrorMessage(null);
+                return;
+              }
+              return syncFromCloudStorage(true).finally(() => {
+                isInitialCloudHydrationDoneRef.current = true;
+                setIsInitialHydrating(false);
+                setLoading(false);
+                setSyncStatus('synced');
+                setSyncErrorMessage(null);
+              });
+            });
+          } else {
+            // Silent connect blocked by browser -> show 1-click connect button for admin
+            setIsWaitingForDriveAuth(true);
+            setDriveStartupStatusText('Google Drive canlı kütük yedeğini doğrudan indirmek için Drive bağlantısını onaylayınız.');
+          }
+        }).catch(() => {
+          setIsWaitingForDriveAuth(true);
+          setDriveStartupStatusText('Google Drive canlı kütük yedeğini doğrudan indirmek için Drive bağlantısını onaylayınız.');
+        });
+      }
     } else {
       // 2. If Teacher: Hydrate directly from Firebase Modular Storage
       syncFromCloudStorage(true).finally(() => {
@@ -2076,6 +2181,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       userRole, 
       loading,
       isInitialHydrating,
+      isWaitingForDriveAuth,
+      isConnectingDriveStartup,
+      driveStartupStatusText,
+      connectDriveAndHydrateOnStartup,
+      skipDriveAndUseCloudStorage,
       syncStatus, 
       syncErrorMessage, 
       pendingSyncCount,

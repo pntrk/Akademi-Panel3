@@ -268,7 +268,11 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 // Dedicated Google Drive Provider
 // Includes both drive and drive.file scopes so shared files can be accessed seamlessly across all admins
 export const googleDriveProvider = new GoogleAuthProvider();
-googleDriveProvider.setCustomParameters({ prompt: 'select_account' });
+googleDriveProvider.setCustomParameters({
+  prompt: 'consent select_account',
+  access_type: 'offline',
+  include_granted_scopes: 'true'
+});
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
 
@@ -297,7 +301,7 @@ export const markDrivePreApproved = (email?: string | null) => {
   } catch {}
 };
 
-export const setCachedAccessToken = (token: string | null, expiresInSeconds = 3500) => {
+export const setCachedAccessToken = (token: string | null, expiresInSeconds = 3600) => {
   inMemoryAccessToken = token;
   try {
     if (token) {
@@ -306,6 +310,7 @@ export const setCachedAccessToken = (token: string | null, expiresInSeconds = 35
       sessionStorage.setItem(DRIVE_EXPIRES_KEY, expiresAt.toString());
       localStorage.setItem(DRIVE_TOKEN_KEY, token);
       localStorage.setItem(DRIVE_EXPIRES_KEY, expiresAt.toString());
+      localStorage.setItem('akademi_admin_drive_connected', 'true');
       if (auth.currentUser?.email) {
         markDrivePreApproved(auth.currentUser.email);
       }
@@ -314,6 +319,7 @@ export const setCachedAccessToken = (token: string | null, expiresInSeconds = 35
       sessionStorage.removeItem(DRIVE_EXPIRES_KEY);
       localStorage.removeItem(DRIVE_TOKEN_KEY);
       localStorage.removeItem(DRIVE_EXPIRES_KEY);
+      localStorage.removeItem('akademi_admin_drive_connected');
     }
   } catch {}
 };
@@ -323,8 +329,8 @@ export const getCachedAccessToken = (): string | null => {
   try {
     const stored = sessionStorage.getItem(DRIVE_TOKEN_KEY) || localStorage.getItem(DRIVE_TOKEN_KEY);
     const expiresAt = Number(sessionStorage.getItem(DRIVE_EXPIRES_KEY) || localStorage.getItem(DRIVE_EXPIRES_KEY) || 0);
-    // Token is valid if expires in the future with at least 60s buffer
-    if (stored && expiresAt > Date.now() + 60000) {
+    // Token is valid if expires in the future or without rigid threshold
+    if (stored && (expiresAt === 0 || expiresAt > Date.now() + 10000)) {
       inMemoryAccessToken = stored;
       return stored;
     }
@@ -334,12 +340,13 @@ export const getCachedAccessToken = (): string | null => {
 
 export const loginWithGoogle = async () => {
   try {
-    // Primary: Login with Google Drive scope included so admins get Drive token seamlessly
+    // Primary: Login with Google Drive scope included so admins get Drive token seamlessly on entry
     const result = await signInWithPopup(auth, googleDriveProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
       setCachedAccessToken(credential.accessToken);
       markDrivePreApproved(result.user?.email || auth.currentUser?.email);
+      console.log('✓ Google Drive token seamlessly cached for admin login:', result.user?.email);
     }
     return result;
   } catch (err: any) {

@@ -1966,6 +1966,18 @@ export const ExamsView = () => {
     ).length;
   }, [filteredAndSortedExams, state.students]);
 
+  // Kütükteki toplam kayıtlı öğrenci sayısı (seçili kademe filtresine göre dinamik)
+  const totalStudentsInSystem = useMemo(() => {
+    if (selectedGrades.includes('Tümü') || selectedGrades.length === 0) {
+      return state.students.length;
+    }
+    return state.students.filter(s => {
+      const match = s.className ? s.className.trim().match(/^(\d+)/) : null;
+      const studentGrade = match ? match[1] : 'Diğer';
+      return selectedGrades.includes(studentGrade);
+    }).length;
+  }, [state.students, selectedGrades]);
+
   return (
     <div className="space-y-2 sm:space-y-6 md:space-y-8 flex flex-col h-full relative font-sans text-brand-ink">
       {/* Upper header action bar */}
@@ -2111,10 +2123,26 @@ export const ExamsView = () => {
         </div>
       )}
 
-      {/* Summary Stats - Collapsible on Mobile, 4 Cols on Desktop */}
-      <section className={`${isMobileStatsOpen ? 'grid' : 'hidden'} sm:grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-4 md:gap-5`}>
-        {/* Stat 1: Listelenen Sınav */}
-        <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-brand-accent/50">
+      {/* Summary Stats - Collapsible on Mobile, 5 Cols on Desktop */}
+      <section className={`${isMobileStatsOpen ? 'grid' : 'hidden'} sm:grid grid-cols-2 lg:grid-cols-5 gap-1.5 sm:gap-3.5 md:gap-4`}>
+        {/* Stat 1: Kayıtlı Toplam Öğrenci (Kütük) */}
+        <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-indigo-400">
+          <div className="flex items-center gap-1.5 min-w-0 sm:w-full sm:justify-between sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-semibold text-brand-ink/60 uppercase tracking-wider truncate">
+              <span className="hidden sm:inline">Kayıtlı </span>Öğrenci
+            </span>
+            <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1 shrink-0">
+            <span className="font-serif text-sm sm:text-2xl md:text-3xl font-bold text-indigo-900 leading-none">{totalStudentsInSystem}</span>
+            <span className="text-[9px] sm:text-xs text-indigo-600/80 font-medium">kayıtlı</span>
+          </div>
+        </div>
+
+        {/* Stat 2: Listelenen Sınav */}
+        <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-blue-400">
           <div className="flex items-center gap-1.5 min-w-0 sm:w-full sm:justify-between sm:mb-2">
             <span className="text-[10px] sm:text-xs font-semibold text-brand-ink/60 uppercase tracking-wider truncate">
               <span className="hidden sm:inline">Listelenen </span>Sınav
@@ -2129,8 +2157,24 @@ export const ExamsView = () => {
           </div>
         </div>
 
-        {/* Stat 2: Toplam Sipariş Adedi */}
-        <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-brand-accent/50">
+        {/* Stat 3: Sınavlara Katılan Katılımcı Sayısı */}
+        <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-emerald-400">
+          <div className="flex items-center gap-1.5 min-w-0 sm:w-full sm:justify-between sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-semibold text-brand-ink/60 uppercase tracking-wider truncate">
+              Sınav Katılımı
+            </span>
+            <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1 shrink-0">
+            <span className="font-serif text-sm sm:text-2xl md:text-3xl font-bold text-emerald-700 leading-none">{totalRegisteredParticipants}</span>
+            <span className="text-[9px] sm:text-xs text-emerald-600/70 font-medium">katılımcı</span>
+          </div>
+        </div>
+
+        {/* Stat 4: Toplam Sipariş Adedi */}
+        <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-purple-400">
           <div className="flex items-center gap-1.5 min-w-0 sm:w-full sm:justify-between sm:mb-2">
             <span className="text-[10px] sm:text-xs font-semibold text-brand-ink/60 uppercase tracking-wider truncate">
               <span className="hidden sm:inline">Toplam </span>Sipariş
@@ -2147,8 +2191,8 @@ export const ExamsView = () => {
           </div>
         </div>
 
-        {/* Stat 3: Toplam Yayıncı Maliyeti */}
-        <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-amber-300">
+        {/* Stat 5: Toplam Yayıncı Maliyeti */}
+        <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-amber-400">
           <div className="flex items-center gap-1.5 min-w-0 sm:w-full sm:justify-between sm:mb-2">
             <span className="text-[10px] sm:text-xs font-semibold text-brand-ink/60 uppercase tracking-wider truncate">
               <span className="hidden sm:inline">Yayıncı </span>Maliyeti
@@ -2161,22 +2205,6 @@ export const ExamsView = () => {
             <span className="font-serif text-sm sm:text-2xl md:text-3xl font-bold text-brand-accent leading-none">
               ₺{filteredAndSortedExams.reduce((sum, e) => sum + ((e.publisherFee || 0) * (e.orderQuantity || 0)), 0).toLocaleString('tr-TR')}
             </span>
-          </div>
-        </div>
-
-        {/* Stat 4: Katılan Toplam Öğrenci */}
-        <div className="bg-white px-2.5 py-1.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs sm:shadow-sm flex items-center sm:flex-col justify-between sm:justify-between gap-1.5 sm:gap-2 transition-all hover:border-emerald-300">
-          <div className="flex items-center gap-1.5 min-w-0 sm:w-full sm:justify-between sm:mb-2">
-            <span className="text-[10px] sm:text-xs font-semibold text-brand-ink/60 uppercase tracking-wider truncate">
-              <span className="hidden sm:inline">Katılan </span>Öğrenci
-            </span>
-            <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1 shrink-0">
-            <span className="font-serif text-sm sm:text-2xl md:text-3xl font-bold text-emerald-700 leading-none">{totalRegisteredParticipants}</span>
-            <span className="text-[9px] sm:text-xs text-emerald-600/70 font-medium">öğrenci</span>
           </div>
         </div>
       </section>
