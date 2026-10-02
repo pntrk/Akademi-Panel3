@@ -812,36 +812,14 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           });
         });
       } else {
-        // Token not found in memory/storage (e.g. refreshed page or session restored)
-        // Try silent background connect first:
-        connectGoogleDrive(true).then((silentToken) => {
-          if (silentToken) {
-            setDriveStartupStatusText('Google Drive üzerindeki en güncel canlı okul kütüğü indiriliyor...');
-            return syncFromGoogleDriveOnStartup().then((synced) => {
-              if (synced) {
-                isInitialCloudHydrationDoneRef.current = true;
-                setIsInitialHydrating(false);
-                setLoading(false);
-                setSyncStatus('synced');
-                setSyncErrorMessage(null);
-                return;
-              }
-              return syncFromCloudStorage(true).finally(() => {
-                isInitialCloudHydrationDoneRef.current = true;
-                setIsInitialHydrating(false);
-                setLoading(false);
-                setSyncStatus('synced');
-                setSyncErrorMessage(null);
-              });
-            });
-          } else {
-            // Silent connect blocked by browser -> show 1-click connect button for admin
-            setIsWaitingForDriveAuth(true);
-            setDriveStartupStatusText('Google Drive canlı kütük yedeğini doğrudan indirmek için Drive bağlantısını onaylayınız.');
-          }
-        }).catch(() => {
-          setIsWaitingForDriveAuth(true);
-          setDriveStartupStatusText('Google Drive canlı kütük yedeğini doğrudan indirmek için Drive bağlantısını onaylayınız.');
+        // No Drive token yet: DO NOT block or prompt the user with scary popups on launch!
+        // Immediately hydrate from Firebase Cloud Storage (instant, 100% automated, zero permission prompts)
+        syncFromCloudStorage(true).finally(() => {
+          isInitialCloudHydrationDoneRef.current = true;
+          setIsInitialHydrating(false);
+          setLoading(false);
+          setSyncStatus('synced');
+          setSyncErrorMessage(null);
         });
       }
     } else {

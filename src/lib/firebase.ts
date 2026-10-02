@@ -5,6 +5,8 @@ import {
   signInWithPopup, 
   signOut, 
   onAuthStateChanged, 
+  setPersistence,
+  browserLocalPersistence,
   type User 
 } from 'firebase/auth';
 import { 
@@ -81,6 +83,9 @@ try {
 
 // Initialize Firebase Auth
 export const auth = getAuth(app);
+try {
+  setPersistence(auth, browserLocalPersistence).catch(() => {});
+} catch (e) {}
 
 export const FIRESTORE_UPGRADE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/databases/${firebaseConfig.firestoreDatabaseId || '(default)'}/data?openUpgradeDialog=true`;
 export const FIREBASE_STORAGE_ACTIVATE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/storage`;
@@ -261,19 +266,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Standard Google Auth Provider for App Login (Clean, non-sensitive scopes: email & profile only)
+// Standard Google Auth Provider for App Login (Clean, official, non-sensitive scopes: email & profile only)
+// NEVER displays developer unverified warnings or scary permissions dialogs!
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// Dedicated Google Drive Provider
-// Includes both drive and drive.file scopes so shared files can be accessed seamlessly across all admins
+// Dedicated Google Drive Provider for Drive File sync
+// Uses non-sensitive 'drive.file' scope (app-created files only) instead of restricted full 'drive' scope.
+// Uses prompt: 'select_account' (NO 'consent' forcing) so Google remembers user consent and never repeats permission prompts!
 export const googleDriveProvider = new GoogleAuthProvider();
 googleDriveProvider.setCustomParameters({
-  prompt: 'consent select_account',
-  access_type: 'offline',
-  include_granted_scopes: 'true'
+  prompt: 'select_account'
 });
-googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
 
 // Token keys for persistent session/local storage
@@ -329,7 +333,7 @@ export const getCachedAccessToken = (): string | null => {
   try {
     const stored = sessionStorage.getItem(DRIVE_TOKEN_KEY) || localStorage.getItem(DRIVE_TOKEN_KEY);
     const expiresAt = Number(sessionStorage.getItem(DRIVE_EXPIRES_KEY) || localStorage.getItem(DRIVE_EXPIRES_KEY) || 0);
-    // Token is valid if expires in the future or without rigid threshold
+    // Token is valid if stored and not strictly expired
     if (stored && (expiresAt === 0 || expiresAt > Date.now() + 10000)) {
       inMemoryAccessToken = stored;
       return stored;
@@ -339,24 +343,25 @@ export const getCachedAccessToken = (): string | null => {
 };
 
 export const loginWithGoogle = async () => {
+  // If user is already authenticated in Firebase, reuse existing auth session immediately
+  if (auth.currentUser) {
+    return { user: auth.currentUser };
+  }
+
   try {
-    // Primary: Login with Google Drive scope included so admins get Drive token seamlessly on entry
-    const result = await signInWithPopup(auth, googleDriveProvider);
+    // Primary: Standard clean Google login (instant 1-click, official, ZERO scary warning screens)
+    const result = await signInWithPopup(auth, googleProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
       setCachedAccessToken(credential.accessToken);
-      markDrivePreApproved(result.user?.email || auth.currentUser?.email);
-      console.log('✓ Google Drive token seamlessly cached for admin login:', result.user?.email);
     }
     return result;
   } catch (err: any) {
     if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
       throw err;
     }
-    // Fallback: If drive scopes prompt failed, login with standard provider
-    console.warn('Google Drive login provider notice, falling back to standard login:', err?.message);
-    const fallbackResult = await signInWithPopup(auth, googleProvider);
-    return fallbackResult;
+    console.error('Google login error:', err);
+    throw err;
   }
 };
 
@@ -368,8 +373,12 @@ export const connectGoogleDrive = async (silentOnly = false, forceRefresh = fals
     setCachedAccessToken(null);
   }
 
+  if (silentOnly) {
+    return null;
+  }
+
   try {
-    // Prompt without 'consent' -> Google automatically reuses prior consent without showing permission dialogs!
+    // Uses drive.file and select_account (One-time approval, Google remembers consent permanently)
     const result = await signInWithPopup(auth, googleDriveProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
@@ -378,12 +387,10 @@ export const connectGoogleDrive = async (silentOnly = false, forceRefresh = fals
       return credential.accessToken;
     }
   } catch (error: any) {
-    if (silentOnly) {
-      console.warn('Silent drive connection notice:', error?.message);
-      return null;
+    console.warn('Drive connection notice:', error?.message);
+    if (!silentOnly) {
+      throw error;
     }
-    console.error('Drive connection error:', error);
-    throw error;
   }
   return null;
 };

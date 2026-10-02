@@ -17,7 +17,7 @@ import { KeysAndPrintView } from './views/KeysAndPrintView';
 import { OmrSetupView } from './views/OmrSetupView';
 import { AnalysisView } from './views/AnalysisView';
 import { auth, loginWithGoogle, logout, firebaseConfig, onAuthStateChanged, User, createSyntheticUser, db, doc, setDoc } from './lib/firebase';
-import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck, Database, Cloud, HardDriveDownload } from 'lucide-react';
+import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck, Database, Cloud } from 'lucide-react';
 import { useAppContext, checkIsQuotaExceededToday, markQuotaExceededToday } from './context/AppContext';
 
 // Record user login into access_requests collection so administrators see all registered users (throttled to once/day)
@@ -55,11 +55,7 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
     checkAndRefreshRole, 
     loading: appLoading, 
     isInitialHydrating,
-    isWaitingForDriveAuth,
-    isConnectingDriveStartup,
-    driveStartupStatusText,
-    connectDriveAndHydrateOnStartup,
-    skipDriveAndUseCloudStorage
+    driveStartupStatusText
   } = useAppContext();
   const [activeTab, setActiveTab] = useState<'students' | 'halls' | 'results' | 'scan' | 'keys_print' | 'omr-setup' | 'analysis' | 'exams' | 'league' | 'budget'>(
     'results'
@@ -94,7 +90,7 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   }, [userRole, activeTab]);
 
-  // Açılışta öncelikle Google Drive / Bulut canlı yedeği indirilir
+  // Açılışta canlı kütük yüklenirken standart temiz yükleme ekranı
   if (appLoading || isInitialHydrating) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF9F5] dark:bg-[#121316] p-4 sm:p-6 text-center font-sans">
@@ -104,11 +100,7 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
 
           <div className="relative mb-4 mt-2">
             <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-400/30 flex items-center justify-center shadow-md">
-              {isWaitingForDriveAuth ? (
-                <Cloud className="w-8 h-8 text-amber-600" />
-              ) : (
-                <Database className="w-8 h-8 text-amber-500 animate-pulse" />
-              )}
+              <Database className="w-8 h-8 text-amber-500 animate-pulse" />
             </div>
             <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -117,48 +109,16 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
           </div>
 
           <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-white mb-1.5">
-            {isWaitingForDriveAuth ? 'Google Drive Canlı Kütük İndirmesi' : 'Canlı Kütük İndiriliyor...'}
+            Canlı Okul Kütüğü Yükleniyor...
           </h3>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-5">
-            {driveStartupStatusText || 'Google Drive üzerindeki en güncel canlı okul kütüğü taranıyor ve sisteme yükleniyor. Tarayıcı hafızasındaki eski veriler yedeklenmez.'}
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4">
+            {driveStartupStatusText || 'En güncel okul kütüğü ve sınav verileri güvenli bulut veritabanından alınıyor.'}
           </p>
 
-          {isWaitingForDriveAuth ? (
-            <div className="w-full space-y-2.5">
-              <button
-                type="button"
-                onClick={connectDriveAndHydrateOnStartup}
-                disabled={isConnectingDriveStartup}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-60"
-              >
-                {isConnectingDriveStartup ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    <span>Drive Canlı Kütüğü İndiriliyor...</span>
-                  </>
-                ) : (
-                  <>
-                    <HardDriveDownload className="w-4 h-4" />
-                    <span>Google Drive'a Bağlan & Canlı Kütüğü İndir</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={skipDriveAndUseCloudStorage}
-                disabled={isConnectingDriveStartup}
-                className="w-full py-2 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
-              >
-                Bulut veritabanı yedeği ile devam et
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-3.5 py-1.5 rounded-full border border-amber-200/60 dark:border-amber-800/40">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-              <span>Bulut / Google Drive canlı kütük eşitlemesi yapılıyor...</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-1.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/40">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            <span>Veriler güvenle senkronize ediliyor...</span>
+          </div>
         </div>
       </div>
     );
