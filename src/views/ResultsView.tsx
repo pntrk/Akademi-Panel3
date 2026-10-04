@@ -2497,21 +2497,23 @@ export function ResultsView() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                    <h3 className="text-sm sm:text-lg font-bold text-slate-900 tracking-tight truncate">
+                    <h3 className="text-sm sm:text-lg font-bold text-slate-900 tracking-tight truncate max-w-full">
                       {exam.name}
                     </h3>
-                    {exam.examType === 'internal' ? (
-                      <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1 shrink-0">
-                        <Target className="w-3 h-3" /> Kurum İçi Optik
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {exam.examType === 'internal' ? (
+                        <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 flex items-center gap-1 shadow-2xs shrink-0">
+                          <Target className="w-3 h-3 text-emerald-600" /> Kurum İçi Optik
+                        </span>
+                      ) : (
+                        <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-lg bg-sky-50 text-sky-800 border border-sky-200/80 flex items-center gap-1 shadow-2xs shrink-0">
+                          <FileSpreadsheet className="w-3 h-3 text-sky-600" /> Yayıncı Denemesi
+                        </span>
+                      )}
+                      <span className="text-[10px] sm:text-[11px] font-mono tabular-nums font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs shrink-0">
+                        {evaluatedResults.length} Öğrenci
                       </span>
-                    ) : (
-                      <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200/80 flex items-center gap-1 shrink-0">
-                        <FileSpreadsheet className="w-3 h-3" /> Yayıncı Denemesi
-                      </span>
-                    )}
-                    <span className="text-[10px] sm:text-[11px] font-mono tabular-nums font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                      {evaluatedResults.length} Öğrenci
-                    </span>
+                    </div>
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block">
                     {exam.examType === 'internal' 
@@ -2627,10 +2629,10 @@ export function ResultsView() {
                     type="button"
                     onClick={() => setIsBatchPdfModalOpen(true)}
                     disabled={evaluatedResults.length === 0}
-                    className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-2xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                    className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-indigo-200/90 bg-gradient-to-r from-indigo-50 to-indigo-100/70 text-indigo-900 shadow-2xs active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
                   >
-                    <FileText className="w-4 h-4 text-indigo-600" />
-                    <span>Toplu Karne (PDF)</span>
+                    <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span className="truncate">Toplu Karne (PDF)</span>
                   </button>
 
                   {userRole === 'admin' && (
@@ -2638,18 +2640,18 @@ export function ResultsView() {
                       <button
                         type="button"
                         onClick={() => (window as any).__navigateToTab?.('scan')}
-                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-400 bg-emerald-600 text-white shadow-2xs active:scale-95 transition-all cursor-pointer"
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-500 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs active:scale-[0.98] transition-all cursor-pointer"
                       >
-                        <Camera className="w-4 h-4" />
+                        <Camera className="w-4 h-4 text-white shrink-0" />
                         <span>Optik Tara</span>
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={() => publisherFileInputRef.current?.click()}
-                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-400 bg-emerald-600 text-white shadow-2xs active:scale-95 transition-all cursor-pointer"
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-500 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs active:scale-[0.98] transition-all cursor-pointer"
                       >
-                        <FileSpreadsheet className="w-4 h-4" />
+                        <FileSpreadsheet className="w-4 h-4 text-white shrink-0" />
                         <span>Excel Yükle</span>
                       </button>
                     )
@@ -2657,14 +2659,14 @@ export function ResultsView() {
                 </div>
 
                 {/* İkincil Mobil Butonlar (Yatay Kaydırılabilir Çipler) */}
-                <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-0.5">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
                   <button
                     type="button"
                     onClick={handleExportResultsExcel}
                     disabled={evaluatedResults.length === 0}
-                    className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 active:bg-slate-100 whitespace-nowrap shrink-0 disabled:opacity-50"
+                    className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-slate-200/90 bg-slate-50/90 hover:bg-slate-100 text-slate-700 active:scale-95 shadow-2xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
-                    <Download className="w-3 h-3 text-emerald-600" />
+                    <Download className="w-3 h-3 text-emerald-600 shrink-0" />
                     <span>Excel</span>
                   </button>
 
@@ -2672,9 +2674,9 @@ export function ResultsView() {
                     type="button"
                     onClick={handlePrintResults}
                     disabled={evaluatedResults.length === 0}
-                    className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 active:bg-slate-100 whitespace-nowrap shrink-0 disabled:opacity-50"
+                    className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-slate-200/90 bg-slate-50/90 hover:bg-slate-100 text-slate-700 active:scale-95 shadow-2xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
-                    <Printer className="w-3 h-3" />
+                    <Printer className="w-3 h-3 text-slate-600 shrink-0" />
                     <span>A4 Liste</span>
                   </button>
 
@@ -2682,9 +2684,9 @@ export function ResultsView() {
                     <button
                       type="button"
                       onClick={() => (window as any).__navigateToTab?.('omr-setup')}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 active:bg-slate-100 whitespace-nowrap shrink-0"
+                      className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-slate-200/90 bg-slate-50/90 hover:bg-slate-100 text-slate-700 active:scale-95 shadow-2xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
                     >
-                      <Printer className="w-3 h-3 text-indigo-600" />
+                      <Printer className="w-3 h-3 text-indigo-600 shrink-0" />
                       <span>Form Bas</span>
                     </button>
                   )}
@@ -2693,9 +2695,9 @@ export function ResultsView() {
                     <button
                       type="button"
                       onClick={handleDownloadPublisherTemplate}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 active:bg-slate-100 whitespace-nowrap shrink-0"
+                      className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-slate-200/90 bg-slate-50/90 hover:bg-slate-100 text-slate-700 active:scale-95 shadow-2xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
                     >
-                      <Download className="w-3 h-3" />
+                      <Download className="w-3 h-3 text-indigo-600 shrink-0" />
                       <span>Şablon</span>
                     </button>
                   )}
@@ -2704,9 +2706,9 @@ export function ResultsView() {
                     <button
                       type="button"
                       onClick={handleDeleteAllResults}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-rose-200 bg-rose-50 text-rose-700 active:bg-rose-100 whitespace-nowrap shrink-0"
+                      className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-rose-200 bg-rose-50 text-rose-700 active:scale-95 shadow-2xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-3 h-3 text-rose-600 shrink-0" />
                       <span>Temizle</span>
                     </button>
                   )}
@@ -2717,23 +2719,23 @@ export function ResultsView() {
             {/* KPI Metric Strip - Responsive Dashboard */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-2.5 pt-3 sm:pt-3.5">
               {/* Katılım Oranı */}
-              <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between shadow-2xs">
-                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Katılım Oranı</span>
-                <div className="flex items-baseline gap-1 mt-0.5 sm:mt-1">
+              <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 flex flex-col justify-between shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">Katılım Oranı</span>
+                <div className="flex items-baseline gap-1 mt-1">
                   <span className="text-sm sm:text-lg font-black font-mono tabular-nums text-slate-800">
                     {summaryStats.totalScanned}
                   </span>
                   <span className="text-[10px] sm:text-xs text-slate-500 font-mono">/ {summaryStats.totalMaster}</span>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded font-mono ml-auto">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 bg-emerald-100/80 border border-emerald-200 px-1.5 py-0.2 rounded-md font-mono ml-auto">
                     %{summaryStats.participationRate}
                   </span>
                 </div>
               </div>
 
               {/* Net Ortalaması */}
-              <div className="bg-blue-50/60 p-2.5 sm:p-3 rounded-xl border border-blue-100 flex flex-col justify-between shadow-2xs">
-                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-700">Net Ortalaması</span>
-                <div className="flex items-baseline gap-1 mt-0.5 sm:mt-1">
+              <div className="bg-blue-50/60 p-2.5 sm:p-3 rounded-2xl border border-blue-200/70 flex flex-col justify-between shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-blue-700">Net Ortalaması</span>
+                <div className="flex items-baseline gap-1 mt-1">
                   <span className="text-sm sm:text-lg font-black font-mono tabular-nums text-blue-900">
                     {summaryStats.avgNet}
                   </span>
@@ -2742,9 +2744,9 @@ export function ResultsView() {
               </div>
 
               {/* Zirve Net */}
-              <div className="bg-emerald-50/60 p-2.5 sm:p-3 rounded-xl border border-emerald-100 flex flex-col justify-between shadow-2xs">
-                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-700">Zirve Net</span>
-                <div className="flex items-baseline gap-1 mt-0.5 sm:mt-1">
+              <div className="bg-emerald-50/60 p-2.5 sm:p-3 rounded-2xl border border-emerald-200/70 flex flex-col justify-between shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-700">Zirve Net</span>
+                <div className="flex items-baseline gap-1 mt-1">
                   <span className="text-sm sm:text-lg font-black font-mono tabular-nums text-emerald-900">
                     {summaryStats.maxNet}
                   </span>
@@ -2753,9 +2755,9 @@ export function ResultsView() {
               </div>
 
               {/* Doğru / Yanlış */}
-              <div className="bg-amber-50/60 p-2.5 sm:p-3 rounded-xl border border-amber-100 flex flex-col justify-between shadow-2xs">
-                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-700">D / Y Ortalaması</span>
-                <div className="flex items-baseline gap-1.5 mt-0.5 sm:mt-1">
+              <div className="bg-amber-50/60 p-2.5 sm:p-3 rounded-2xl border border-amber-200/70 flex flex-col justify-between shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-700">D / Y Ortalaması</span>
+                <div className="flex items-baseline gap-1.5 mt-1">
                   <span className="text-xs sm:text-base font-black font-mono tabular-nums text-emerald-700">
                     {summaryStats.avgCorrect} D
                   </span>
@@ -2767,17 +2769,24 @@ export function ResultsView() {
               </div>
 
               {/* LGS Puan / En Düşük Net */}
-              <div className="bg-purple-50/60 p-2.5 sm:p-3 rounded-xl border border-purple-100 col-span-2 sm:col-span-4 lg:col-span-1 flex flex-col justify-between shadow-2xs">
-                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-purple-700">
+              <div className="bg-purple-50/60 p-2.5 sm:p-3 rounded-2xl border border-purple-200/70 col-span-2 sm:col-span-4 lg:col-span-1 flex flex-col justify-between shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-purple-700">
                   {isLgs ? 'LGS Puan Ortalaması' : 'En Düşük Net'}
                 </span>
-                <div className="flex items-baseline gap-1 mt-0.5 sm:mt-1">
-                  <span className="text-sm sm:text-lg font-black font-mono tabular-nums text-purple-900">
-                    {isLgs ? summaryStats.avgLgs : summaryStats.minNet}
-                  </span>
-                  <span className="text-[10px] sm:text-[11px] text-purple-600 font-bold">
-                    {isLgs ? 'Puan' : 'Net'}
-                  </span>
+                <div className="flex items-baseline justify-between sm:justify-start gap-1 mt-1">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-sm sm:text-lg font-black font-mono tabular-nums text-purple-900">
+                      {isLgs ? summaryStats.avgLgs : summaryStats.minNet}
+                    </span>
+                    <span className="text-[10px] sm:text-[11px] text-purple-600 font-bold">
+                      {isLgs ? 'Puan' : 'Net'}
+                    </span>
+                  </div>
+                  {isLgs && (
+                    <span className="sm:hidden text-[10px] font-bold text-purple-700 bg-purple-100/80 px-2 py-0.5 rounded-md border border-purple-200/60">
+                      500 Üzerinden
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
