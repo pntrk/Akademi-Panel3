@@ -573,39 +573,52 @@ export const fetchModularSchoolState = async (
   schoolId = 'main'
 ): Promise<{ data: any; source: 'modular' | 'legacy' | 'none' } | null> => {
   try {
+    // 1. Fetch root school document first
+    const rootSnap = await getDoc(doc(dbInstance, 'schools', schoolId)).catch(() => null);
+    const rootData = (rootSnap && rootSnap.exists()) ? rootSnap.data() : {};
+
+    const merged: any = {
+      students: rootData.students || [],
+      exams: rootData.exams || [],
+      results: rootData.results || [],
+      budget: rootData.budget || { incomes: [], expenses: [], debts: [] },
+      examHalls: rootData.examHalls || [],
+      leagueMentors: rootData.leagueMentors || {},
+      leagueTeamPoints: rootData.leagueTeamPoints || {},
+      approvedTransfers: rootData.approvedTransfers || [],
+      admins: rootData.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
+      teachers: rootData.teachers || [],
+      version: Number(rootData.version) || 1,
+      lastPublishedAt: rootData.lastPublishedAt,
+      lastPublishedBy: rootData.lastPublishedBy,
+      examCalendarPrintSettings: rootData.examCalendarPrintSettings,
+      canonicalDriveFileId: rootData.canonicalDriveFileId,
+      canonicalDriveFileLink: rootData.canonicalDriveFileLink
+    };
+
+    // 2. Fetch and overlay modular subcollections (modules/*)
     const modulesColRef = collection(dbInstance, 'schools', schoolId, 'modules');
-    const snap = await getDocs(modulesColRef);
+    const snap = await getDocs(modulesColRef).catch(() => null);
 
-    if (!snap.empty) {
-      const merged: any = {
-        students: [],
-        exams: [],
-        results: [],
-        budget: { incomes: [], expenses: [], debts: [] },
-        examHalls: [],
-        leagueMentors: {},
-        leagueTeamPoints: {},
-        approvedTransfers: [],
-        admins: ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
-        teachers: []
-      };
-
+    let hasModular = false;
+    if (snap && !snap.empty) {
+      hasModular = true;
       snap.forEach(docSnap => {
         const id = docSnap.id;
         const d = docSnap.data();
-        if (id === 'students') merged.students = d.students || [];
-        else if (id === 'exams') merged.exams = d.exams || [];
-        else if (id === 'results') merged.results = d.results || [];
-        else if (id === 'budget') merged.budget = d.budget || { incomes: [], expenses: [], debts: [] };
-        else if (id === 'halls') merged.examHalls = d.examHalls || [];
+        if (id === 'students' && Array.isArray(d.students)) merged.students = d.students;
+        else if (id === 'exams' && Array.isArray(d.exams)) merged.exams = d.exams;
+        else if (id === 'results' && Array.isArray(d.results)) merged.results = d.results;
+        else if (id === 'budget' && d.budget) merged.budget = d.budget;
+        else if (id === 'halls' && Array.isArray(d.examHalls)) merged.examHalls = d.examHalls;
         else if (id === 'league') {
-          merged.leagueMentors = d.leagueMentors || {};
-          merged.leagueTeamPoints = d.leagueTeamPoints || {};
-          merged.approvedTransfers = d.approvedTransfers || [];
+          if (d.leagueMentors) merged.leagueMentors = d.leagueMentors;
+          if (d.leagueTeamPoints) merged.leagueTeamPoints = d.leagueTeamPoints;
+          if (d.approvedTransfers) merged.approvedTransfers = d.approvedTransfers;
         } else if (id === 'meta') {
-          merged.version = d.version || 1;
-          merged.lastPublishedAt = d.lastPublishedAt;
-          merged.lastPublishedBy = d.lastPublishedBy;
+          if (d.version !== undefined) merged.version = Number(d.version) || merged.version;
+          if (d.lastPublishedAt) merged.lastPublishedAt = d.lastPublishedAt;
+          if (d.lastPublishedBy) merged.lastPublishedBy = d.lastPublishedBy;
           if (Array.isArray(d.admins) && d.admins.length > 0) merged.admins = d.admins;
           if (Array.isArray(d.teachers)) merged.teachers = d.teachers;
           if (d.examCalendarPrintSettings) merged.examCalendarPrintSettings = d.examCalendarPrintSettings;
@@ -613,14 +626,10 @@ export const fetchModularSchoolState = async (
           if (d.canonicalDriveFileLink) merged.canonicalDriveFileLink = d.canonicalDriveFileLink;
         }
       });
-
-      return { data: merged, source: 'modular' };
     }
 
-    // Fallback: Check legacy single-document 'schools/main'
-    const legacySnap = await getDoc(doc(dbInstance, 'schools', schoolId));
-    if (legacySnap.exists()) {
-      return { data: legacySnap.data(), source: 'legacy' };
+    if (hasModular || (rootSnap && rootSnap.exists())) {
+      return { data: merged, source: hasModular ? 'modular' : 'legacy' };
     }
 
     return null;
@@ -686,7 +695,7 @@ export const writeModularSchoolState = async (
   try {
     const promises: Promise<void>[] = [];
 
-    // Always keep root school document in sync with active administrators, teachers, and published timestamp
+    // Always write complete root school document with all full data arrays
     const rootSchoolRef = doc(dbInstance, 'schools', schoolId);
     promises.push(setDoc(rootSchoolRef, {
       name: "Kırklareli Atatürk Ortaokulu",
@@ -695,8 +704,17 @@ export const writeModularSchoolState = async (
       lastPublishedBy: cleanState.lastPublishedBy || 'admin',
       admins: cleanState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
       teachers: cleanState.teachers || [],
+      students: cleanState.students || [],
+      exams: cleanState.exams || [],
+      results: cleanState.results || [],
+      examHalls: cleanState.examHalls || [],
+      budget: cleanState.budget || { incomes: [], expenses: [], debts: [] },
+      leagueMentors: cleanState.leagueMentors || {},
+      leagueTeamPoints: cleanState.leagueTeamPoints || {},
+      approvedTransfers: cleanState.approvedTransfers || [],
       studentCount: cleanState.students?.length || 0,
       examCount: cleanState.exams?.length || 0,
+      hallCount: cleanState.examHalls?.length || 0,
       canonicalDriveFileId: cleanState.canonicalDriveFileId || undefined,
       canonicalDriveFileLink: cleanState.canonicalDriveFileLink || undefined
     }, { merge: true }));

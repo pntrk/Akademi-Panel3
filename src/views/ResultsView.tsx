@@ -2621,8 +2621,8 @@ export function ResultsView() {
 
               {/* MOBİL: Kompakt 2 Kademeli Hızlı İşlem Araç Çubuğu (md:hidden) */}
               <div className="flex md:hidden flex-col gap-2 w-full pt-1">
-                {/* Ana Mobil Butonlar (Toplu Karne ve Tarama/Yükleme) */}
-                <div className="grid grid-cols-2 gap-2">
+                {/* Ana Mobil Butonlar (Toplu Karne ve Tarama/Yükleme - Yalnızca Admin) */}
+                <div className={userRole === 'admin' ? "grid grid-cols-2 gap-2" : "grid grid-cols-1 gap-2"}>
                   <button
                     type="button"
                     onClick={() => setIsBatchPdfModalOpen(true)}
@@ -2633,24 +2633,26 @@ export function ResultsView() {
                     <span>Toplu Karne (PDF)</span>
                   </button>
 
-                  {exam.examType === 'internal' && userRole === 'admin' ? (
-                    <button
-                      type="button"
-                      onClick={() => (window as any).__navigateToTab?.('scan')}
-                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-400 bg-emerald-600 text-white shadow-2xs active:scale-95 transition-all cursor-pointer"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>Optik Tara</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => publisherFileInputRef.current?.click()}
-                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-400 bg-emerald-600 text-white shadow-2xs active:scale-95 transition-all cursor-pointer"
-                    >
-                      <FileSpreadsheet className="w-4 h-4" />
-                      <span>Excel Yükle</span>
-                    </button>
+                  {userRole === 'admin' && (
+                    exam.examType === 'internal' ? (
+                      <button
+                        type="button"
+                        onClick={() => (window as any).__navigateToTab?.('scan')}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-400 bg-emerald-600 text-white shadow-2xs active:scale-95 transition-all cursor-pointer"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Optik Tara</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => publisherFileInputRef.current?.click()}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border border-emerald-400 bg-emerald-600 text-white shadow-2xs active:scale-95 transition-all cursor-pointer"
+                      >
+                        <FileSpreadsheet className="w-4 h-4" />
+                        <span>Excel Yükle</span>
+                      </button>
+                    )
                   )}
                 </div>
 
