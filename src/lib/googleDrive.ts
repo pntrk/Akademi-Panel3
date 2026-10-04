@@ -108,10 +108,20 @@ export const listBackupsFromGoogleDrive = async (): Promise<DriveBackupItem[]> =
 };
 
 export const downloadBackupFromGoogleDrive = async (fileId: string): Promise<any> => {
-  const token = await ensureDriveAccessToken();
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
+  let token = await ensureDriveAccessToken();
+  let response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
     headers: { Authorization: `Bearer ${token}` }
   });
+
+  if (response.status === 401 || response.status === 403) {
+    const freshToken = await connectGoogleDrive(false, true);
+    if (freshToken) {
+      token = freshToken;
+      response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    }
+  }
 
   if (!response.ok) {
     throw new Error(`Google Drive'dan yedek indirilemedi (Durum: ${response.status})`);
@@ -286,8 +296,8 @@ export const lockToCanonicalDriveFile = async (
       headers: { Authorization: `Bearer ${token}` }
     });
 
-    // If 401 (expired/invalid token), re-authenticate and retry
-    if (res.status === 401) {
+    // If 401 or 403 (insufficient scope / expired), re-authenticate with full drive scope and retry
+    if (res.status === 401 || res.status === 403) {
       const newToken = await connectGoogleDrive(false, true);
       if (newToken) {
         token = newToken;
@@ -603,7 +613,7 @@ export const syncLiveMasterToGoogleDrive = async (
   userEmail?: string
 ): Promise<{ success: boolean; fileId?: string; modifiedTime?: string; error?: string; cleanedRevisions?: number }> => {
   try {
-    const token = await ensureDriveAccessToken();
+    let token = await ensureDriveAccessToken();
     const existing = await findLiveMasterDriveFile(token);
 
     const now = new Date();
@@ -641,6 +651,25 @@ export const syncLiveMasterToGoogleDrive = async (
           body: payloadJson
         }
       );
+
+      // If PATCH fails due to 401 or 403, refresh token and retry
+      if (patchRes.status === 401 || patchRes.status === 403) {
+        const freshToken = await connectGoogleDrive(false, true);
+        if (freshToken) {
+          token = freshToken;
+          patchRes = await fetch(
+            `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=media&fields=id,name,modifiedTime&supportsAllDrives=true`,
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json; charset=UTF-8'
+              },
+              body: payloadJson
+            }
+          );
+        }
+      }
 
       // If PATCH fails, perform aggressive cleanup of old revisions and retry once
       if (!patchRes.ok) {

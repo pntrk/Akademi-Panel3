@@ -274,7 +274,8 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 // Dedicated Google Drive Provider for Drive File sync (Only used by Admin when connecting Google Drive)
 export const googleDriveProvider = new GoogleAuthProvider();
 googleDriveProvider.setCustomParameters({
-  prompt: 'select_account',
+  prompt: 'consent select_account',
+  access_type: 'offline',
   include_granted_scopes: 'true'
 });
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
