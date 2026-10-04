@@ -344,30 +344,20 @@ export const getCachedAccessToken = (): string | null => {
 
 /**
  * Standard Universal Google Authentication for all users (Teachers, Admins, Guests).
- * Directly includes Google Drive capabilities for Administrators so Drive master is loaded instantly upon login.
+ * Uses basic non-sensitive scopes (profile & email).
+ * NEVER triggers 403: access_denied, test user blockages, or unverified app warnings for teachers!
  */
 export const loginWithGoogle = async () => {
   try {
-    const result = await signInWithPopup(auth, googleDriveProvider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (credential?.accessToken) {
-      setCachedAccessToken(credential.accessToken);
-      markDrivePreApproved(result.user?.email);
-    }
+    const result = await signInWithPopup(auth, googleProvider);
     return result;
   } catch (err: any) {
     if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
       // Gracefully handle user cancelling or closing the popup
       return null;
     }
-    // Safe fallback to basic googleProvider if needed
-    try {
-      const basicResult = await signInWithPopup(auth, googleProvider);
-      return basicResult;
-    } catch (fallbackErr) {
-      console.warn('Google Sign In notice:', err?.message || err);
-      throw err;
-    }
+    console.warn('Google Sign In notice:', err?.message || err);
+    throw err;
   }
 };
 
