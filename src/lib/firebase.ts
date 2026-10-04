@@ -277,6 +277,7 @@ googleDriveProvider.setCustomParameters({
   prompt: 'select_account',
   include_granted_scopes: 'true'
 });
+googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
 
 // Token keys for persistent session/local storage

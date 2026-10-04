@@ -211,14 +211,29 @@ export const getDriveFileMetadata = async (fileId: string, token: string): Promi
   modifiedTime?: string;
   webViewLink?: string;
   canEdit?: boolean;
-  ownerEmail?: string;
   ownerName?: string;
+  ownerEmail?: string;
 } | null> => {
   try {
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,trashed,modifiedTime,webViewLink,owners(displayName,emailAddress),capabilities(canEdit)&supportsAllDrives=true`, {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,trashed,modifiedTime,webViewLink,capabilities(canEdit)&supportsAllDrives=true`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // Fallback check: test if alt=media responds ok (meaning file exists and user has read access)
+      const altRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
+        method: 'HEAD',
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => null);
+      if (altRes && altRes.ok) {
+        return {
+          id: fileId,
+          name: LIVE_MASTER_FILE_NAME,
+          trashed: false,
+          canEdit: true
+        };
+      }
+      return null;
+    }
     const data = await res.json();
     return {
       id: data.id,
@@ -227,8 +242,8 @@ export const getDriveFileMetadata = async (fileId: string, token: string): Promi
       modifiedTime: data.modifiedTime,
       webViewLink: data.webViewLink,
       canEdit: data.capabilities?.canEdit !== false,
-      ownerEmail: data.owners?.[0]?.emailAddress,
-      ownerName: data.owners?.[0]?.displayName
+      ownerName: data.owners?.[0]?.displayName,
+      ownerEmail: data.owners?.[0]?.emailAddress
     };
   } catch (e) {
     return null;
@@ -380,17 +395,24 @@ export const findLiveMasterDriveFile = async (
     let knownMeta: any = null;
     if (knownId) {
       knownMeta = await getDriveFileMetadata(knownId, token);
-    }
-
-    // FAST-PATH: If known canonical file exists and is valid, return immediately without slow multi-second Drive full search!
-    if (knownMeta && !knownMeta.trashed && !forceFullScan) {
-      if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink);
-      return {
-        id: knownMeta.id,
-        name: knownMeta.name || LIVE_MASTER_FILE_NAME,
-        modifiedTime: knownMeta.modifiedTime,
-        webViewLink: knownMeta.webViewLink
-      };
+      // FAST-PATH: If known canonical file exists and is valid, return immediately!
+      if (knownMeta && !knownMeta.trashed) {
+        if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink);
+        return {
+          id: knownMeta.id,
+          name: knownMeta.name || LIVE_MASTER_FILE_NAME,
+          modifiedTime: knownMeta.modifiedTime,
+          webViewLink: knownMeta.webViewLink
+        };
+      }
+      // Even if metadata call failed, if knownId is configured and we're not forcing full scan, try returning knownId
+      if (!forceFullScan) {
+        return {
+          id: knownId,
+          name: LIVE_MASTER_FILE_NAME,
+          webViewLink: getLiveMasterFileLink() || `https://drive.google.com/file/d/${knownId}/view`
+        };
+      }
     }
 
     // Search across Google Drive for any AkademiPanel, Canli_Kutuk, or backup JSON files
@@ -404,6 +426,23 @@ export const findLiveMasterDriveFile = async (
     if (res.ok) {
       const data = await res.json();
       candidateFiles = data.files || [];
+    }
+
+    // Also query files shared with current user if candidate list is small
+    if (candidateFiles.length < 5) {
+      try {
+        const sharedRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=sharedWithMe%20%3D%20true%20and%20trashed%20%3D%20false&fields=files(id,name,modifiedTime,size,webViewLink)&orderBy=modifiedTime desc&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (sharedRes.ok) {
+          const sharedData = await sharedRes.json();
+          const sharedCandidates = (sharedData.files || []).filter((f: any) => 
+            f.name?.includes('Canli_Kutuk') || f.name?.includes('Akademi') || f.name?.includes('Kutuk') || f.name?.includes('Ogrenci') || f.name?.includes('.json')
+          );
+          candidateFiles = candidateFiles.concat(sharedCandidates);
+        }
+      } catch (e) {}
     }
 
     // If knownId exists and is valid
@@ -440,7 +479,6 @@ export const findLiveMasterDriveFile = async (
     // If no valid knownId, choose the most recently modified candidate
     if (candidateFiles.length > 0) {
       const liveMasterMatch = candidateFiles.find(f => f.name === LIVE_MASTER_FILE_NAME);
-      // If liveMasterMatch has nearly same modified time as candidateFiles[0], prefer liveMasterMatch, else use candidateFiles[0]
       const chosen = (liveMasterMatch && Math.abs(new Date(liveMasterMatch.modifiedTime || 0).getTime() - new Date(candidateFiles[0].modifiedTime || 0).getTime()) < 5000)
         ? liveMasterMatch
         : candidateFiles[0];
@@ -452,6 +490,14 @@ export const findLiveMasterDriveFile = async (
         name: chosen.name,
         modifiedTime: chosen.modifiedTime,
         webViewLink: webLink
+      };
+    }
+
+    if (knownId) {
+      return {
+        id: knownId,
+        name: LIVE_MASTER_FILE_NAME,
+        webViewLink: getLiveMasterFileLink() || `https://drive.google.com/file/d/${knownId}/view`
       };
     }
   } catch (e) {
