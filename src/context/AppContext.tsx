@@ -1364,23 +1364,17 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       const sp = hall.seatingPlan || [];
       let changed = false;
       const newSp = sp.map(item => {
-        const student = students.find(st => st.id === item.studentId);
-        if (!student) { changed = true; return null; }
-        
-        const assignedExamIds = hall.examIds || (hall.examId ? [hall.examId] : []);
-        if (assignedExamIds.length > 0) {
-          const isRegistered = student.examRegistrations?.some(reg => assignedExamIds.includes(reg.examId));
-          if (!isRegistered) { changed = true; return null; }
-        }
-        
-        if (item.studentNo !== student.no || item.studentName !== student.name || item.studentClass !== student.className) {
-          changed = true;
-          return { ...item, studentNo: student.no, studentName: student.name, studentClass: student.className };
+        const student = students.find(st => st.id === item.studentId || (item.studentNo && Number(st.no) === Number(item.studentNo)));
+        if (student) {
+          if (item.studentNo !== student.no || item.studentName !== student.name || item.studentClass !== student.className || item.studentId !== student.id) {
+            changed = true;
+            return { ...item, studentNo: student.no, studentName: student.name, studentClass: student.className, studentId: student.id };
+          }
         }
         return item;
-      }).filter(Boolean) as SeatingPlanItem[];
+      });
       
-      if (changed || newSp.length !== sp.length) {
+      if (changed) {
         return { ...hall, seatingPlan: newSp };
       }
       return hall;
@@ -1409,21 +1403,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       const currentIds = hall.examIds || [];
       const isSame = currentIds.length === newExamIds.length && currentIds.every(id => newExamIds.includes(id));
       
-      let spChanged = false;
-      const currentSp = hall.seatingPlan || [];
-      const newSp = currentSp.filter(item => {
-        const student = s.students.find(st => st.id === item.studentId);
-        if (!student) { spChanged = true; return false; }
-        if (newExamIds.length > 0) {
-          const hasReg = student.examRegistrations?.some(reg => newExamIds.includes(reg.examId));
-          if (!hasReg) { spChanged = true; return false; }
-        } else {
-          spChanged = true; return false;
-        }
-        return true;
-      });
-      if (!isSame || spChanged) {
-        return { ...hall, examIds: newExamIds, examId: newExamIds.length > 0 ? newExamIds[0] : undefined, seatingPlan: newSp };
+      if (!isSame) {
+        return { ...hall, examIds: newExamIds, examId: newExamIds.length > 0 ? newExamIds[0] : undefined };
       }
       return hall;
     });
