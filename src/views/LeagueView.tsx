@@ -16,15 +16,25 @@ export const LeagueView = () => {
   const [showTactics, setShowTactics] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   
-  // Filtering states
+  // Current month key (YYYY-MM format based on local calendar)
+  const currentMonthKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
+  // Filtering states - defaults automatically to current month
   const [selectedGrade, setSelectedGrade] = useState<string>('8');
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Dropdown states
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const [isGradeDropdownOpen, setIsGradeDropdownOpen] = useState(false);
+  const [isTeamFilterOpen, setIsTeamFilterOpen] = useState(false);
   
   // Tactics modal state
   const [activeTacticsMonth, setActiveTacticsMonth] = useState<number>(0);
@@ -37,26 +47,6 @@ export const LeagueView = () => {
       fetchMonthArenaPartition(selectedMonth).catch(() => {});
     }
   }, [selectedMonth]);
-
-  // Set default to latest month available if not manually changed
-  useEffect(() => {
-    if (selectedMonth === 'all' && state.exams.length > 0) {
-      const months = new Set<string>();
-      state.exams.forEach(e => {
-        if (e.date) {
-          const dateObj = parseDate(e.date);
-          months.add(`${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`);
-        }
-      });
-      if (state.arenaMonthSummaries) {
-        state.arenaMonthSummaries.forEach(s => months.add(s.monthKey));
-      }
-      const sorted = Array.from(months).sort((a, b) => b.localeCompare(a));
-      if (sorted.length > 0) {
-        setSelectedMonth(sorted[0]);
-      }
-    }
-  }, [state.exams, state.arenaMonthSummaries]);
 
   const mentors = state.leagueMentors || {};
   const bonusPoints = state.leagueTeamPoints || {};
@@ -134,9 +124,24 @@ export const LeagueView = () => {
       });
     }
 
+    // 3. Ensure current ongoing month is always present so it automatically matches and defaults
+    if (!monthMap.has(currentMonthKey)) {
+      const now = new Date();
+      const yr = now.getFullYear();
+      const mo = now.getMonth() + 1;
+      monthMap.set(currentMonthKey, {
+        key: currentMonthKey,
+        label: `${monthNames[mo - 1]} ${yr}`,
+        shortLabel: monthNames[mo - 1],
+        hasData: false,
+        examCount: 0,
+        timestamp: new Date(yr, mo - 1, 1).getTime()
+      });
+    }
+
     // Sort chronologically (oldest to newest academic flow)
     return Array.from(monthMap.values()).sort((a, b) => a.timestamp - b.timestamp);
-  }, [state.exams, state.arenaMonthlyData]);
+  }, [state.exams, state.arenaMonthlyData, currentMonthKey]);
 
   const selectedMonthLabel = useMemo(() => {
     if (selectedMonth === 'all') return 'Tüm Zamanlar';
@@ -474,9 +479,14 @@ export const LeagueView = () => {
                       <Calendar className="w-3.5 h-3.5 text-brand-ink/50 shrink-0" />
                       <span className="truncate">
                         {selectedMonth === 'all' ? '🏆 Tüm Zamanlar' : (() => {
+                          const found = allAcademicMonths.find(m => m.key === selectedMonth);
+                          const isCurrent = selectedMonth === currentMonthKey;
+                          if (found) {
+                            return `${found.label}${isCurrent ? ' (Bu Ay)' : ''}`;
+                          }
                           const [year, month] = selectedMonth.split('-');
                           const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
-                          return `${monthNames[parseInt(month) - 1]} ${year}`;
+                          return `${monthNames[parseInt(month) - 1] || month} ${year}${isCurrent ? ' (Bu Ay)' : ''}`;
                         })()}
                       </span>
                     </div>
@@ -513,6 +523,7 @@ export const LeagueView = () => {
                         ) : (
                           allAcademicMonths.map(m => {
                             const isSelected = selectedMonth === m.key;
+                            const isCurrent = m.key === currentMonthKey;
                             return (
                               <button
                                 key={m.key}
@@ -527,10 +538,28 @@ export const LeagueView = () => {
                                 <div className="flex items-center gap-2 truncate">
                                   <span>📅</span>
                                   <span className="truncate">{m.label}</span>
+                                  {isCurrent && (
+                                    <span className="text-[9px] font-extrabold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 shrink-0">
+                                      Bu Ay
+                                    </span>
+                                  )}
                                 </div>
-                                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300/60 shrink-0">
-                                  {m.examCount} Deneme
-                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {m.examCount && m.examCount > 0 ? (
+                                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300/60">
+                                      {m.examCount} Deneme
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-brand-ink/40 font-medium bg-brand-ink/5 px-2 py-0.5 rounded-full">
+                                      Aktif Dönem
+                                    </span>
+                                  )}
+                                  {isSelected && (
+                                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                                      ✓
+                                    </span>
+                                  )}
+                                </div>
                               </button>
                             );
                           })
@@ -625,21 +654,38 @@ export const LeagueView = () => {
               </div>
             </div>
 
-            {/* Takım Filtreleri - Mobilde dikey liste, masaüstünde yatay sekmeler */}
+            {/* Takım Filtreleri - Mobilde tıklanınca açılır yapı, masaüstünde yatay sekmeler */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 pt-2 border-t border-brand-border/40">
-              <div className="flex items-center justify-between sm:justify-start px-0.5">
-                <span className="text-[11px] font-bold text-brand-ink/50 uppercase tracking-wider flex items-center gap-1">
-                  <Filter className="w-3 h-3 text-brand-ink/40" />
-                  <span>Takım Filtresi:</span>
-                </span>
-                <span className="text-[10px] text-brand-ink/40 font-medium sm:hidden">
-                  {selectedTeamFilter === 'all' ? 'Tümü Seçili' : selectedTeamFilter}
-                </span>
+              <div 
+                onClick={() => setIsTeamFilterOpen(!isTeamFilterOpen)}
+                className="w-full sm:w-auto flex items-center justify-between px-3 py-2 sm:p-0 bg-[#FAF9F6] sm:bg-transparent border sm:border-0 border-brand-border/80 rounded-xl cursor-pointer sm:cursor-default transition-all shadow-2xs sm:shadow-none active:scale-[0.99] sm:active:scale-100"
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <Filter className="w-3.5 h-3.5 text-brand-ink/50 shrink-0" />
+                  <span className="text-[11px] font-bold text-brand-ink/50 uppercase tracking-wider">
+                    Takım Filtresi:
+                  </span>
+                  <span className="text-xs font-extrabold text-brand-ink truncate sm:hidden">
+                    {selectedTeamFilter === 'all' && `🏆 Tüm Takımlar (${baseStudents.length})`}
+                    {selectedTeamFilter === 'Kutup Yıldızları' && `⭐ Kutup (${kutup.length})`}
+                    {selectedTeamFilter === 'Sıçrama Ustaları' && `🚀 Sıçrama (${sicrama.length})`}
+                    {selectedTeamFilter === 'Taktik Avcıları' && `🛡️ Taktik (${taktik.length})`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 sm:hidden shrink-0 ml-1">
+                  <span className="text-[10px] text-brand-ink/40 font-bold">
+                    {isTeamFilterOpen ? 'Kapat' : 'Seç'}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-brand-ink/50 transition-transform duration-200 ${isTeamFilterOpen ? 'rotate-180' : ''}`} />
+                </div>
               </div>
               
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+              <div className={`${isTeamFilterOpen ? 'flex' : 'hidden'} sm:flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto animate-fade-in`}>
                 <button
-                  onClick={() => setSelectedTeamFilter('all')}
+                  onClick={() => {
+                    setSelectedTeamFilter('all');
+                    setIsTeamFilterOpen(false);
+                  }}
                   className={`w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs ${
                     selectedTeamFilter === 'all'
                       ? 'bg-[#151618] text-white ring-1 ring-[#151618]'
@@ -658,7 +704,10 @@ export const LeagueView = () => {
                 </button>
 
                 <button
-                  onClick={() => setSelectedTeamFilter('Kutup Yıldızları')}
+                  onClick={() => {
+                    setSelectedTeamFilter('Kutup Yıldızları');
+                    setIsTeamFilterOpen(false);
+                  }}
                   className={`w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs ${
                     selectedTeamFilter === 'Kutup Yıldızları'
                       ? 'bg-amber-500 text-white font-extrabold ring-1 ring-amber-500'
@@ -677,7 +726,10 @@ export const LeagueView = () => {
                 </button>
 
                 <button
-                  onClick={() => setSelectedTeamFilter('Sıçrama Ustaları')}
+                  onClick={() => {
+                    setSelectedTeamFilter('Sıçrama Ustaları');
+                    setIsTeamFilterOpen(false);
+                  }}
                   className={`w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs ${
                     selectedTeamFilter === 'Sıçrama Ustaları'
                       ? 'bg-blue-600 text-white font-extrabold ring-1 ring-blue-600'
@@ -696,7 +748,10 @@ export const LeagueView = () => {
                 </button>
 
                 <button
-                  onClick={() => setSelectedTeamFilter('Taktik Avcıları')}
+                  onClick={() => {
+                    setSelectedTeamFilter('Taktik Avcıları');
+                    setIsTeamFilterOpen(false);
+                  }}
                   className={`w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs ${
                     selectedTeamFilter === 'Taktik Avcıları'
                       ? 'bg-emerald-600 text-white font-extrabold ring-1 ring-emerald-600'
@@ -716,9 +771,9 @@ export const LeagueView = () => {
               </div>
             </div>
 
-            {/* 2.1. Aylık Parçalı Arşiv Bilgilendirmesi */}
+            {/* 2.1. Aylık Parçalı Arşiv Bilgilendirmesi - Mobilde gizli, masaüstünde görünür */}
             {selectedMonth !== 'all' && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-amber-50/70 border border-amber-200/80 rounded-xl px-3.5 py-2.5 text-amber-900 shadow-2xs mt-1">
+              <div className="hidden sm:flex sm:flex-row sm:items-center justify-between gap-2 text-xs bg-amber-50/70 border border-amber-200/80 rounded-xl px-3.5 py-2.5 text-amber-900 shadow-2xs mt-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-amber-950 flex items-center gap-1.5">
                     <span>📅</span>
@@ -732,7 +787,7 @@ export const LeagueView = () => {
                     ({monthPartition?.examCount || state.exams.filter(e => e.date && parseDate(e.date).getFullYear() === parseInt(selectedMonth.split('-')[0]) && (parseDate(e.date).getMonth() + 1) === parseInt(selectedMonth.split('-')[1])).length} Deneme Sınavı Analizi)
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-100/80 border border-emerald-300/70 px-2.5 py-1 rounded-lg shrink-0 self-start sm:self-auto">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-100/80 border border-emerald-300/70 px-2.5 py-1 rounded-lg shrink-0">
                   <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   <span>Parçalı Aylık Arşiv</span>
                 </div>
