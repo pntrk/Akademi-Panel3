@@ -169,19 +169,37 @@ export const StudentsView = () => {
 
   // Overall registration statistics based on active filters
   const stats = useMemo(() => {
-    let totalRegisteredStudents = 0;
-    let totalFees = 0;
-    let totalUnpaidFees = 0;
+    const validExamIds = new Set(state.exams.map(e => String(e.id)));
+    const seatedStudentIds = new Set<string>();
+
+    state.examHalls.forEach(h => {
+      (h.seatingPlan || []).forEach(sp => {
+        if (sp.studentId) {
+          seatedStudentIds.add(sp.studentId);
+        } else if (sp.studentNo) {
+          const matched = state.students.find(st => Number(st.no) === Number(sp.studentNo));
+          if (matched) seatedStudentIds.add(matched.id);
+        }
+      });
+    });
 
     const hasActiveFilter = !!(classFilter || examFilter || hallFilter || searchQuery.trim());
     const targetStudents = hasActiveFilter ? filteredStudents : state.students;
 
+    let totalRegisteredStudents = 0;
+    let totalFees = 0;
+    let totalUnpaidFees = 0;
+
     targetStudents.forEach(s => {
-      const regs = s.examRegistrations || [];
+      const regs = (s.examRegistrations || []).filter(r => validExamIds.size === 0 || validExamIds.has(String(r.examId)));
       const relevantRegs = examFilter ? regs.filter(r => String(r.examId) === String(examFilter)) : regs;
-      if (relevantRegs.length > 0) {
+      
+      const isRegistered = relevantRegs.length > 0 || (hallFilter ? true : seatedStudentIds.has(s.id));
+      
+      if (isRegistered) {
         totalRegisteredStudents++;
       }
+
       relevantRegs.forEach(r => {
         const fee = Number(r.fee) || 0;
         if (r.isPaid) {
@@ -191,6 +209,7 @@ export const StudentsView = () => {
         }
       });
     });
+
     return {
       totalStudents: targetStudents.length,
       totalRegisteredStudents,
@@ -198,7 +217,7 @@ export const StudentsView = () => {
       totalFees: Math.round((totalFees + Number.EPSILON) * 100) / 100,
       totalUnpaidFees: Math.round((totalUnpaidFees + Number.EPSILON) * 100) / 100
     };
-  }, [state.students, filteredStudents, classFilter, examFilter, hallFilter, searchQuery]);
+  }, [state.students, state.exams, state.examHalls, filteredStudents, classFilter, examFilter, hallFilter, searchQuery]);
 
   // Checkbox functions
   const toggleSelectStudent = (id: string) => {

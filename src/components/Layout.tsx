@@ -540,10 +540,15 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all active:scale-[0.99] cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-emerald-400" />
-                    <span>Kullanıcı ve Rol Yönetimi</span>
+                    <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div className="text-left min-w-0">
+                      <div className="truncate">Kullanıcı ve Rol Yönetimi</div>
+                      <div className="text-[10px] text-emerald-300/70 font-normal truncate">
+                        {(state.admins?.length || 2) + (state.teachers?.length || 0)} Toplam Kayıtlı Güncel Kullanıcı
+                      </div>
+                    </div>
                   </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-emerald-400" />
+                  <ChevronRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 </button>
               )}
             </div>

@@ -397,16 +397,20 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                       <Bell className="w-3.5 h-3.5" />
                       <span>{isRequestingPermission ? 'İzin İsteniyor...' : 'Bildirimleri Aç'}</span>
                     </button>
-                  ) : (
+                  ) : userRole === 'admin' ? (
                     <button
                       onClick={() => {
                         displayBrowserNotification('🔔 Test Bildirimi', 'AkademiPanel bildirim sistemi aktif ve çalışıyor!');
                       }}
-                      className="w-full py-1.5 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 border border-white/10"
+                      className="w-full py-1.5 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 border border-amber-500/40"
                     >
                       <Bell className="w-3.5 h-3.5 text-amber-400" />
                       <span>Test Bildirimi Gönder</span>
                     </button>
+                  ) : (
+                    <div className="w-full py-1.5 px-3 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-center font-bold text-[11px]">
+                      ✓ Anlık Bildirimler Etkin
+                    </div>
                   )}
                 </div>
               </div>
@@ -455,7 +459,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                           </span>
                         )}
                       </div>
-                      <div className="text-[10px] text-emerald-300/80">{totalUsersCount > 0 ? `${totalUsersCount} Kayıtlı Kullanıcı` : 'Üye ve Yetki Tanımlama'}</div>
+                      <div className="text-[10px] text-emerald-300/80 font-medium">{admins.length + teachers.length + pendingCount} Toplam Kayıtlı Güncel Kullanıcı</div>
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-emerald-300" />
