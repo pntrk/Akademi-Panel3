@@ -271,16 +271,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// Dedicated Google Drive Provider for Drive File sync
-// Requests drive.file & drive scopes so all shared & owned AkademiPanel backups can be seamlessly downloaded
-// Uses prompt: 'select_account' so Google remembers user consent and never repeats permission prompts
+// Dedicated Google Drive Provider for Drive File sync (Only used by Admin when connecting Google Drive)
 export const googleDriveProvider = new GoogleAuthProvider();
 googleDriveProvider.setCustomParameters({
   prompt: 'select_account',
   include_granted_scopes: 'true'
 });
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
-googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
 
 // Token keys for persistent session/local storage
 const DRIVE_TOKEN_KEY = 'akademi_drive_access_token';
@@ -344,33 +341,22 @@ export const getCachedAccessToken = (): string | null => {
   return null;
 };
 
+/**
+ * Standard Universal Google Authentication for all users (Teachers, Admins, Guests).
+ * Uses basic non-sensitive scopes (profile & email).
+ * Never triggers Google verification warning or "Hata 403: access_denied" test user blockage!
+ */
 export const loginWithGoogle = async () => {
-  // If user is already authenticated in Firebase, check if we also have an active Drive token
-  if (auth.currentUser && getCachedAccessToken()) {
-    return { user: auth.currentUser };
-  }
-
   try {
-    // Primary: Google login with Drive access included so admin can automatically download the live master backup
-    const result = await signInWithPopup(auth, googleDriveProvider);
+    const result = await signInWithPopup(auth, googleProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
       setCachedAccessToken(credential.accessToken);
-      markDrivePreApproved(result.user?.email || auth.currentUser?.email);
     }
     return result;
   } catch (err: any) {
-    if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
-      throw err;
-    }
-    console.warn('Google Drive login fallback to standard login:', err);
-    // Fallback: standard provider if user restricts Drive permissions
-    const fallbackResult = await signInWithPopup(auth, googleProvider);
-    const credential = GoogleAuthProvider.credentialFromResult(fallbackResult);
-    if (credential?.accessToken) {
-      setCachedAccessToken(credential.accessToken);
-    }
-    return fallbackResult;
+    console.error('Google Sign In error:', err);
+    throw err;
   }
 };
 
