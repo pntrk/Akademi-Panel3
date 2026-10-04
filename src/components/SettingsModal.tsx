@@ -151,6 +151,17 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
   const admins = (state.admins || []).map(a => (a || '').trim().toLowerCase());
   const teachers = (state.teachers || []).map(t => (t || '').trim().toLowerCase());
 
+  // Merge state lists with registeredUsers permissions for instant optimistic UI reaction
+  const effectiveTeachers = Array.from(new Set([
+    ...teachers,
+    ...registeredUsers.filter(u => u.role === 'teacher' || (u.status === 'approved' && u.role !== 'admin' && !admins.includes(u.email))).map(u => u.email)
+  ])).filter(Boolean);
+
+  const effectiveAdmins = Array.from(new Set([
+    ...admins,
+    ...registeredUsers.filter(u => u.role === 'admin').map(u => u.email)
+  ])).filter(Boolean);
+
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setFeedback({ message, type });
     setTimeout(() => setFeedback(null), 3500);
@@ -161,10 +172,13 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
     return clean === 'kirklareliataturkortaokulu@gmail.com' || clean === 'bahadirkumcu@gmail.com';
   };
 
-  // Classify registered users
+  // Classify registered users: A user is pending ONLY IF they don't have teacher/admin role and are not approved
   const pendingUsers = registeredUsers.filter(u => {
     const email = (u.email || '').trim().toLowerCase();
-    return email && !admins.includes(email) && !teachers.includes(email);
+    if (!email) return false;
+    if (effectiveAdmins.includes(email) || effectiveTeachers.includes(email)) return false;
+    if (u.role === 'admin' || u.role === 'teacher' || u.status === 'approved') return false;
+    return true;
   });
 
   // Filtered lists based on search
@@ -174,11 +188,11 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
     (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const filteredTeachers = teachers.filter(email => 
+  const filteredTeachers = effectiveTeachers.filter(email => 
     !searchQuery || email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredAdmins = admins.filter(email => 
+  const filteredAdmins = effectiveAdmins.filter(email => 
     !searchQuery || email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -206,9 +220,7 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
     setIsProcessing(cleanEmail);
     try {
-      await setUserAccountRole(cleanEmail, role);
-
-      // Save user record with approved status
+      // 1. Optimistic UI update: Immediately update registeredUsers state so user moves to authorized section
       const updatedList = registeredUsers.map(u => 
         u.email === cleanEmail 
           ? { ...u, role, status: 'approved' }
@@ -230,6 +242,9 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
         localStorage.setItem(LOCAL_USERS_CACHE_KEY, JSON.stringify(updatedList));
       } catch {}
 
+      // 2. Perform backend & Firebase role assignment
+      await setUserAccountRole(cleanEmail, role);
+
       const roleLabel = role === 'admin' ? 'İDARECİ (Yönetici)' : 'ÖĞRETMEN';
       showToast(`${userName || cleanEmail} için ${roleLabel} yetkisi başarıyla tanımlandı! Kullanıcının ekranı anında açılacaktır.`);
     } catch (err: any) {
@@ -247,6 +262,16 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
     const cleanEmail = email.trim().toLowerCase();
     setIsProcessing(cleanEmail);
     try {
+      const updatedList = registeredUsers.map(u => 
+        u.email === cleanEmail 
+          ? { ...u, role: 'guest', status: 'pending' }
+          : u
+      );
+      setRegisteredUsers(updatedList);
+      try {
+        localStorage.setItem(LOCAL_USERS_CACHE_KEY, JSON.stringify(updatedList));
+      } catch {}
+
       await setUserAccountRole(cleanEmail, 'guest');
       showToast(`${cleanEmail} kullanıcısının yetkisi kaldırıldı (Misafir moduna alındı).`, 'info');
     } catch (err: any) {
