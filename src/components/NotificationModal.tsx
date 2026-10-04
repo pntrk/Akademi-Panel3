@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Bell, BellRing, BellOff, X, Send, Sparkles, Check, Trash2, 
   ExternalLink, AlertCircle, Volume2, ShieldCheck, Clock, 
-  Flame, Award, Calendar, BarChart2, Radio, Info
+  Flame, Award, Calendar, BarChart2, Radio, Info, Building, LayoutTemplate
 } from 'lucide-react';
 import { AppNotification } from '../types';
 import { 
@@ -30,25 +30,25 @@ const TEMPLATES = [
     type: 'exam_result' as const,
     label: '📊 Sınav Sonucu',
     title: 'Yeni Deneme Sınavı Sonuçları Açıklandı!',
-    message: 'Son yapılan deneme sınavının netleri, puanları ve karne detayları sisteme yüklenmiştir. Sonuçlarınızı incelemek için tıklayınız.',
+    message: 'Son yapılan deneme sınavının netleri, puanları ve karne detayları sisteme yüklenmiştir. İncelemek için tıklayınız.',
     linkTab: 'results' as const,
     icon: BarChart2,
     color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
   },
   {
     type: 'exam_created' as const,
-    label: '📅 Yeni Sınav',
-    title: 'Yeni Sınav Takvime Eklendi!',
-    message: 'Önümüzdeki günlerde uygulanacak yeni deneme sınavı ve salon yerleşim planı güncellenmiştir.',
-    linkTab: 'exams' as const,
-    icon: Calendar,
+    label: '🏛️ Salonlar & Yerleşim',
+    title: 'Sınav Salonları & Oturma Düzeni Güncellendi!',
+    message: 'Uygulanacak deneme sınavının salon listeleri, sıra numaraları ve yerleşim şeması güncellenmiştir.',
+    linkTab: 'halls' as const,
+    icon: Building,
     color: 'text-indigo-400 bg-indigo-500/15 border-indigo-500/30'
   },
   {
     type: 'arena_update' as const,
     label: '🏆 Akademi Arena',
     title: 'Akademi Arena Lig Puanları Güncellendi!',
-    message: 'Haftalık lig puan durumu, kazanılan yeni başarı rozetleri ve transferler güncellendi. Takımınızın sırasını hemen görün.',
+    message: 'Haftalık lig puan durumu, kazanılan yeni başarı rozetleri ve transferler güncellendi. Sıralamayı görmek için tıklayınız.',
     linkTab: 'league' as const,
     icon: Award,
     color: 'text-amber-400 bg-amber-500/15 border-amber-500/30'
@@ -56,8 +56,8 @@ const TEMPLATES = [
   {
     type: 'announcement' as const,
     label: '📢 Genel Duyuru',
-    title: 'Önemli Okul & Sınav Bilgilendirmesi',
-    message: 'Öğrencilerimizin ve öğretmenlerimizin dikkatine: Lütfen duyuruyu inceleyiniz.',
+    title: 'Önemli Sınav & Yerleşim Bilgilendirmesi',
+    message: 'Sınav salonları, oturma düzeni ve sonuçlar ile ilgili öğretmenlerimizin dikkatine sunulan duyuru.',
     linkTab: 'results' as const,
     icon: Radio,
     color: 'text-sky-400 bg-sky-500/15 border-sky-500/30'
@@ -494,16 +494,16 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                       onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
                       className="w-full bg-[#202124] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-accent cursor-pointer"
                     >
-                      <option value="exam_result">Sınav Sonucu</option>
-                      <option value="exam_created">Yeni Sınav</option>
+                      <option value="exam_result">Sınav Sonuçları & Karneler</option>
+                      <option value="exam_created">Salonlar & Oturma Düzeni</option>
                       <option value="arena_update">Akademi Arena</option>
-                      <option value="announcement">Duyuru</option>
+                      <option value="announcement">Genel Duyuru</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-white/70 mb-1">
-                      Hedef Sayfa
+                      Hedef Sayfa (Öğretmen Yetkili)
                     </label>
                     <select
                       value={formData.linkTab}
@@ -511,9 +511,8 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                       className="w-full bg-[#202124] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-accent cursor-pointer"
                     >
                       <option value="results">Sonuçlar & Karneler</option>
-                      <option value="exams">Deneme Sınavları</option>
+                      <option value="halls">Salonlar & Yerleşim</option>
                       <option value="league">Akademi Arena</option>
-                      <option value="students">Öğrenci Kayıtları</option>
                     </select>
                   </div>
 
