@@ -671,6 +671,24 @@ export const saveCanonicalDriveFileToFirestore = async (fileId: string, fileLink
   }
 };
 
+export const deepCleanForFirestore = (obj: any): any => {
+  if (obj === undefined) return null;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj.toISOString();
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => deepCleanForFirestore(item)).filter(item => item !== undefined);
+  }
+  
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleaned[key] = deepCleanForFirestore(value);
+    }
+  }
+  return cleaned;
+};
+
 export const writeModularSchoolState = async (
   dbInstance: any,
   cleanState: any,
@@ -681,26 +699,28 @@ export const writeModularSchoolState = async (
   const updatedModules: string[] = [];
   const newHashes: Record<string, string> = { ...lastHashes };
 
+  const safeState = deepCleanForFirestore(cleanState || {});
+
   const modulesData: Record<string, any> = {
-    students: { students: cleanState.students || [] },
-    exams: { exams: cleanState.exams || [] },
-    results: { results: cleanState.results || [] },
-    budget: { budget: cleanState.budget || { incomes: [], expenses: [], debts: [] } },
-    halls: { examHalls: cleanState.examHalls || [] },
+    students: { students: safeState.students || [] },
+    exams: { exams: safeState.exams || [] },
+    results: { results: safeState.results || [] },
+    budget: { budget: safeState.budget || { incomes: [], expenses: [], debts: [] } },
+    halls: { examHalls: safeState.examHalls || [] },
     league: {
-      leagueMentors: cleanState.leagueMentors || {},
-      leagueTeamPoints: cleanState.leagueTeamPoints || {},
-      approvedTransfers: cleanState.approvedTransfers || []
+      leagueMentors: safeState.leagueMentors || {},
+      leagueTeamPoints: safeState.leagueTeamPoints || {},
+      approvedTransfers: safeState.approvedTransfers || []
     },
     meta: {
-      version: cleanState.version || 1,
-      lastPublishedAt: cleanState.lastPublishedAt || new Date().toISOString(),
-      lastPublishedBy: cleanState.lastPublishedBy || 'admin',
-      admins: cleanState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
-      teachers: cleanState.teachers || [],
-      examCalendarPrintSettings: cleanState.examCalendarPrintSettings,
-      canonicalDriveFileId: cleanState.canonicalDriveFileId || undefined,
-      canonicalDriveFileLink: cleanState.canonicalDriveFileLink || undefined
+      version: safeState.version || 1,
+      lastPublishedAt: safeState.lastPublishedAt || new Date().toISOString(),
+      lastPublishedBy: safeState.lastPublishedBy || 'admin',
+      admins: safeState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
+      teachers: safeState.teachers || [],
+      examCalendarPrintSettings: safeState.examCalendarPrintSettings || null,
+      canonicalDriveFileId: safeState.canonicalDriveFileId || null,
+      canonicalDriveFileLink: safeState.canonicalDriveFileLink || null
     }
   };
 
@@ -709,33 +729,33 @@ export const writeModularSchoolState = async (
 
     // Always write complete root school document with all full data arrays
     const rootSchoolRef = doc(dbInstance, 'schools', schoolId);
-    promises.push(setDoc(rootSchoolRef, {
+    promises.push(setDoc(rootSchoolRef, deepCleanForFirestore({
       name: "Kırklareli Atatürk Ortaokulu",
-      version: cleanState.version || 1,
-      lastPublishedAt: cleanState.lastPublishedAt || new Date().toISOString(),
-      lastPublishedBy: cleanState.lastPublishedBy || 'admin',
-      admins: cleanState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
-      teachers: cleanState.teachers || [],
-      students: cleanState.students || [],
-      exams: cleanState.exams || [],
-      results: cleanState.results || [],
-      examHalls: cleanState.examHalls || [],
-      budget: cleanState.budget || { incomes: [], expenses: [], debts: [] },
-      leagueMentors: cleanState.leagueMentors || {},
-      leagueTeamPoints: cleanState.leagueTeamPoints || {},
-      approvedTransfers: cleanState.approvedTransfers || [],
-      studentCount: cleanState.students?.length || 0,
-      examCount: cleanState.exams?.length || 0,
-      hallCount: cleanState.examHalls?.length || 0,
-      canonicalDriveFileId: cleanState.canonicalDriveFileId || undefined,
-      canonicalDriveFileLink: cleanState.canonicalDriveFileLink || undefined
-    }, { merge: true }));
+      version: safeState.version || 1,
+      lastPublishedAt: safeState.lastPublishedAt || new Date().toISOString(),
+      lastPublishedBy: safeState.lastPublishedBy || 'admin',
+      admins: safeState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
+      teachers: safeState.teachers || [],
+      students: safeState.students || [],
+      exams: safeState.exams || [],
+      results: safeState.results || [],
+      examHalls: safeState.examHalls || [],
+      budget: safeState.budget || { incomes: [], expenses: [], debts: [] },
+      leagueMentors: safeState.leagueMentors || {},
+      leagueTeamPoints: safeState.leagueTeamPoints || {},
+      approvedTransfers: safeState.approvedTransfers || [],
+      studentCount: safeState.students?.length || 0,
+      examCount: safeState.exams?.length || 0,
+      hallCount: safeState.examHalls?.length || 0,
+      canonicalDriveFileId: safeState.canonicalDriveFileId || null,
+      canonicalDriveFileLink: safeState.canonicalDriveFileLink || null
+    }), { merge: true }));
 
     for (const [modKey, modPayload] of Object.entries(modulesData)) {
       const payloadStr = JSON.stringify(modPayload);
       if (forceAll || lastHashes[modKey] !== payloadStr) {
         const modDocRef = doc(dbInstance, 'schools', schoolId, 'modules', modKey);
-        promises.push(setDoc(modDocRef, modPayload));
+        promises.push(setDoc(modDocRef, deepCleanForFirestore(modPayload)));
         updatedModules.push(modKey);
         newHashes[modKey] = payloadStr;
       }

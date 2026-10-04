@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { ExamHall, SeatingPlanItem } from '../types';
 import { generateId, exportToExcel } from '../lib/utils';
@@ -184,6 +184,19 @@ export const HallsView = () => {
     setIsModalOpen(false);
     setEditingHallId(null);
   };
+
+  // Keep active modal seating plan synced when state updates from Firebase
+  useEffect(() => {
+    if (isModalOpen && editingHallId) {
+      const currentHall = state.examHalls.find(h => h.id === editingHallId);
+      if (currentHall) {
+        setHallName(currentHall.name);
+        if (currentHall.seatingPlan) {
+          setSeatingPlan(currentHall.seatingPlan);
+        }
+      }
+    }
+  }, [state.examHalls, editingHallId, isModalOpen]);
 
   const handleDragStart = (e: React.DragEvent, seatNum: number) => {
     if (isReadOnly) return;
