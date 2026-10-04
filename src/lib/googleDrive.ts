@@ -449,13 +449,101 @@ export const findLiveMasterDriveFile = async (
 };
 
 /**
+ * Ensures Google Drive file does not exceed version/revision limits (e.g. 100 versions quota).
+ * Implements FIFO cleanup: queries revisions of the file (with full pagination support for 100+ versions),
+ * and if count > maxAllowedRevisions, deletes the earliest revisions one by one to keep ample headroom
+ * for fresh backups and continuous live syncing.
+ */
+export const cleanOldDriveRevisions = async (
+  fileId: string,
+  token?: string,
+  maxAllowedRevisions = 30
+): Promise<{ cleanedCount: number; currentRevisions: number }> => {
+  try {
+    const activeToken = token || (await ensureDriveAccessToken());
+    let allRevisions: { id: string; modifiedTime?: string; keepForever?: boolean }[] = [];
+    let pageToken: string | undefined = undefined;
+
+    // Fetch all pages of revisions (in case file has reached 100 or 101+ versions)
+    do {
+      const pageParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+      const listUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/revisions?fields=nextPageToken,revisions(id,modifiedTime,keepForever,size)&pageSize=100&supportsAllDrives=true${pageParam}`;
+      const res = await fetch(listUrl, {
+        headers: { Authorization: `Bearer ${activeToken}` }
+      });
+
+      if (!res.ok) {
+        break;
+      }
+
+      const data = await res.json();
+      if (Array.isArray(data.revisions)) {
+        allRevisions = allRevisions.concat(data.revisions);
+      }
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+
+    if (allRevisions.length <= maxAllowedRevisions) {
+      return { cleanedCount: 0, currentRevisions: allRevisions.length };
+    }
+
+    // Sort oldest first (FIFO order)
+    const sorted = [...allRevisions].sort((a, b) => {
+      const ta = a.modifiedTime ? new Date(a.modifiedTime).getTime() : 0;
+      const tb = b.modifiedTime ? new Date(b.modifiedTime).getTime() : 0;
+      return ta - tb;
+    });
+
+    const toDeleteCount = allRevisions.length - maxAllowedRevisions;
+    // Always keep at least the latest few revisions
+    const candidatesToDelete = sorted.slice(0, Math.min(toDeleteCount, allRevisions.length - 1));
+
+    let cleaned = 0;
+    for (const rev of candidatesToDelete) {
+      try {
+        // If keepForever was set, remove it first
+        if (rev.keepForever) {
+          await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${rev.id}?supportsAllDrives=true`, {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${activeToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ keepForever: false })
+          }).catch(() => {});
+        }
+
+        const delRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${rev.id}?supportsAllDrives=true`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${activeToken}` }
+          }
+        );
+        if (delRes.ok || delRes.status === 204) {
+          cleaned++;
+        }
+      } catch (err) {
+        // Continue cleaning other revisions
+      }
+    }
+
+    return { cleanedCount: cleaned, currentRevisions: allRevisions.length - cleaned };
+  } catch (err) {
+    console.warn('Drive revision cleanup notice:', err);
+    return { cleanedCount: 0, currentRevisions: 0 };
+  }
+};
+
+/**
  * Synchronizes the state to the SINGLE canonical 'AkademiPanel_Canli_Kutuk.json' on Google Drive.
  * GUARANTEE: NEVER creates duplicate files if a master file is already known.
+ * AUTOMATIC QUOTA PROTECTION: Proactively purges oldest revisions (FIFO) to prevent 100-version limits.
  */
 export const syncLiveMasterToGoogleDrive = async (
   liveState: any,
   userEmail?: string
-): Promise<{ success: boolean; fileId?: string; modifiedTime?: string; error?: string }> => {
+): Promise<{ success: boolean; fileId?: string; modifiedTime?: string; error?: string; cleanedRevisions?: number }> => {
   try {
     const token = await ensureDriveAccessToken();
     const existing = await findLiveMasterDriveFile(token);
@@ -481,7 +569,10 @@ export const syncLiveMasterToGoogleDrive = async (
 
     // If an existing master file was found, ALWAYS update in-place (PATCH)
     if (existing?.id) {
-      const patchRes = await fetch(
+      // Proactive FIFO revision cleanup: Clean before write to guarantee room for the new revision
+      await cleanOldDriveRevisions(existing.id, token, 30).catch(() => {});
+
+      let patchRes = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=media&fields=id,name,modifiedTime&supportsAllDrives=true`,
         {
           method: 'PATCH',
@@ -493,9 +584,29 @@ export const syncLiveMasterToGoogleDrive = async (
         }
       );
 
+      // If PATCH fails, perform aggressive cleanup of old revisions and retry once
+      if (!patchRes.ok) {
+        await cleanOldDriveRevisions(existing.id, token, 15).catch(() => {});
+        patchRes = await fetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=media&fields=id,name,modifiedTime&supportsAllDrives=true`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json; charset=UTF-8'
+            },
+            body: payloadJson
+          }
+        );
+      }
+
       if (patchRes.ok) {
         const patchData = await patchRes.json();
         setLiveMasterFileId(patchData.id);
+
+        // Keep revisions safe below 30
+        cleanOldDriveRevisions(patchData.id, token, 30).catch(() => {});
+
         return {
           success: true,
           fileId: patchData.id,
@@ -564,6 +675,7 @@ export const syncLiveMasterToGoogleDrive = async (
 
     const created = await createRes.json();
     setLiveMasterFileId(created.id, created.webViewLink);
+    cleanOldDriveRevisions(created.id, token, 40).catch(() => {});
     return {
       success: true,
       fileId: created.id,

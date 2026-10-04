@@ -17,6 +17,7 @@ import {
   listBackupsFromGoogleDrive, 
   downloadBackupFromGoogleDrive, 
   deleteBackupFromGoogleDrive,
+  cleanOldDriveRevisions,
   LIVE_MASTER_FILE_NAME,
   getLiveMasterFileId,
   setLiveMasterFileId,
@@ -84,6 +85,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
   const [driveFilesList, setDriveFilesList] = useState<DriveBackupItem[]>([]);
   const [isLoadingDriveFiles, setIsLoadingDriveFiles] = useState(false);
   const [driveFileActionLoadingId, setDriveFileActionLoadingId] = useState<string | null>(null);
+  const [isCleaningRevisions, setIsCleaningRevisions] = useState(false);
 
   const [liveDriveMeta, setLiveDriveMeta] = useState<{
     modifiedTime?: string;
@@ -249,6 +251,42 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     navigator.clipboard.writeText(canonicalFileLink);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const handleCleanDriveRevisions = async () => {
+    setIsCleaningRevisions(true);
+    setFeedback(null);
+    try {
+      if (!isDriveConnected) {
+        await handleConnectDrive();
+      }
+      const targetId = canonicalFileId || getLiveMasterFileId();
+      if (!targetId) {
+        setFeedback({ type: 'error', message: 'Temizlenecek aktif bir Google Drive kütük dosyası bulunamadı.' });
+        return;
+      }
+      const token = getCachedAccessToken();
+      if (!token) {
+        setFeedback({ type: 'error', message: 'Google Drive oturumu bulunamadı. Lütfen giriş yapınız.' });
+        return;
+      }
+      const res = await cleanOldDriveRevisions(targetId, token, 35);
+      if (res.cleanedCount > 0) {
+        setFeedback({
+          type: 'success',
+          message: `Google Drive üzerindeki ${res.cleanedCount} adet eski sürüm (FIFO) başarıyla silinerek temizlendi. Kalan aktif sürüm sayısı: ${res.currentRevisions}. 100 sürüm limitine takılmadan yedeklemeler kesintisiz çalışacaktır!`
+        });
+      } else {
+        setFeedback({
+          type: 'success',
+          message: `Google Drive sürüm kotası zaten tertemiz ve optimum düzeyde (Toplam ${res.currentRevisions} sürüm). Kotada bolca yer mevcuttur.`
+        });
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: e?.message || 'Sürüm temizleme hatası oluştu.' });
+    } finally {
+      setIsCleaningRevisions(false);
+    }
   };
 
   const handleLoadDriveFiles = async () => {
