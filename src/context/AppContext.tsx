@@ -563,11 +563,15 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           const reqSnap = await getDoc(doc(db, 'access_requests', cleanEmail));
           if (reqSnap.exists()) {
             const reqData = reqSnap.data();
-            if (reqData.role === 'admin' || reqData.role === 'teacher') {
-              const targetRole = reqData.role as 'admin' | 'teacher';
-              setCachedAuthorizedRole(cleanEmail, targetRole);
-              setUserRole(targetRole);
-              return targetRole;
+            const resolvedRole = (reqData.role === 'admin' || reqData.role === 'teacher')
+              ? reqData.role
+              : (reqData.status === 'approved' ? 'teacher' : null);
+
+            if (resolvedRole) {
+              setCachedAuthorizedRole(cleanEmail, resolvedRole);
+              setUserRole(resolvedRole);
+              syncFromCloudStorage(true).catch(() => {});
+              return resolvedRole;
             }
           }
         } catch (e) {
@@ -943,40 +947,41 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     if (cleanUserEmail && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
       const userDocRef = doc(db, 'access_requests', cleanUserEmail);
       getDoc(userDocRef).then((existingSnap) => {
-        const existingData = existingSnap.exists() ? existingSnap.data() : null;
-        const finalRole = (existingData?.role === 'admin' || existingData?.role === 'teacher')
-          ? existingData.role
-          : initialComputedRole;
-        const finalStatus = (finalRole === 'admin' || finalRole === 'teacher')
-          ? 'approved'
-          : 'pending';
+        if (existingSnap.exists()) {
+          const existingData = existingSnap.data();
+          const existingRole = (existingData?.role === 'admin' || existingData?.role === 'teacher')
+            ? existingData.role
+            : (existingData?.status === 'approved' ? 'teacher' : null);
 
-        if (finalRole !== initialComputedRole && (finalRole === 'admin' || finalRole === 'teacher')) {
-          setCachedAuthorizedRole(cleanUserEmail, finalRole);
-          setUserRole(finalRole);
-          if (finalRole === 'teacher') {
+          if (existingRole) {
+            setCachedAuthorizedRole(cleanUserEmail, existingRole);
+            setUserRole(existingRole);
             syncFromCloudStorage(true).catch(() => {});
           }
-        }
 
-        setDoc(userDocRef, {
-          email: cleanUserEmail,
-          name: user.displayName || cleanUserEmail.split('@')[0],
-          photoURL: user.photoURL || null,
-          role: finalRole,
-          status: finalStatus,
-          lastLoginAt: new Date().toISOString(),
-          timestamp: existingData?.timestamp || new Date().toISOString()
-        }, { merge: true }).catch(() => {});
-      }).catch(() => {
-        setDoc(userDocRef, {
-          email: cleanUserEmail,
-          name: user.displayName || cleanUserEmail.split('@')[0],
-          photoURL: user.photoURL || null,
-          role: initialComputedRole,
-          status: initialComputedRole === 'guest' ? 'pending' : 'approved',
-          lastLoginAt: new Date().toISOString()
-        }, { merge: true }).catch(() => {});
+          // ONLY update lastLoginAt and profile info WITHOUT overwriting role or status!
+          setDoc(userDocRef, {
+            email: cleanUserEmail,
+            name: user.displayName || cleanUserEmail.split('@')[0],
+            photoURL: user.photoURL || null,
+            lastLoginAt: new Date().toISOString()
+          }, { merge: true }).catch(() => {});
+        } else {
+          // Document does not exist yet -> create initial access request
+          const finalRole = initialComputedRole;
+          const finalStatus = (finalRole === 'admin' || finalRole === 'teacher') ? 'approved' : 'pending';
+          setDoc(userDocRef, {
+            email: cleanUserEmail,
+            name: user.displayName || cleanUserEmail.split('@')[0],
+            photoURL: user.photoURL || null,
+            role: finalRole,
+            status: finalStatus,
+            lastLoginAt: new Date().toISOString(),
+            timestamp: new Date().toISOString()
+          }, { merge: true }).catch(() => {});
+        }
+      }).catch((err) => {
+        console.warn('Initial access_requests getDoc notice:', err);
       });
     }
 
@@ -988,14 +993,19 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         unsubUserApproval = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
-            const grantedRole = data.role as 'admin' | 'teacher' | 'guest';
-            if (grantedRole && (grantedRole === 'admin' || grantedRole === 'teacher')) {
+            const grantedRole = (data.role === 'admin' || data.role === 'teacher') 
+              ? data.role 
+              : (data.status === 'approved' ? 'teacher' : null);
+
+            if (grantedRole) {
               setCachedAuthorizedRole(cleanUserEmail, grantedRole);
               setUserRole(grantedRole);
               syncFromCloudStorage(true).catch(() => {});
             }
           }
-        }, () => {});
+        }, (err) => {
+          console.warn('Approval snapshot notice:', err);
+        });
       } catch (e) {}
     }
 
