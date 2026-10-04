@@ -26,8 +26,10 @@ export const LeagueView = () => {
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const [isGradeDropdownOpen, setIsGradeDropdownOpen] = useState(false);
   
-  // Tactics modal active month
+  // Tactics modal state
   const [activeTacticsMonth, setActiveTacticsMonth] = useState<number>(0);
+  const [isTacticsMonthOpen, setIsTacticsMonthOpen] = useState(false);
+  const [tacticsTeamFilter, setTacticsTeamFilter] = useState<'all' | 'kutup' | 'sicrama' | 'taktik' | 'ortak'>('all');
 
   // Auto-fetch partitioned month data when user selects a specific month
   useEffect(() => {
@@ -387,45 +389,45 @@ export const LeagueView = () => {
   return (
     <div className="space-y-4 sm:space-y-6 flex flex-col h-full font-sans text-brand-ink animate-fade-in">
       
-      {/* 1. Header & Quick Actions */}
-      <header className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-brand-border/80 shadow-2xs">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+      {/* 1. Header & Quick Actions - Compact on mobile */}
+      <header className="bg-white rounded-xl sm:rounded-3xl p-2.5 sm:p-5 border border-brand-border/80 shadow-2xs">
+        <div className="flex items-center justify-between gap-2.5 sm:gap-4">
           
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shrink-0 font-bold shadow-sm">
-                <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shrink-0 font-bold shadow-2xs">
+              <Trophy className="w-4 h-4 sm:w-6 sm:h-6" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h1 className="text-base sm:text-2xl md:text-3xl font-serif text-brand-ink font-bold tracking-tight truncate">
+                  Akademi Arena
+                </h1>
+                <span className="hidden xs:inline-block sm:inline-block bg-amber-100 text-amber-900 border border-amber-300 text-[9px] sm:text-xs font-extrabold px-1.5 sm:px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                  Lig & Rozetler
+                </span>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl md:text-3xl font-serif text-brand-ink font-bold tracking-tight">
-                    Akademi Arena
-                  </h1>
-                  <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] sm:text-xs font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    Lig & Rozetler
-                  </span>
-                </div>
-                <p className="text-brand-ink/60 text-xs sm:text-sm mt-0.5">
-                  Öğrenci ligleri, haftalık dinamik takımlar, lig puanları (LP) ve rozet sistemi.
-                </p>
-              </div>
+              <p className="hidden sm:block text-brand-ink/60 text-xs sm:text-sm mt-0.5 truncate">
+                Öğrenci ligleri, haftalık dinamik takımlar, lig puanları (LP) ve rozet sistemi.
+              </p>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 w-full lg:w-auto">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={() => setShowTactics(true)}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200/90 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
+              title="Aylık Taktikler"
+              className="flex items-center justify-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200/90 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
             >
               <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-              <span className="sm:hidden">Taktikler</span>
+              <span className="sm:hidden text-[11px]">Taktik</span>
               <span className="hidden sm:inline">Aylık Taktikler</span>
             </button>
 
             <button
               onClick={() => setActiveView(activeView === 'dashboard' ? 'rules' : 'dashboard')}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl transition-all shadow-2xs text-xs font-bold active:scale-95 cursor-pointer shrink-0 ${
+              title="Rozet Rehberi ve Kurallar"
+              className={`flex items-center justify-center gap-1 px-2.5 sm:px-5 py-1.5 sm:py-2.5 rounded-xl transition-all shadow-2xs text-xs font-bold active:scale-95 cursor-pointer shrink-0 ${
                 activeView === 'dashboard'
                   ? 'bg-[#151618] hover:bg-black text-white'
                   : 'bg-amber-600 hover:bg-amber-700 text-white'
@@ -434,13 +436,13 @@ export const LeagueView = () => {
               {activeView === 'dashboard' ? (
                 <>
                   <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="sm:hidden">Kurallar</span>
+                  <span className="sm:hidden text-[11px]">Kurallar</span>
                   <span className="hidden sm:inline">Rozet Rehberi & Kurallar</span>
                 </>
               ) : (
                 <>
                   <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Arena Tablosu</span>
+                  <span className="text-[11px] sm:text-xs">Arena Tablosu</span>
                 </>
               )}
             </button>
@@ -1470,68 +1472,259 @@ export const LeagueView = () => {
                 {/* Content */}
                 <div className="p-4 sm:p-6 overflow-y-auto">
                   
-                  {/* Mobile View: Month Tabs & Clean Cards */}
-                  <div className="sm:hidden space-y-4">
-                    {/* Month selector chips */}
-                    <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-                      {tacticsMonths.map((m, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setActiveTacticsMonth(i)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all ${
-                            activeTacticsMonth === i
-                              ? 'bg-purple-600 text-white shadow-2xs'
-                              : 'bg-[#FAF9F6] border border-brand-border/70 text-brand-ink/70'
-                          }`}
-                        >
-                          {m.name.split(' ')[0]}
-                        </button>
-                      ))}
+                  {/* Mobile View: Vertical Month Filter & Clean Cards */}
+                  <div className="sm:hidden space-y-3.5">
+                    
+                    {/* 1. Dikey Ay Filtreleme Dropdown'u */}
+                    <div className="relative w-full">
+                      <div className="text-[11px] font-bold text-brand-ink/50 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Dönem / Ay Filtresi:</span>
+                        </span>
+                        <span className="text-[10px] text-purple-700 font-bold bg-purple-100 px-2 py-0.5 rounded-full">
+                          {activeTacticsMonth + 1} / {tacticsMonths.length}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => setIsTacticsMonthOpen(!isTacticsMonthOpen)}
+                        className="w-full flex items-center justify-between p-3 bg-purple-50/90 border border-purple-200/90 rounded-2xl text-xs font-bold text-purple-950 transition-all shadow-2xs active:scale-[0.99] cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <div className="w-7 h-7 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                            {activeTacticsMonth + 1}
+                          </div>
+                          <div className="text-left min-w-0">
+                            <div className="text-xs font-bold text-purple-950 truncate">
+                              {tacticsMonths[activeTacticsMonth].name}
+                            </div>
+                            <div className="text-[10px] text-purple-700/80 font-medium truncate">
+                              Ayı değiştirmek için dokunun 👇
+                            </div>
+                          </div>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-purple-700 transition-transform duration-200 shrink-0 ${isTacticsMonthOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Dikey Açılır Ay Listesi */}
+                      {isTacticsMonthOpen && (
+                        <>
+                          <div className="fixed inset-0 z-20" onClick={() => setIsTacticsMonthOpen(false)} />
+                          <div className="absolute left-0 right-0 mt-1.5 bg-white border border-purple-200 rounded-2xl shadow-xl z-30 py-1.5 max-h-72 overflow-y-auto animate-fade-in divide-y divide-purple-100/60">
+                            {tacticsMonths.map((m, i) => {
+                              const isSelected = activeTacticsMonth === i;
+                              return (
+                                <button
+                                  key={i}
+                                  onClick={() => {
+                                    setActiveTacticsMonth(i);
+                                    setIsTacticsMonthOpen(false);
+                                  }}
+                                  className={`w-full text-left px-3.5 py-2.5 text-xs font-semibold hover:bg-purple-50/70 transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                                    isSelected ? 'bg-purple-100/70 text-purple-950 font-bold' : 'text-brand-ink'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="w-5 h-5 rounded-lg bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                      {i + 1}
+                                    </span>
+                                    <span className="truncate">{m.name}</span>
+                                  </div>
+                                  {isSelected && (
+                                    <span className="text-[10px] font-bold text-purple-800 bg-purple-200/80 px-2 py-0.5 rounded-full shrink-0">
+                                      Aktif
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
                     </div>
 
-                    {/* Active Month Missions Card */}
+                    {/* Hızlı Önceki / Sonraki Ay Geçiş Çubuğu */}
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        disabled={activeTacticsMonth === 0}
+                        onClick={() => setActiveTacticsMonth(prev => Math.max(0, prev - 1))}
+                        className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-[#FAF9F6] border border-brand-border/80 text-brand-ink disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>Önceki Ay</span>
+                      </button>
+                      
+                      <button
+                        disabled={activeTacticsMonth === tacticsMonths.length - 1}
+                        onClick={() => setActiveTacticsMonth(prev => Math.min(tacticsMonths.length - 1, prev + 1))}
+                        className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-[#FAF9F6] border border-brand-border/80 text-brand-ink disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <span>Sonraki Ay</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* 2. Dikey Görev / Takım Filtresi */}
+                    <div className="flex flex-col gap-1.5 pt-1 border-t border-brand-border/40">
+                      <div className="text-[11px] font-bold text-brand-ink/50 uppercase tracking-wider flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Filter className="w-3 h-3 text-brand-ink/40" />
+                          <span>Görev Filtresi:</span>
+                        </span>
+                        {tacticsTeamFilter !== 'all' && (
+                          <button
+                            onClick={() => setTacticsTeamFilter('all')}
+                            className="text-[10px] text-purple-700 font-bold hover:underline cursor-pointer"
+                          >
+                            Tümünü Göster
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Dikey Buton Sıralaması */}
+                      <div className="flex flex-col gap-1.5">
+                        <button
+                          onClick={() => setTacticsTeamFilter('all')}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                            tacticsTeamFilter === 'all'
+                              ? 'bg-[#151618] text-white ring-1 ring-[#151618]'
+                              : 'bg-[#FAF9F6] hover:bg-[#F2EFE9] text-brand-ink/70 border border-brand-border/60'
+                          }`}
+                        >
+                          <span>Tüm Takım & DYK Görevleri</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${tacticsTeamFilter === 'all' ? 'bg-white/20 text-white' : 'bg-brand-ink/5 text-brand-ink/60'}`}>
+                            4 Görev
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => setTacticsTeamFilter('ortak')}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                            tacticsTeamFilter === 'ortak'
+                              ? 'bg-purple-900 text-white ring-1 ring-purple-900'
+                              : 'bg-purple-50/70 hover:bg-purple-100/70 text-purple-950 border border-purple-200/80'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>🏆</span>
+                            <span>Ortak DYK & Takım Görevi</span>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${tacticsTeamFilter === 'ortak' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-900'}`}>
+                            Hedef
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => setTacticsTeamFilter('kutup')}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                            tacticsTeamFilter === 'kutup'
+                              ? 'bg-amber-500 text-white font-extrabold ring-1 ring-amber-500'
+                              : 'bg-amber-50/70 hover:bg-amber-100/70 text-amber-950 border border-amber-200/80'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>⭐</span>
+                            <span>Kutup Yıldızları (A Takımı)</span>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${tacticsTeamFilter === 'kutup' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-900'}`}>
+                            A Takımı
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => setTacticsTeamFilter('sicrama')}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                            tacticsTeamFilter === 'sicrama'
+                              ? 'bg-blue-600 text-white font-extrabold ring-1 ring-blue-600'
+                              : 'bg-blue-50/70 hover:bg-blue-100/70 text-blue-950 border border-blue-200/80'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>🚀</span>
+                            <span>Sıçrama Ustaları (B Takımı)</span>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${tacticsTeamFilter === 'sicrama' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-900'}`}>
+                            B Takımı
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => setTacticsTeamFilter('taktik')}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                            tacticsTeamFilter === 'taktik'
+                              ? 'bg-emerald-600 text-white font-extrabold ring-1 ring-emerald-600'
+                              : 'bg-emerald-50/70 hover:bg-emerald-100/70 text-emerald-950 border border-emerald-200/80'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>🛡️</span>
+                            <span>Taktik Avcıları (C Takımı)</span>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${tacticsTeamFilter === 'taktik' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-900'}`}>
+                            C Takımı
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 3. Filtrelenmiş Taktik ve Görev Kartları */}
                     {(() => {
                       const item = tacticsMonths[activeTacticsMonth];
                       return (
-                        <div className="space-y-3">
-                          <div className="bg-purple-50/60 p-3 rounded-2xl border border-purple-200">
-                            <h4 className="text-xs font-bold text-purple-950 uppercase tracking-wider mb-1">
-                              📅 {item.name}
-                            </h4>
-                            <p className="text-xs text-purple-900 font-medium">
-                              🏆 <strong>Ortak DYK & Takım Görevi:</strong> {item.ortak}
-                            </p>
-                          </div>
+                        <div className="space-y-2.5 pt-1">
+                          
+                          {/* Ortak DYK */}
+                          {(tacticsTeamFilter === 'all' || tacticsTeamFilter === 'ortak') && (
+                            <div className="bg-purple-50/80 p-3.5 rounded-2xl border border-purple-200/90 shadow-2xs space-y-1 animate-fade-in">
+                              <h4 className="text-xs font-bold text-purple-950 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>🏆</span>
+                                <span>Ortak DYK & Takım Görevi ({item.name})</span>
+                              </h4>
+                              <p className="text-xs text-purple-900 font-medium leading-relaxed pl-5">
+                                {item.ortak}
+                              </p>
+                            </div>
+                          )}
 
-                          <div className="bg-amber-50/60 p-3.5 rounded-2xl border border-amber-200/80 space-y-1">
-                            <p className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                              <span>⭐</span>
-                              <span>Kutup Yıldızları (A Takımı)</span>
-                            </p>
-                            <p className="text-xs text-amber-900/90 leading-relaxed font-medium">
-                              {item.kutup}
-                            </p>
-                          </div>
+                          {/* Kutup Yıldızları */}
+                          {(tacticsTeamFilter === 'all' || tacticsTeamFilter === 'kutup') && (
+                            <div className="bg-amber-50/80 p-3.5 rounded-2xl border border-amber-200/90 shadow-2xs space-y-1 animate-fade-in">
+                              <p className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                                <span>⭐</span>
+                                <span>Kutup Yıldızları (A Takımı) Taktik Hedefi</span>
+                              </p>
+                              <p className="text-xs text-amber-950/90 leading-relaxed font-medium pl-5">
+                                {item.kutup}
+                              </p>
+                            </div>
+                          )}
 
-                          <div className="bg-blue-50/60 p-3.5 rounded-2xl border border-blue-200/80 space-y-1">
-                            <p className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
-                              <span>🚀</span>
-                              <span>Sıçrama Ustaları (B Takımı)</span>
-                            </p>
-                            <p className="text-xs text-blue-900/90 leading-relaxed font-medium">
-                              {item.sicrama}
-                            </p>
-                          </div>
+                          {/* Sıçrama Ustaları */}
+                          {(tacticsTeamFilter === 'all' || tacticsTeamFilter === 'sicrama') && (
+                            <div className="bg-blue-50/80 p-3.5 rounded-2xl border border-blue-200/90 shadow-2xs space-y-1 animate-fade-in">
+                              <p className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                                <span>🚀</span>
+                                <span>Sıçrama Ustaları (B Takımı) Taktik Hedefi</span>
+                              </p>
+                              <p className="text-xs text-blue-950/90 leading-relaxed font-medium pl-5">
+                                {item.sicrama}
+                              </p>
+                            </div>
+                          )}
 
-                          <div className="bg-emerald-50/60 p-3.5 rounded-2xl border border-emerald-200/80 space-y-1">
-                            <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                              <span>🛡️</span>
-                              <span>Taktik Avcıları (C Takımı)</span>
-                            </p>
-                            <p className="text-xs text-emerald-900/90 leading-relaxed font-medium">
-                              {item.taktik}
-                            </p>
-                          </div>
+                          {/* Taktik Avcıları */}
+                          {(tacticsTeamFilter === 'all' || tacticsTeamFilter === 'taktik') && (
+                            <div className="bg-emerald-50/80 p-3.5 rounded-2xl border border-emerald-200/90 shadow-2xs space-y-1 animate-fade-in">
+                              <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                                <span>🛡️</span>
+                                <span>Taktik Avcıları (C Takımı) Taktik Hedefi</span>
+                              </p>
+                              <p className="text-xs text-emerald-950/90 leading-relaxed font-medium pl-5">
+                                {item.taktik}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
