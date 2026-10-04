@@ -1073,43 +1073,43 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   // Real-time Firestore listener for teachers & throttled focus check
   useEffect(() => {
-    // Real-time Firestore Meta listener for teachers (Admins sync strictly via Google Drive!)
-    let unsubMeta: (() => void) | null = null;
-    const cleanUserEmail = (user?.email || '').trim().toLowerCase();
+    // Real-time Firestore Modules listener for teachers (Admins sync strictly via Google Drive!)
+    let unsubModules: (() => void) | null = null;
+    let unsubRoot: (() => void) | null = null;
 
     if (userRole === 'teacher' && firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
       try {
-        const metaDocRef = doc(db, 'schools', 'main', 'modules', 'meta');
-        unsubMeta = onSnapshot(metaDocRef, (snap) => {
-          if (snap.exists()) {
-            const remoteMeta = snap.data();
-            const remoteVer = Number(remoteMeta?.version) || 0;
-            const localVer = Number((stateRef.current as any).version) || 0;
-
-            if (remoteVer > localVer) {
-              syncFromCloudStorage(true).catch(() => {});
-            }
+        const modulesColRef = collection(db, 'schools', 'main', 'modules');
+        unsubModules = onSnapshot(modulesColRef, (snapshot) => {
+          if (!snapshot.empty) {
+            syncFromCloudStorage(true).catch(() => {});
           }
         }, (err: any) => {
           if (err?.code !== 'unavailable') {
-            console.warn('Realtime cloud meta listener notice:', err?.message || err);
+            console.warn('Realtime cloud modules listener notice:', err?.message || err);
           }
         });
+
+        const rootDocRef = doc(db, 'schools', 'main');
+        unsubRoot = onSnapshot(rootDocRef, () => {
+          syncFromCloudStorage(true).catch(() => {});
+        }, () => {});
       } catch (e) {}
     }
 
     // Sync on tab focus for teachers so they see published updates when they switch back
     const handleFocus = () => {
       const now = Date.now();
-      if (userRole === 'teacher' && now - lastFocusSyncRef.current > 60000 && isInitialCloudHydrationDoneRef.current) {
+      if (userRole === 'teacher' && now - lastFocusSyncRef.current > 10000 && isInitialCloudHydrationDoneRef.current) {
         lastFocusSyncRef.current = now;
-        syncFromCloudStorage().catch(() => {});
+        syncFromCloudStorage(true).catch(() => {});
       }
     };
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      if (unsubMeta) unsubMeta();
+      if (unsubModules) unsubModules();
+      if (unsubRoot) unsubRoot();
       window.removeEventListener('focus', handleFocus);
     };
   }, [user?.email, userRole]);
