@@ -340,7 +340,8 @@ export const setCachedAuthorizedRole = (cleanEmail: string, role: 'admin' | 'tea
 export const evaluateUserRole = (
   userEmail: string,
   adminsList: string[] = [],
-  teachersList: string[] = []
+  teachersList: string[] = [],
+  currentRole?: 'admin' | 'teacher' | 'guest'
 ): 'admin' | 'teacher' | 'guest' => {
   const cleanEmail = (userEmail || '').trim().toLowerCase();
   if (!cleanEmail) return 'guest';
@@ -363,8 +364,12 @@ export const evaluateUserRole = (
   
   // Fallback to locally cached authorized role so users are never blocked or demoted during offline / slow network / initial load
   const cachedRole = getCachedAuthorizedRole(cleanEmail);
-  if (cachedRole) {
+  if (cachedRole === 'admin' || cachedRole === 'teacher') {
     return cachedRole;
+  }
+
+  if (currentRole === 'admin' || currentRole === 'teacher') {
+    return currentRole;
   }
 
   return 'guest';
@@ -1054,7 +1059,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         } catch (e) {}
 
         const cleanEmail = (user?.email || '').trim().toLowerCase();
-        const computedRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+        const computedRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers, userRole);
         setUserRole(computedRole);
 
         setPendingSyncCount(0);
@@ -1543,6 +1548,21 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
     setCachedAuthorizedRole(clean, newRole);
 
+    // 1. INSTANT BROADCAST: Write immediately to access_requests collection first so teacher's real-time onSnapshot fires in <50ms!
+    if (firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
+      try {
+        await setDoc(doc(db, 'access_requests', clean), {
+          email: clean,
+          role: newRole,
+          status: newRole === 'guest' ? 'pending' : 'approved',
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (e) {
+        console.warn('Error updating access_requests for user:', e);
+      }
+    }
+
+    // 2. Synchronize administrators & teachers lists in school state
     let currentAdmins = stateRef.current.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'];
     let currentTeachers = stateRef.current.teachers || [];
 
@@ -1558,19 +1578,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
 
     await updateUsers(currentAdmins, currentTeachers);
-
-    if (firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
-      try {
-        await setDoc(doc(db, 'access_requests', clean), {
-          email: clean,
-          role: newRole,
-          status: newRole === 'guest' ? 'pending' : 'approved',
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-      } catch (e) {
-        console.warn('Error updating access_requests for user:', e);
-      }
-    }
   };
 
   const approveTransfer = (studentNo: number, examName: string, toTeam: string) => { if (userRole !== 'admin') return; _approveTransfer(studentNo, examName, toTeam); };

@@ -67,13 +67,13 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [isCheckingRole, setIsCheckingRole] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Auto-refresh role if in guest mode, unless quota is exceeded (throttled to 60s)
+  // Auto-refresh role if in guest mode (fast 3-second check for instant entry once admin approves)
   useEffect(() => {
     if (userRole === 'guest') {
       if (checkIsQuotaExceededToday()) return;
       const interval = setInterval(() => {
         checkAndRefreshRole().catch(() => {});
-      }, 60000);
+      }, 3000);
       return () => clearInterval(interval);
     }
   }, [userRole, checkAndRefreshRole]);
