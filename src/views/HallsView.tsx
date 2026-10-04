@@ -5,11 +5,12 @@ import { generateId, exportToExcel } from '../lib/utils';
 import { Plus, Trash2, Download, LayoutTemplate, X, Users, RefreshCw, AlertCircle, Building, MapPin, Search, Filter, ChevronDown, CheckCircle2, Eye } from 'lucide-react';
 
 export const HallsView = () => {
-  const { state, setExamHalls } = useAppContext();
+  const { state, setExamHalls, userRole } = useAppContext();
+  const isReadOnly = userRole !== 'admin';
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHallId, setEditingHallId] = useState<string | null>(null);
-  const [mobileModalTab, setMobileModalTab] = useState<'settings' | 'preview'>('settings');
+  const [mobileModalTab, setMobileModalTab] = useState<'settings' | 'preview'>('preview');
   
   // Mobile Quick Toggles & Filters
   const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false);
@@ -121,6 +122,7 @@ export const HallsView = () => {
   }, [registeredStudentsForSeating, deselectedStudentIds]);
 
   const openNewModal = () => {
+    if (isReadOnly) return;
     setEditingHallId(null);
     setHallName('');
     setColumns([
@@ -174,7 +176,7 @@ export const HallsView = () => {
     const seatedIds = (hall.seatingPlan || []).map(sp => sp.studentId);
     const initialDeselected = registered.filter(s => !seatedIds.includes(s.id)).map(s => s.id);
     setDeselectedStudentIds(initialDeselected);
-    setMobileModalTab('settings');
+    setMobileModalTab(isReadOnly ? 'preview' : 'settings');
     setIsModalOpen(true);
   };
 
@@ -184,12 +186,14 @@ export const HallsView = () => {
   };
 
   const handleDragStart = (e: React.DragEvent, seatNum: number) => {
+    if (isReadOnly) return;
     setDraggedSeatNum(seatNum);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', seatNum.toString());
   };
 
   const handleDragOver = (e: React.DragEvent, seatNum: number) => {
+    if (isReadOnly) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragOverSeatNum !== seatNum) {
@@ -198,6 +202,7 @@ export const HallsView = () => {
   };
 
   const handleDragLeave = (e: React.DragEvent, seatNum: number) => {
+    if (isReadOnly) return;
     e.preventDefault();
     if (dragOverSeatNum === seatNum) {
       setDragOverSeatNum(null);
@@ -205,6 +210,7 @@ export const HallsView = () => {
   };
 
   const handleDrop = (e: React.DragEvent | { preventDefault: () => void; dataTransfer?: any }, targetSeatNum: number) => {
+    if (isReadOnly) return;
     e.preventDefault();
     setDragOverSeatNum(null);
     
@@ -246,6 +252,7 @@ export const HallsView = () => {
 
   // Touch / Click to swap desks easily on mobile
   const handleSeatClick = (seatNum: number) => {
+    if (isReadOnly) return;
     if (draggedSeatNum === null) {
       const hasStudent = seatingPlan.some(s => s.deskNumber === seatNum);
       if (hasStudent) {
@@ -259,6 +266,7 @@ export const HallsView = () => {
   };
 
   const handleGenerateSeating = () => {
+    if (isReadOnly) return;
     if (selectedClasses.length === 0) {
       alert("Lütfen önce sınıfları seçin.");
       return;
@@ -291,6 +299,7 @@ export const HallsView = () => {
   };
 
   const handleSaveHall = () => {
+    if (isReadOnly) return;
     if (!hallName.trim()) {
       alert("Lütfen salon adı girin.");
       return;
@@ -316,6 +325,7 @@ export const HallsView = () => {
   };
 
   const removeHall = (hallId: string) => {
+    if (isReadOnly) return;
     const hall = state.examHalls.find(h => h.id === hallId);
     const hallName = hall?.name || 'Bu salonu';
     if (window.confirm(`${hallName} silinecektir. Onaylıyor musunuz?`)) {
@@ -579,14 +589,22 @@ export const HallsView = () => {
           </div>
         </div>
 
-        <button 
-          onClick={openNewModal} 
-          className="flex items-center justify-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 bg-[#151618] border border-[#151618] text-white text-xs font-bold rounded-xl transition-all hover:bg-black active:scale-95 shadow-2xs sm:shadow-xs cursor-pointer min-w-0"
-        >
-          <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400" />
-          <span className="hidden sm:inline">Yeni Salon Oluştur</span>
-          <span className="sm:hidden">Yeni Salon</span>
-        </button>
+        {!isReadOnly ? (
+          <button 
+            onClick={openNewModal} 
+            className="flex items-center justify-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 bg-[#151618] border border-[#151618] text-white text-xs font-bold rounded-xl transition-all hover:bg-black active:scale-95 shadow-2xs sm:shadow-xs cursor-pointer min-w-0"
+          >
+            <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400" />
+            <span className="hidden sm:inline">Yeni Salon Oluştur</span>
+            <span className="sm:hidden">Yeni Salon</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-900 border border-amber-500/30 rounded-xl text-xs font-bold shrink-0">
+            <Eye className="w-3.5 h-3.5 text-amber-600" />
+            <span className="hidden sm:inline">Öğretmen Önizleme Modu (Salt Okunur)</span>
+            <span className="sm:hidden">Önizleme Modu</span>
+          </div>
+        )}
       </header>
 
       {/* Mobile Quick Toggles */}
@@ -821,14 +839,16 @@ export const HallsView = () => {
                   >
                     <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
-                  <button 
-                    onClick={() => removeHall(hall.id)} 
-                    className="p-1.5 sm:p-2 text-brand-ink/50 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 active:scale-95 shadow-2xs" 
-                    title="Salonu Sil"
-                    aria-label="Salonu Sil"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  </button>
+                  {!isReadOnly && (
+                    <button 
+                      onClick={() => removeHall(hall.id)} 
+                      className="p-1.5 sm:p-2 text-brand-ink/50 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 active:scale-95 shadow-2xs" 
+                      title="Salonu Sil"
+                      aria-label="Salonu Sil"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -873,10 +893,14 @@ export const HallsView = () => {
                 {/* Main Action Button */}
                 <button 
                   onClick={() => openEditModal(hall)} 
-                  className="w-full mt-2.5 py-2.5 px-3 bg-[#FAF9F6] border border-brand-border/80 text-brand-ink hover:bg-white hover:border-brand-accent hover:text-brand-accent font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer"
+                  className={`w-full mt-2.5 py-2.5 px-3 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer ${
+                    isReadOnly 
+                      ? 'bg-amber-50/80 border border-amber-200/80 text-amber-900 hover:bg-amber-100 hover:border-amber-400' 
+                      : 'bg-[#FAF9F6] border border-brand-border/80 text-brand-ink hover:bg-white hover:border-brand-accent hover:text-brand-accent'
+                  }`}
                 >
-                  <Eye className="w-3.5 h-3.5 text-brand-ink/60 group-hover:text-brand-accent shrink-0" />
-                  <span>Detayları ve Oturma Düzenini Gör</span>
+                  <Eye className={`w-3.5 h-3.5 shrink-0 ${isReadOnly ? 'text-amber-600' : 'text-brand-ink/60 group-hover:text-brand-accent'}`} />
+                  <span>{isReadOnly ? 'Oturma Düzeni Önizlemesini Gör' : 'Detayları ve Oturma Düzenini Gör'}</span>
                 </button>
               </div>
             </div>
@@ -930,10 +954,14 @@ export const HallsView = () => {
                 </div>
                 <div>
                   <h3 className="text-base sm:text-xl font-serif text-brand-ink font-bold leading-tight">
-                    {editingHallId ? 'Sınav Salonu Düzenle' : 'Yeni Sınav Salonu Oluştur'}
+                    {isReadOnly 
+                      ? `${hallName || 'Sınav Salonu'} - Oturma Düzeni Önizleme` 
+                      : (editingHallId ? 'Sınav Salonu Düzenle' : 'Yeni Sınav Salonu Oluştur')}
                   </h3>
                   <p className="text-[10px] sm:text-xs text-brand-ink/60">
-                    Salon detayları, kapasite ve otomatik oturma düzeni
+                    {isReadOnly 
+                      ? 'Admin tarafından oluşturulan sınav oturma düzeni ve yerleşim şeması (Salt Okunur)' 
+                      : 'Salon detayları, kapasite ve otomatik oturma düzeni'}
                   </p>
                 </div>
               </div>
@@ -946,32 +974,34 @@ export const HallsView = () => {
             </div>
 
             {/* Mobile Tab Switcher */}
-            <div className="md:hidden flex border-b border-brand-border/70 bg-[#FAF9F6] p-1.5 gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={() => setMobileModalTab('settings')}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                  mobileModalTab === 'settings'
-                    ? 'bg-[#151618] text-white shadow-xs'
-                    : 'text-brand-ink/60 hover:text-brand-ink'
-                }`}
-              >
-                <Building className="w-3.5 h-3.5" />
-                <span>1. Salon Ayarları & Öğrenciler</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobileModalTab('preview')}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                  mobileModalTab === 'preview'
-                    ? 'bg-[#151618] text-white shadow-xs'
-                    : 'text-brand-ink/60 hover:text-brand-ink'
-                }`}
-              >
-                <LayoutTemplate className="w-3.5 h-3.5" />
-                <span>2. Oturma Şeması ({seatingPlan.length}/{capacity})</span>
-              </button>
-            </div>
+            {!isReadOnly && (
+              <div className="md:hidden flex border-b border-brand-border/70 bg-[#FAF9F6] p-1.5 gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMobileModalTab('settings')}
+                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                    mobileModalTab === 'settings'
+                      ? 'bg-[#151618] text-white shadow-xs'
+                      : 'text-brand-ink/60 hover:text-brand-ink'
+                  }`}
+                >
+                  <Building className="w-3.5 h-3.5" />
+                  <span>1. Salon Ayarları & Öğrenciler</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileModalTab('preview')}
+                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                    mobileModalTab === 'preview'
+                      ? 'bg-[#151618] text-white shadow-xs'
+                      : 'text-brand-ink/60 hover:text-brand-ink'
+                  }`}
+                >
+                  <LayoutTemplate className="w-3.5 h-3.5" />
+                  <span>2. Oturma Şeması ({seatingPlan.length}/{capacity})</span>
+                </button>
+              </div>
+            )}
 
             {/* Content */}
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-[#fcfbf7]/40">
@@ -1303,9 +1333,22 @@ export const HallsView = () => {
               </div>
 
               {/* Right Content - Seating Plan Preview */}
-              <div className={`w-full md:w-2/3 p-4 sm:p-6 flex-col overflow-hidden ${
+              <div className={`w-full ${!isReadOnly ? 'md:w-2/3' : 'md:w-full'} p-4 sm:p-6 flex flex-col overflow-hidden ${
                 mobileModalTab === 'preview' ? 'flex' : 'hidden md:flex'
               }`}>
+                {/* Read-Only Notice Banner for Teacher */}
+                {isReadOnly && (
+                  <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 flex items-center justify-between gap-2 text-xs shrink-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Eye className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="truncate"><strong>Öğretmen İnceleme Modu:</strong> Admin tarafından oluşturulan sınav oturma düzeni salt okunur önizleme modundadır. Değişiklik yapılamaz.</span>
+                    </div>
+                    <span className="bg-amber-200/80 text-amber-900 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase shrink-0">
+                      Salt Okunur
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center mb-4 shrink-0">
                   <div>
                     <h4 className="text-base sm:text-lg font-serif font-bold text-[#5a5a40]">Oturma Düzeni Önizlemesi</h4>
@@ -1313,21 +1356,33 @@ export const HallsView = () => {
                       <p className="text-[11px] sm:text-xs font-medium text-amber-700 mt-1 flex items-center gap-1">
                         <AlertCircle className="w-3 h-3 shrink-0" />
                         <span>
-                          {draggedSeatNum 
-                            ? `${draggedSeatNum}. sıra seçildi. Taşımak için hedef sıraya dokunun.`
-                            : 'Öğrenciye dokunup ardından hedef sıraya dokunarak kolayca yer değiştirebilirsiniz.'}
+                          {isReadOnly 
+                            ? 'Admin tarafından oluşturulan oturma şeması görüntülenmektedir.' 
+                            : (draggedSeatNum 
+                              ? `${draggedSeatNum}. sıra seçildi. Taşımak için hedef sıraya dokunun.`
+                              : 'Öğrenciye dokunup ardından hedef sıraya dokunarak kolayca yer değiştirebilirsiniz.')}
                         </span>
                       </p>
                     )}
                   </div>
                   <div className="flex items-center space-x-2">
                     {seatingPlan.length > 0 && (
-                      <button 
-                        onClick={handlePrintSchematic}
-                        className="flex items-center px-3 py-1.5 bg-[#fcfbf7] border border-[#e6e2d3] text-[#5a5a40] text-xs font-bold rounded-full hover:bg-[#f5f5f0] transition-colors"
-                      >
-                        <Download className="w-3.5 h-3.5 mr-1" /> PDF İndir
-                      </button>
+                      <>
+                        <button 
+                          onClick={() => handleExport({ id: editingHallId || '', name: hallName, capacity, columns, seatingPlan } as any)}
+                          className="flex items-center px-3 py-1.5 bg-[#fcfbf7] border border-[#e6e2d3] text-[#5a5a40] text-xs font-bold rounded-full hover:bg-[#f5f5f0] transition-colors cursor-pointer"
+                          title="Excel Yoklama Listesi İndir"
+                        >
+                          <Download className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Excel
+                        </button>
+                        <button 
+                          onClick={handlePrintSchematic}
+                          className="flex items-center px-3 py-1.5 bg-[#fcfbf7] border border-[#e6e2d3] text-[#5a5a40] text-xs font-bold rounded-full hover:bg-[#f5f5f0] transition-colors cursor-pointer"
+                          title="PDF Şema Yazdır"
+                        >
+                          <Download className="w-3.5 h-3.5 mr-1 text-indigo-600" /> PDF İndir
+                        </button>
+                      </>
                     )}
                     <span className="bg-[#f5f5f0] border border-[#e6e2d3] text-[#5a5a40] px-3 py-1.5 rounded-full text-xs font-bold">
                       Yerleşen: {seatingPlan.length} / {capacity}
@@ -1371,17 +1426,19 @@ export const HallsView = () => {
                                 return (
                                   <div 
                                     key={seatIdx}
-                                    draggable={!!student}
-                                    onClick={() => handleSeatClick(seatNum)}
+                                    draggable={!isReadOnly && !!student}
+                                    onClick={() => !isReadOnly && handleSeatClick(seatNum)}
                                     onDragStart={(e) => {
-                                      if (student) handleDragStart(e, seatNum);
+                                      if (!isReadOnly && student) handleDragStart(e, seatNum);
                                     }}
-                                    onDragOver={(e) => handleDragOver(e, seatNum)}
-                                    onDragLeave={(e) => handleDragLeave(e, seatNum)}
-                                    onDrop={(e) => handleDrop(e, seatNum)}
-                                    className={`flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg border relative min-h-[4.5rem] sm:min-h-[5rem] flex-1 min-w-0 print:h-24 print:w-32 transition-transform hover:scale-105 hover:z-10 cursor-pointer ${
+                                    onDragOver={(e) => !isReadOnly && handleDragOver(e, seatNum)}
+                                    onDragLeave={(e) => !isReadOnly && handleDragLeave(e, seatNum)}
+                                    onDrop={(e) => !isReadOnly && handleDrop(e, seatNum)}
+                                    className={`flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg border relative min-h-[4.5rem] sm:min-h-[5rem] flex-1 min-w-0 print:h-24 print:w-32 transition-transform ${
+                                      !isReadOnly ? 'hover:scale-105 hover:z-10 cursor-pointer' : 'cursor-default'
+                                    } ${
                                       student 
-                                        ? 'bg-white border-[#d4d19d] shadow-2xs print:border-black cursor-grab active:cursor-grabbing' 
+                                        ? `bg-white border-[#d4d19d] shadow-2xs print:border-black ${!isReadOnly ? 'cursor-grab active:cursor-grabbing' : ''}` 
                                         : 'bg-[#fcfbf7] border-dashed border-[#e6e2d3] print:border-gray-300'
                                     } ${draggedSeatNum === seatNum ? 'opacity-90 ring-2 ring-amber-500 bg-amber-50 scale-105 z-20 shadow-md' : ''} ${dragOverSeatNum === seatNum ? 'ring-2 ring-amber-500 bg-amber-50 scale-105' : ''}`}
                                   >
@@ -1420,7 +1477,9 @@ export const HallsView = () => {
                         <Users className="w-8 h-8 text-[#d6d2c3]" />
                       </div>
                       <p className="text-sm">
-                        Henüz oturma düzeni oluşturulmadı.<br/>Sınıf seçip <strong>"Oturma Düzeni Oluştur"</strong> butonuna tıklayın.
+                        {isReadOnly 
+                          ? 'Bu salon için henüz bir oturma düzeni oluşturulmamış.' 
+                          : <>Henüz oturma düzeni oluşturulmadı.<br/>Sınıf seçip <strong>"Oturma Düzeni Oluştur"</strong> butonuna tıklayın.</>}
                       </p>
                     </div>
                   )}
@@ -1434,14 +1493,16 @@ export const HallsView = () => {
                 onClick={closeModal}
                 className="px-4 py-2 text-xs sm:text-sm text-brand-ink/70 hover:text-brand-ink font-bold rounded-xl hover:bg-black/5 transition-colors cursor-pointer"
               >
-                İptal
+                {isReadOnly ? 'Pencereyi Kapat' : 'İptal'}
               </button>
-              <button
-                onClick={handleSaveHall}
-                className="px-5 sm:px-6 py-2 sm:py-2.5 bg-[#151618] hover:bg-black text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
-              >
-                Salonu Kaydet
-              </button>
+              {!isReadOnly && (
+                <button
+                  onClick={handleSaveHall}
+                  className="px-5 sm:px-6 py-2 sm:py-2.5 bg-[#151618] hover:bg-black text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Salonu Kaydet
+                </button>
+              )}
             </div>
           </div>
         </div>

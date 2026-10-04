@@ -381,10 +381,10 @@ export const findLiveMasterDriveFile = async (
       knownMeta = await getDriveFileMetadata(knownId, token);
     }
 
-    // Search across Google Drive for any AkademiPanel or Canli_Kutuk files
-    const query = "(name contains 'AkademiPanel' or name contains 'Canli_Kutuk') and trashed = false";
+    // Search across Google Drive for any AkademiPanel, Canli_Kutuk, or backup files
+    const query = "(name contains 'AkademiPanel' or name contains 'Canli_Kutuk' or name contains 'Kutuk' or name contains 'Okul_Yedegi' or name contains 'Tam_Yedek' or name contains 'Ogrenci') and trashed = false";
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,size,webViewLink,owners,description)&orderBy=modifiedTime desc&pageSize=25&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,size,webViewLink,owners,description)&orderBy=modifiedTime desc&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
@@ -397,37 +397,42 @@ export const findLiveMasterDriveFile = async (
     // If knownId exists and is valid
     if (knownMeta && !knownMeta.trashed) {
       const knownTime = knownMeta.modifiedTime ? new Date(knownMeta.modifiedTime).getTime() : 0;
-      // Check if another candidate file is substantially newer (more than 1 minute newer)
-      const newerCandidate = candidateFiles.find(f => {
+      
+      // Look for candidate files that are newer than knownMeta
+      const fresherCandidate = candidateFiles.find(f => {
         if (f.id === knownMeta.id) return false;
         const candidateTime = f.modifiedTime ? new Date(f.modifiedTime).getTime() : 0;
-        return candidateTime > knownTime + 60000;
+        return candidateTime > knownTime;
       });
 
-      if (!newerCandidate) {
-        if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink);
+      if (fresherCandidate) {
+        const webLink = fresherCandidate.webViewLink || `https://drive.google.com/file/d/${fresherCandidate.id}/view`;
+        setLiveMasterFileId(fresherCandidate.id, webLink);
         return {
-          id: knownMeta.id,
-          name: knownMeta.name || LIVE_MASTER_FILE_NAME,
-          modifiedTime: knownMeta.modifiedTime,
-          webViewLink: knownMeta.webViewLink
-        };
-      } else {
-        const webLink = newerCandidate.webViewLink || `https://drive.google.com/file/d/${newerCandidate.id}/view`;
-        setLiveMasterFileId(newerCandidate.id, webLink);
-        return {
-          id: newerCandidate.id,
-          name: newerCandidate.name,
-          modifiedTime: newerCandidate.modifiedTime,
+          id: fresherCandidate.id,
+          name: fresherCandidate.name,
+          modifiedTime: fresherCandidate.modifiedTime,
           webViewLink: webLink
         };
       }
+
+      if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink);
+      return {
+        id: knownMeta.id,
+        name: knownMeta.name || LIVE_MASTER_FILE_NAME,
+        modifiedTime: knownMeta.modifiedTime,
+        webViewLink: knownMeta.webViewLink
+      };
     }
 
     // If no valid knownId, choose the most recently modified candidate
     if (candidateFiles.length > 0) {
       const liveMasterMatch = candidateFiles.find(f => f.name === LIVE_MASTER_FILE_NAME);
-      const chosen = liveMasterMatch || candidateFiles[0];
+      // If liveMasterMatch has nearly same modified time as candidateFiles[0], prefer liveMasterMatch, else use candidateFiles[0]
+      const chosen = (liveMasterMatch && Math.abs(new Date(liveMasterMatch.modifiedTime || 0).getTime() - new Date(candidateFiles[0].modifiedTime || 0).getTime()) < 5000)
+        ? liveMasterMatch
+        : candidateFiles[0];
+
       const webLink = chosen.webViewLink || `https://drive.google.com/file/d/${chosen.id}/view`;
       setLiveMasterFileId(chosen.id, webLink);
       return {

@@ -80,9 +80,9 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   // Enforce role restrictions
   useEffect(() => {
-    // Öğretmen yetkisindeki kullanıcılara sadece Sonuçlar, Analiz ve Arena açılır
+    // Öğretmen yetkisindeki kullanıcılara Sonuçlar, Analiz, Arena ve Salonlar & Oturma Düzeni (sadece önizleme) açılır
     if (userRole === 'teacher') {
-      const allowedTeacherTabs = ['results', 'analysis', 'league'];
+      const allowedTeacherTabs = ['results', 'analysis', 'league', 'halls'];
       if (!allowedTeacherTabs.includes(activeTab)) {
         setActiveTab('results');
       }
@@ -253,7 +253,7 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab as (tab: string) => void} onLogout={onLogout} currentUser={user}>
       {activeTab === 'students' && userRole === 'admin' && <StudentsView />}
-      {activeTab === 'halls' && userRole === 'admin' && <HallsView />}
+      {activeTab === 'halls' && (userRole === 'admin' || userRole === 'teacher') && <HallsView />}
       {activeTab === 'results' && <ResultsView />}
       {activeTab === 'scan' && userRole === 'admin' && (
         <ScanView onNavigate={setActiveTab as (tab: string) => void} />
