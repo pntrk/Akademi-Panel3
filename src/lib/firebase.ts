@@ -271,11 +271,10 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// Dedicated Google Drive Provider for Drive File sync (Only used by Admin when connecting Google Drive)
+// Dedicated Google Drive Provider for Drive File sync (Used by Admin when logging in / connecting Google Drive)
 export const googleDriveProvider = new GoogleAuthProvider();
 googleDriveProvider.setCustomParameters({
-  prompt: 'consent select_account',
-  access_type: 'offline',
+  prompt: 'select_account',
   include_granted_scopes: 'true'
 });
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
