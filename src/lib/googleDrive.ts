@@ -372,7 +372,8 @@ export interface LiveMasterFileInfo {
  */
 export const findLiveMasterDriveFile = async (
   token: string,
-  preferredId?: string | null
+  preferredId?: string | null,
+  forceFullScan = false
 ): Promise<LiveMasterFileInfo | null> => {
   try {
     const knownId = preferredId || getLiveMasterFileId();
@@ -381,10 +382,21 @@ export const findLiveMasterDriveFile = async (
       knownMeta = await getDriveFileMetadata(knownId, token);
     }
 
+    // FAST-PATH: If known canonical file exists and is valid, return immediately without slow multi-second Drive full search!
+    if (knownMeta && !knownMeta.trashed && !forceFullScan) {
+      if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink);
+      return {
+        id: knownMeta.id,
+        name: knownMeta.name || LIVE_MASTER_FILE_NAME,
+        modifiedTime: knownMeta.modifiedTime,
+        webViewLink: knownMeta.webViewLink
+      };
+    }
+
     // Search across Google Drive for any AkademiPanel, Canli_Kutuk, or backup files
     const query = "(name contains 'AkademiPanel' or name contains 'Canli_Kutuk' or name contains 'Kutuk' or name contains 'Okul_Yedegi' or name contains 'Tam_Yedek' or name contains 'Ogrenci') and trashed = false";
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,size,webViewLink,owners,description)&orderBy=modifiedTime desc&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,size,webViewLink,owners,description)&orderBy=modifiedTime desc&pageSize=30&supportsAllDrives=true&includeItemsFromAllDrives=true`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 

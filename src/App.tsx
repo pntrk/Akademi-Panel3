@@ -242,10 +242,19 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
             {driveStartupStatusText || (userRole === 'admin' ? 'En güncel okul kütüğü ve sınav verileri alınıyor.' : 'Sınav sonuçları ve değerlendirme verileri alınıyor.')}
           </p>
 
-          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-1.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/40">
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-1.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/40 mb-3">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
             <span>Veriler güvenle senkronize ediliyor...</span>
           </div>
+
+          {userRole === 'admin' && (
+            <button
+              onClick={() => skipDriveAndUseCloudStorage()}
+              className="text-[11px] text-[#8e8d82] hover:text-[#5a5a40] dark:text-slate-400 dark:hover:text-slate-200 underline transition-colors cursor-pointer pt-1"
+            >
+              Beklemeden yerel / bulut verileriyle devam et
+            </button>
+          )}
         </div>
       </div>
     );
