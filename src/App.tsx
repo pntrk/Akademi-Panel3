@@ -94,9 +94,87 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   }, [userRole, activeTab]);
 
-  // Açılışta canlı kütük yüklenirken veya Drive izni beklenirken yükleme ekranı
+  // 1. GUEST USER: Immediately show "Erişim İsteğiniz Alındı - Yönetici Onayı Bekleniyor" screen!
+  if (userRole === 'guest') {
+    const handleCheckStatus = async () => {
+      setIsCheckingRole(true);
+      setStatusMessage(null);
+      try {
+        const newRole = await checkAndRefreshRole();
+        if (newRole === 'guest') {
+          setStatusMessage('Yönetici tarafından henüz yetki tanımlanmadı. Lütfen yöneticinizin onaylamasını bekleyiniz.');
+        }
+      } catch (e) {
+        setStatusMessage('Yetki kontrolü sırasında bağlantı hatası oluştu. Lütfen tekrar deneyiniz.');
+      } finally {
+        setTimeout(() => setIsCheckingRole(false), 600);
+      }
+    };
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8F7F4] p-4">
+        <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl max-w-lg w-full text-center border border-[#e6e2d3] animate-fade-in relative overflow-hidden">
+          {/* Top Decorative Amber Bar */}
+          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-[#B08D57] to-amber-500"></div>
+
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-5 text-amber-600 shadow-sm">
+            <Lock className="w-8 h-8" />
+          </div>
+
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 mb-3">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+            Yönetici Onayı Bekleniyor
+          </span>
+
+          <h1 className="text-2xl font-serif font-bold text-[#5a5a40] mb-2">Erişim İsteğiniz Alındı</h1>
+          
+          <div className="my-5 p-4 bg-[#fcfbf7] rounded-2xl border border-[#e6e2d3] text-left">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#8e8d82] mb-1">Giriş Yapılan Hesap</p>
+            <p className="text-sm font-bold text-[#5a5a40] truncate">{user.displayName || 'Kullanıcı'}</p>
+            <p className="text-xs font-medium text-[#8e8d82] truncate font-mono">{user.email}</p>
+          </div>
+
+          <p className="text-[#8e8d82] text-xs leading-relaxed mb-4">
+            E-posta adresiniz sisteme başarıyla kaydedildi. Okul yöneticiniz <strong className="text-[#5a5a40]">Kullanıcı & Yetki Yönetimi</strong> panelinden hesabınıza <strong className="text-blue-700">Öğretmen</strong> veya <strong className="text-emerald-700">İdareci</strong> yetkisi tanımladığında, bu sayfa otomatik olarak açılacaktır.
+          </p>
+
+          {statusMessage && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-900 font-medium animate-fade-in">
+              {statusMessage}
+            </div>
+          )}
+
+          <div className="space-y-2.5">
+            <button
+              onClick={handleCheckStatus}
+              disabled={isCheckingRole}
+              className="w-full bg-[#B08D57] hover:bg-[#c4a46e] active:scale-[0.99] text-white py-3 px-4 rounded-xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+            >
+              {isCheckingRole ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  Yetki Durumu Kontrol Ediliyor...
+                </>
+              ) : (
+                'Onay Durumunu Yenile'
+              )}
+            </button>
+
+            <button
+              onClick={onLogout}
+              className="w-full bg-transparent hover:bg-gray-100 text-[#8e8d82] hover:text-[#5a5a40] py-2.5 px-4 rounded-xl font-semibold text-xs transition-colors cursor-pointer"
+            >
+              Farklı Bir Hesapla Giriş Yap / Çıkış
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. ADMIN / TEACHER HYDRATION: Açılışta canlı kütük yüklenirken veya Drive izni beklenirken yükleme ekranı
   if (appLoading || isInitialHydrating) {
-    if (isWaitingForDriveAuth) {
+    if (isWaitingForDriveAuth && userRole === 'admin') {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF9F5] dark:bg-[#121316] p-4 sm:p-6 text-center font-sans">
           <div className="bg-white dark:bg-[#1A1D24] p-6 sm:p-8 rounded-3xl shadow-xl border border-[#B08D57]/40 dark:border-slate-800 max-w-md w-full flex flex-col items-center animate-fade-in relative overflow-hidden">
@@ -158,92 +236,15 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
           </div>
 
           <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-white mb-1.5">
-            Canlı Okul Kütüğü Yükleniyor...
+            {userRole === 'admin' ? 'Canlı Okul Kütüğü Yükleniyor...' : 'Öğretmen Paneli Yükleniyor...'}
           </h3>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4">
-            {driveStartupStatusText || 'En güncel okul kütüğü ve sınav verileri alınıyor.'}
+            {driveStartupStatusText || (userRole === 'admin' ? 'En güncel okul kütüğü ve sınav verileri alınıyor.' : 'Sınav sonuçları ve değerlendirme verileri alınıyor.')}
           </p>
 
           <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-1.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/40">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
             <span>Veriler güvenle senkronize ediliyor...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (userRole === 'guest') {
-    const handleCheckStatus = async () => {
-      setIsCheckingRole(true);
-      setStatusMessage(null);
-      try {
-        const newRole = await checkAndRefreshRole();
-        if (newRole === 'guest') {
-          setStatusMessage('Yönetici tarafından henüz yetki tanımlanmadı. Lütfen yöneticinizin onaylamasını bekleyiniz.');
-        }
-      } catch (e) {
-        setStatusMessage('Yetki kontrolü sırasında bağlantı hatası oluştu. Lütfen tekrar deneyiniz.');
-      } finally {
-        setTimeout(() => setIsCheckingRole(false), 600);
-      }
-    };
-
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8F7F4] p-4">
-        <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl max-w-lg w-full text-center border border-[#e6e2d3] animate-fade-in relative overflow-hidden">
-          {/* Top Decorative Amber Bar */}
-          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-[#B08D57] to-amber-500"></div>
-
-          <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-5 text-amber-600 shadow-sm">
-            <Lock className="w-8 h-8" />
-          </div>
-
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 mb-3">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-            Yönetici Onayı Bekleniyor
-          </span>
-
-          <h1 className="text-2xl font-serif font-bold text-[#5a5a40] mb-2">Erişim İsteğiniz Alındı</h1>
-          
-          <div className="my-5 p-4 bg-[#fcfbf7] rounded-2xl border border-[#e6e2d3] text-left">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#8e8d82] mb-1">Giriş Yapılan Hesap</p>
-            <p className="text-sm font-bold text-[#5a5a40] truncate">{user.displayName || 'Kullanıcı'}</p>
-            <p className="text-xs font-medium text-[#8e8d82] truncate font-mono">{user.email}</p>
-          </div>
-
-          <p className="text-[#8e8d82] text-xs leading-relaxed mb-4">
-            E-posta adresiniz sisteme başarıyla kaydedildi. Okul yöneticiniz <strong className="text-[#5a5a40]">Kullanıcı Yetki Yönetimi</strong> panelinden hesabınıza <strong className="text-blue-700">Öğretmen</strong> veya <strong className="text-emerald-700">İdareci</strong> yetkisi tanımladığında, bu sayfa otomatik olarak açılacaktır.
-          </p>
-
-          {statusMessage && (
-            <div className="mb-4 p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-900 font-medium animate-fade-in">
-              {statusMessage}
-            </div>
-          )}
-
-          <div className="space-y-2.5">
-            <button
-              onClick={handleCheckStatus}
-              disabled={isCheckingRole}
-              className="w-full bg-[#B08D57] hover:bg-[#c4a46e] active:scale-[0.99] text-white py-3 px-4 rounded-xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-            >
-              {isCheckingRole ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  Yetki Durumu Kontrol Ediliyor...
-                </>
-              ) : (
-                'Onay Durumunu Yenile'
-              )}
-            </button>
-
-            <button
-              onClick={onLogout}
-              className="w-full bg-transparent hover:bg-gray-100 text-[#8e8d82] hover:text-[#5a5a40] py-2.5 px-4 rounded-xl font-semibold text-xs transition-colors cursor-pointer"
-            >
-              Farklı Bir Hesapla Giriş Yap / Çıkış
-            </button>
           </div>
         </div>
       </div>

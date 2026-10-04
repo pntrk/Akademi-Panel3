@@ -869,11 +869,18 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     const cleanUserEmail = (user?.email || '').trim().toLowerCase();
     const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
     setUserRole(initialComputedRole);
-    setLoading(true);
-    setIsInitialHydrating(true);
 
-    // 1. If Admin: FIRST and FOREMOST download the latest live master backup from Google Drive!
-    if (initialComputedRole === 'admin') {
+    // 1. If GUEST: Immediately disarm all loaders so user directly sees the "Erişim İsteğiniz Alındı" screen!
+    if (initialComputedRole === 'guest') {
+      setLoading(false);
+      setIsInitialHydrating(false);
+      setIsWaitingForDriveAuth(false);
+      isInitialCloudHydrationDoneRef.current = true;
+      setSyncStatus('synced');
+    } else if (initialComputedRole === 'admin') {
+      // 2. If ADMIN: Only Admin connects and downloads the canonical live master from Google Drive
+      setLoading(true);
+      setIsInitialHydrating(true);
       const cachedToken = getCachedAccessToken();
       if (cachedToken) {
         // Active Drive token exists -> download immediately from Google Drive!
@@ -906,14 +913,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         });
       } else {
         // No Drive token yet:
-        // DO NOT silently load an older Firebase snapshot with 66 students!
-        // Show clear 1-click Drive connect card so admin gets all 120 students.
         setIsWaitingForDriveAuth(true);
         setDriveStartupStatusText('Sınava kayıtlı 120 öğrencinin bulunduğu canlı kütüğü indirmek için Google Drive yetkilendirmesi bekleniyor.');
         setLoading(false);
       }
     } else {
-      // 2. If Teacher: Hydrate directly from Firebase Modular Storage
+      // 3. If TEACHER: NEVER touch Google Drive! Hydrate exclusively from Firebase published data
+      setLoading(true);
+      setIsInitialHydrating(true);
+      setIsWaitingForDriveAuth(false);
+      setDriveStartupStatusText('Yönetim tarafından yayınlanmış sınav ve sonuç verileri Firebase üzerinden alınıyor...');
       syncFromCloudStorage(true).finally(() => {
         isInitialCloudHydrationDoneRef.current = true;
         setIsInitialHydrating(false);
@@ -927,15 +936,43 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
     // Register or update user profile in access_requests on login so admin sees request immediately
     if (cleanUserEmail && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
-      setDoc(doc(db, 'access_requests', cleanUserEmail), {
-        email: cleanUserEmail,
-        name: user.displayName || cleanUserEmail.split('@')[0],
-        photoURL: user.photoURL || null,
-        role: initialComputedRole,
-        status: initialComputedRole === 'guest' ? 'pending' : 'approved',
-        lastLoginAt: new Date().toISOString(),
-        timestamp: new Date().toISOString()
-      }, { merge: true }).catch(() => {});
+      const userDocRef = doc(db, 'access_requests', cleanUserEmail);
+      getDoc(userDocRef).then((existingSnap) => {
+        const existingData = existingSnap.exists() ? existingSnap.data() : null;
+        const finalRole = (existingData?.role === 'admin' || existingData?.role === 'teacher')
+          ? existingData.role
+          : initialComputedRole;
+        const finalStatus = (finalRole === 'admin' || finalRole === 'teacher')
+          ? 'approved'
+          : 'pending';
+
+        if (finalRole !== initialComputedRole && (finalRole === 'admin' || finalRole === 'teacher')) {
+          setCachedAuthorizedRole(cleanUserEmail, finalRole);
+          setUserRole(finalRole);
+          if (finalRole === 'teacher') {
+            syncFromCloudStorage(true).catch(() => {});
+          }
+        }
+
+        setDoc(userDocRef, {
+          email: cleanUserEmail,
+          name: user.displayName || cleanUserEmail.split('@')[0],
+          photoURL: user.photoURL || null,
+          role: finalRole,
+          status: finalStatus,
+          lastLoginAt: new Date().toISOString(),
+          timestamp: existingData?.timestamp || new Date().toISOString()
+        }, { merge: true }).catch(() => {});
+      }).catch(() => {
+        setDoc(userDocRef, {
+          email: cleanUserEmail,
+          name: user.displayName || cleanUserEmail.split('@')[0],
+          photoURL: user.photoURL || null,
+          role: initialComputedRole,
+          status: initialComputedRole === 'guest' ? 'pending' : 'approved',
+          lastLoginAt: new Date().toISOString()
+        }, { merge: true }).catch(() => {});
+      });
     }
 
     // Real-time listener for current user's approval status in access_requests

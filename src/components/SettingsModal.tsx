@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   X, UserPlus, Shield, Users, Trash2, Clock, Check, 
   ShieldCheck, UserCheck, Search, Sparkles, RefreshCw, AlertCircle,
   Calendar, ExternalLink, Mail, User as UserIcon
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { db, auth, collection, query, onSnapshot, deleteDoc, doc, setDoc } from '../lib/firebase';
+import { db, auth, collection, query, onSnapshot, getDocs, deleteDoc, doc, setDoc } from '../lib/firebase';
 
 interface RegisteredUserRecord {
   id: string;
@@ -24,6 +24,7 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
   const { state, updateUsers, setUserAccountRole, userRole } = useAppContext();
   const [newTeacherEmail, setNewTeacherEmail] = useState('');
   const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [quickGrantEmail, setQuickGrantEmail] = useState('');
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUserRecord[]>(() => {
     try {
       const cached = localStorage.getItem(LOCAL_USERS_CACHE_KEY);
@@ -35,25 +36,94 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
   const [searchQuery, setSearchQuery] = useState('');
   const [feedback, setFeedback] = useState<{ message: string; type?: 'success' | 'info' | 'error' } | null>(null);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Real-time listener for registered users who have logged in or attempted login
-  useEffect(() => {
-    if (isOpen && userRole === 'admin') {
+  const fetchUsersDirectly = useCallback(async () => {
+    if (!isOpen || userRole !== 'admin') return;
+    setIsRefreshing(true);
+    try {
       const q = query(collection(db, 'access_requests'));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const usersList: RegisteredUserRecord[] = [];
-        snapshot.forEach(docSnap => {
-          const data = docSnap.data();
+      const snapshot = await getDocs(q);
+      const usersList: RegisteredUserRecord[] = [];
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const email = (data.email || docSnap.id).trim().toLowerCase();
+        if (email) {
           usersList.push({
             id: docSnap.id,
-            email: (data.email || docSnap.id).trim().toLowerCase(),
-            name: data.name || (data.email ? data.email.split('@')[0] : 'Kullanıcı'),
+            email,
+            name: data.name || email.split('@')[0],
             photoURL: data.photoURL || null,
             role: data.role,
             status: data.status,
             lastLoginAt: data.lastLoginAt || data.timestamp,
             timestamp: data.timestamp || data.lastLoginAt
           });
+        }
+      });
+
+      // Merge with state.teachers & state.admins so everyone is accounted for
+      const currentAdmins = (state.admins || []).map(a => (a || '').trim().toLowerCase());
+      const currentTeachers = (state.teachers || []).map(t => (t || '').trim().toLowerCase());
+
+      currentTeachers.forEach(tEmail => {
+        if (tEmail && !usersList.some(u => u.email === tEmail)) {
+          usersList.push({
+            id: tEmail,
+            email: tEmail,
+            name: tEmail.split('@')[0],
+            role: 'teacher',
+            status: 'approved'
+          });
+        }
+      });
+
+      currentAdmins.forEach(aEmail => {
+        if (aEmail && !usersList.some(u => u.email === aEmail)) {
+          usersList.push({
+            id: aEmail,
+            email: aEmail,
+            name: aEmail.split('@')[0],
+            role: 'admin',
+            status: 'approved'
+          });
+        }
+      });
+
+      setRegisteredUsers(usersList);
+      try {
+        localStorage.setItem(LOCAL_USERS_CACHE_KEY, JSON.stringify(usersList));
+      } catch {}
+    } catch (err: any) {
+      console.warn("Direct fetch access_requests notice:", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isOpen, userRole, state.admins, state.teachers]);
+
+  // Real-time listener for registered users who have logged in or attempted login
+  useEffect(() => {
+    if (isOpen && userRole === 'admin') {
+      fetchUsersDirectly();
+
+      const q = query(collection(db, 'access_requests'));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const usersList: RegisteredUserRecord[] = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          const email = (data.email || docSnap.id).trim().toLowerCase();
+          if (email) {
+            usersList.push({
+              id: docSnap.id,
+              email,
+              name: data.name || email.split('@')[0],
+              photoURL: data.photoURL || null,
+              role: data.role,
+              status: data.status,
+              lastLoginAt: data.lastLoginAt || data.timestamp,
+              timestamp: data.timestamp || data.lastLoginAt
+            });
+          }
         });
 
         // Merge with existing cached items
@@ -74,7 +144,7 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
       });
       return () => unsubscribe();
     }
-  }, [isOpen, userRole]);
+  }, [isOpen, userRole, fetchUsersDirectly]);
 
   if (!isOpen || userRole !== 'admin') return null;
 
@@ -242,21 +312,31 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 <h2 className="text-base sm:text-xl font-serif font-bold text-[#5a5a40] truncate">Kullanıcı & Yetki Yönetimi</h2>
                 {pendingUsers.length > 0 && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse shrink-0">
-                    {pendingUsers.length} Bekleyen
+                    {pendingUsers.length} Onay Bekleyen
                   </span>
                 )}
               </div>
               <p className="text-[10.5px] sm:text-xs text-[#8e8d82] mt-0.5 truncate sm:whitespace-normal">
-                Kayıtlı üyeleri görüntüleyin, tek tıkla Öğretmen veya İdareci yetkisi tanımlayın.
+                Giriş yapmış öğretmenleri anında onaylayın veya e-posta ile ön yetkilendirin.
               </p>
             </div>
           </div>
-          <button 
-            onClick={onClose} 
-            className="p-1.5 sm:p-2 text-[#8e8d82] hover:bg-[#e6e2d3] hover:text-[#5a5a40] rounded-full transition-colors cursor-pointer active:scale-95 shrink-0"
-          >
-            <X className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={fetchUsersDirectly}
+              disabled={isRefreshing}
+              title="İstek Listesini Yenile"
+              className="p-1.5 sm:p-2 text-emerald-700 hover:bg-emerald-50 rounded-full transition-colors cursor-pointer active:scale-95 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button 
+              onClick={onClose} 
+              className="p-1.5 sm:p-2 text-[#8e8d82] hover:bg-[#e6e2d3] hover:text-[#5a5a40] rounded-full transition-colors cursor-pointer active:scale-95 shrink-0"
+            >
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Feedback Toast */}
@@ -310,17 +390,61 @@ export const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
                   <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-xs sm:text-sm font-bold text-amber-950 uppercase tracking-wider">
-                    Giriş Yapmış Yeni Kullanıcılar (Onay Bekleyenler)
+                  <h3 className="text-xs sm:text-sm font-bold text-amber-950 uppercase tracking-wider flex items-center gap-2">
+                    <span>Giriş Yapmış Yeni Kullanıcılar (Onay Bekleyenler)</span>
                   </h3>
                   <p className="text-[10.5px] sm:text-xs text-amber-900/80">
-                    Google ile kaydolan kullanıcılar. Tek tıkla yetkilendirin.
+                    Google ile giriş yapan kullanıcılar buraya düşer. Tek tıkla onaylayabilirsiniz.
                   </p>
                 </div>
               </div>
-              <span className="px-2.5 py-0.5 rounded-full text-[10.5px] sm:text-xs font-bold bg-amber-200 text-amber-900 shadow-2xs shrink-0 self-start sm:self-auto">
-                {pendingUsers.length} Hesap
-              </span>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  onClick={fetchUsersDirectly}
+                  disabled={isRefreshing}
+                  className="px-2.5 py-1 bg-amber-200/80 hover:bg-amber-300 text-amber-900 rounded-lg text-[10.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <span>Yenile</span>
+                </button>
+                <span className="px-2.5 py-0.5 rounded-full text-[10.5px] sm:text-xs font-bold bg-amber-200 text-amber-900 shadow-2xs shrink-0">
+                  {pendingUsers.length} Hesap
+                </span>
+              </div>
+            </div>
+
+            {/* Quick One-Click Grant Bar for any email */}
+            <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200/80 flex flex-col sm:flex-row items-center gap-2">
+              <div className="relative flex-1 w-full">
+                <Mail className="w-3.5 h-3.5 text-amber-700 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  placeholder="Kullanıcı e-postası ile anında yetki ver (Örn: kumcu3989@gmail.com)"
+                  value={quickGrantEmail}
+                  onChange={(e) => setQuickGrantEmail(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-amber-50/50 border border-amber-200 rounded-lg text-xs focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  disabled={!quickGrantEmail.trim() || !!isProcessing}
+                  onClick={() => handleGrantRole(quickGrantEmail, 'teacher')}
+                  className="flex-1 sm:flex-initial px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1 disabled:opacity-40 cursor-pointer"
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Öğretmen Yap</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!quickGrantEmail.trim() || !!isProcessing}
+                  onClick={() => handleGrantRole(quickGrantEmail, 'admin')}
+                  className="flex-1 sm:flex-initial px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1 disabled:opacity-40 cursor-pointer"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>İdareci Yap</span>
+                </button>
+              </div>
             </div>
 
             {filteredPending.length > 0 ? (

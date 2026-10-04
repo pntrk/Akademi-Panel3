@@ -100,11 +100,8 @@ service cloud.firestore {
 
     // Access Requests & User Registrations
     match /access_requests/{requestId} {
-      allow get: if isSchoolAdmin() || (isSignedIn() && userEmail() == requestId.lower());
-      allow list: if isSchoolAdmin();
-      allow create: if isSignedIn() && (userEmail() == requestId.lower() || isSchoolAdmin());
-      allow update: if isSchoolAdmin() || (isSignedIn() && userEmail() == requestId.lower());
-      allow delete: if isSchoolAdmin() || isSuperAdmin();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
     }
   }
 }
