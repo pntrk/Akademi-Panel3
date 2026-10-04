@@ -19,6 +19,7 @@ import {
   deleteBackupFromGoogleDrive,
   LIVE_MASTER_FILE_NAME,
   getLiveMasterFileId,
+  setLiveMasterFileId,
   getLiveMasterFileLink,
   getDriveFileMetadata,
   lockToCanonicalDriveFile
@@ -47,12 +48,16 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     deleteCloudBackup, 
     syncFromCloudStorage,
     saveNow,
-    restoreBackup
+    restoreBackup,
+    downloadLatestFromDrive,
+    lastDataSource,
+    activeMasterFileName
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<'sync' | 'archive'>('sync');
   const [isPublishingToTeachers, setIsPublishingToTeachers] = useState(false);
   const [isPullingData, setIsPullingData] = useState(false);
+  const [isPullingFromDrive, setIsPullingFromDrive] = useState(false);
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshotNote, setSnapshotNote] = useState('');
@@ -75,6 +80,10 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
   const isAdmin = userRole === 'admin';
   const currentUser = auth.currentUser;
   const currentEmail = (currentUser?.email || 'admin@okul.gov.tr').toLowerCase();
+
+  const [driveFilesList, setDriveFilesList] = useState<DriveBackupItem[]>([]);
+  const [isLoadingDriveFiles, setIsLoadingDriveFiles] = useState(false);
+  const [driveFileActionLoadingId, setDriveFileActionLoadingId] = useState<string | null>(null);
 
   const [liveDriveMeta, setLiveDriveMeta] = useState<{
     modifiedTime?: string;
@@ -131,6 +140,36 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
       }
     } finally {
       setIsConnectingDrive(false);
+    }
+  };
+
+  // 0. ADMIN ACTION: Pull latest master directly from Google Drive
+  const handlePullFromDrive = async () => {
+    setIsPullingFromDrive(true);
+    setFeedback(null);
+    try {
+      if (!isDriveConnected) {
+        await handleConnectDrive();
+      }
+      const res = await downloadLatestFromDrive();
+      if (res.success) {
+        const id = getLiveMasterFileId();
+        if (id) {
+          setCanonicalFileId(id);
+          const link = getLiveMasterFileLink() || `https://drive.google.com/file/d/${id}/view`;
+          setCanonicalFileLink(link);
+        }
+        setFeedback({
+          type: 'success',
+          message: `Google Drive üzerindeki "${res.fileName}" dosyası başarıyla indirildi. Sistemde ${res.studentCount} öğrenci ve ${res.examCount} sınav eksiksiz yüklendi ve Firebase'e eşitlendi!`
+        });
+      } else {
+        setFeedback({ type: 'error', message: res.error || 'Google Drive üzerinden dosya indirilemedi.' });
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: e?.message || 'Drive indirme hatası oluştu.' });
+    } finally {
+      setIsPullingFromDrive(false);
     }
   };
 
@@ -210,6 +249,52 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     navigator.clipboard.writeText(canonicalFileLink);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const handleLoadDriveFiles = async () => {
+    setIsLoadingDriveFiles(true);
+    setFeedback(null);
+    try {
+      if (!isDriveConnected) {
+        await handleConnectDrive();
+      }
+      const files = await listBackupsFromGoogleDrive();
+      setDriveFilesList(files);
+      if (files.length === 0) {
+        setFeedback({ type: 'error', message: 'Google Drive üzerinde "AkademiPanel" veya "Canli_Kutuk" dosyası bulunamadı.' });
+      } else {
+        setFeedback({ type: 'success', message: `Google Drive üzerinde ${files.length} kütük/yedek dosyası listelendi.` });
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: e?.message || 'Drive dosyaları listelenirken hata oluştu.' });
+    } finally {
+      setIsLoadingDriveFiles(false);
+    }
+  };
+
+  const handleRestoreFromDriveFile = async (item: DriveBackupItem) => {
+    setDriveFileActionLoadingId(item.id);
+    setFeedback(null);
+    try {
+      const rawData = await downloadBackupFromGoogleDrive(item.id);
+      const res = await restoreBackup(rawData);
+      if (res.success) {
+        setLiveMasterFileId(item.id, item.webViewLink);
+        setCanonicalFileId(item.id);
+        if (item.webViewLink) setCanonicalFileLink(item.webViewLink);
+        await saveCanonicalDriveFileToFirestore(item.id, item.webViewLink);
+        setFeedback({
+          type: 'success',
+          message: `"${item.name}" dosyası başarıyla indirildi ve sistem kütüğü olarak yüklendi! (${res.summary?.studentCount ?? 'tüm'} öğrenci)`
+        });
+      } else {
+        setFeedback({ type: 'error', message: res.message || 'Dosya geri yüklenemedi.' });
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: e?.message || 'Drive dosyasından geri yükleme başarısız.' });
+    } finally {
+      setDriveFileActionLoadingId(null);
+    }
   };
 
   // 3. ADMIN ACTION: Publish to Teachers (Firebase)
@@ -554,6 +639,9 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                         }`}>
                           {isDriveConnected ? '✓ Drive Bağlı' : 'Bağlantı Bekleniyor'}
                         </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100/90 text-emerald-900 border border-emerald-300">
+                          Kaynak: {lastDataSource === 'drive' ? 'Google Drive (Canlı Kütük)' : lastDataSource === 'firebase' ? 'Firebase Bulut' : 'Cihaz Hafızası'}
+                        </span>
                       </div>
                       <p className="text-[11px] text-emerald-800 mt-1 leading-relaxed">
                         Tüm idareciler <strong>tek bir ortak dosya</strong> üzerinden 30 saniyede bir otomatik eşitlenir. Çift başlılık önlenir. <strong>Firebase kotası tüketmez.</strong>
@@ -561,7 +649,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                     </div>
                   </div>
 
-                  <div className="w-full sm:w-auto flex items-center gap-2 shrink-0">
+                  <div className="w-full sm:w-auto flex flex-wrap items-center gap-2 shrink-0">
                     {!isDriveConnected ? (
                       <button
                         onClick={handleConnectDrive}
@@ -572,14 +660,27 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                         <span>{isConnectingDrive ? 'Bağlanıyor...' : 'Drive\'a Bağlan'}</span>
                       </button>
                     ) : (
-                      <button
-                        onClick={handleManualDriveSync}
-                        disabled={isDriveAutoSyncing}
-                        className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isDriveAutoSyncing ? 'animate-spin' : ''}`} />
-                        <span>{isDriveAutoSyncing ? 'Drive Eşitleniyor...' : 'Şimdi Drive\'a Eşitle'}</span>
-                      </button>
+                      <>
+                        <button
+                          onClick={handlePullFromDrive}
+                          disabled={isPullingFromDrive || isDriveAutoSyncing}
+                          className="w-full sm:w-auto px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                          title="Google Drive'daki en son 120 kişilik kütüğü hemen indir"
+                        >
+                          <Download className={`w-3.5 h-3.5 ${isPullingFromDrive ? 'animate-bounce' : ''}`} />
+                          <span>{isPullingFromDrive ? 'Drive\'dan İndiriliyor...' : 'Drive\'dan Canlı Kütüğü İndir'}</span>
+                        </button>
+
+                        <button
+                          onClick={handleManualDriveSync}
+                          disabled={isDriveAutoSyncing || isPullingFromDrive}
+                          className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                          title="Mevcut kütüğü Drive'a kaydet"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isDriveAutoSyncing ? 'animate-spin' : ''}`} />
+                          <span>{isDriveAutoSyncing ? 'Drive Eşitleniyor...' : 'Şimdi Drive\'a Eşitle'}</span>
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -813,6 +914,17 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                     <span>Mevcut Kütüğü İndir</span>
                   </button>
 
+                  {/* Google Drive Scan & List Button */}
+                  <button
+                    onClick={handleLoadDriveFiles}
+                    disabled={isLoadingDriveFiles}
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl border border-emerald-300 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    title="Google Drive üzerindeki kütük ve yedek dosyalarını tara"
+                  >
+                    <FolderCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>{isLoadingDriveFiles ? 'Drive Taranıyor...' : 'Drive Yedeklerini Listele'}</span>
+                  </button>
+
                   {/* Create Snapshot Button */}
                   <button
                     onClick={() => setShowCreateForm(prev => !prev)}
@@ -823,6 +935,68 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                   </button>
                 </div>
               </div>
+
+              {/* Google Drive Found Files Section */}
+              {driveFilesList.length > 0 && (
+                <div className="p-4 bg-emerald-50/70 border border-emerald-300 rounded-2xl space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <FolderCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <h4 className="font-bold text-xs text-emerald-950 font-serif">
+                        Google Drive Üzerindeki Kütük & Yedek Dosyaları ({driveFilesList.length})
+                      </h4>
+                    </div>
+                    <button
+                      onClick={() => setDriveFilesList([])}
+                      className="text-[11px] text-emerald-800 hover:text-emerald-950 font-bold cursor-pointer underline"
+                    >
+                      Kapat
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {driveFilesList.map((file) => {
+                      const isBusy = driveFileActionLoadingId === file.id;
+                      return (
+                        <div 
+                          key={file.id}
+                          className="p-2.5 bg-white rounded-xl border border-emerald-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <span className="font-bold text-emerald-950 truncate block">{file.name}</span>
+                            <span className="text-[10px] text-emerald-700 block">
+                              Değiştirilme: {file.modifiedTime ? formatDate(file.modifiedTime) : formatDate(file.createdTime)} {file.size ? `• ${(Number(file.size) / 1024).toFixed(1)} KB` : ''}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                            {file.webViewLink && (
+                              <a
+                                href={file.webViewLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[11px] font-semibold border border-emerald-200 flex items-center gap-1"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span>Aç</span>
+                              </a>
+                            )}
+                            <button
+                              onClick={() => handleRestoreFromDriveFile(file)}
+                              disabled={isBusy}
+                              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50 active:scale-95"
+                              title="Bu dosyayı indirip aktif kütük olarak sisteme yükle"
+                            >
+                              <Download className={`w-3 h-3 ${isBusy ? 'animate-bounce' : ''}`} />
+                              <span>{isBusy ? 'Yükleniyor...' : 'Kütük Olarak Yükle'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Create Snapshot Form */}
               {showCreateForm && (

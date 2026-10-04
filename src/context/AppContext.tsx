@@ -78,6 +78,9 @@ interface AppContextType {
   driveStartupStatusText: string;
   connectDriveAndHydrateOnStartup: () => Promise<boolean>;
   skipDriveAndUseCloudStorage: () => Promise<void>;
+  downloadLatestFromDrive: () => Promise<{ success: boolean; studentCount?: number; examCount?: number; fileName?: string; error?: string }>;
+  lastDataSource: 'drive' | 'firebase' | 'local';
+  activeMasterFileName?: string | null;
   syncStatus: 'synced' | 'saving' | 'quota_exceeded' | 'offline' | 'error' | 'pending_publish';
   syncErrorMessage?: string | null;
   pendingSyncCount: number;
@@ -454,6 +457,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   });
   const [isDriveAutoSyncing, setIsDriveAutoSyncing] = useState<boolean>(false);
+  const [lastDataSource, setLastDataSource] = useState<'drive' | 'firebase' | 'local'>('local');
+  const [activeMasterFileName, setActiveMasterFileName] = useState<string | null>(null);
   const driveSyncTimerRef = useRef<any>(null);
   const lastKnownDriveModifiedTimeRef = useRef<string | null>(null);
   const [cloudBackups, setCloudBackups] = useState<CloudBackupRecord[]>([]);
@@ -648,19 +653,29 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         return false;
       }
 
+      setDriveStartupStatusText('Google Drive üzerindeki kütük dosyaları taranıyor...');
       const file = await findLiveMasterDriveFile(token);
       if (!file?.id) {
         console.warn('Google Drive açılış kontrolü: Canlı kütük dosyası bulunamadı.');
         return false;
       }
 
+      const fileName = file.name || LIVE_MASTER_FILE_NAME;
+      setActiveMasterFileName(fileName);
+      setDriveStartupStatusText(`"${fileName}" Google Drive üzerinden indiriliyor...`);
+
       const rawData = await downloadBackupFromGoogleDrive(file.id);
       if (rawData) {
         const targetData = rawData.data || rawData;
         if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget || targetData.admins)) {
           const safeData = sanitizeSchoolState(targetData);
+          const studentCount = safeData.students?.length || 0;
+          const examCount = safeData.exams?.length || 0;
+
           setState(safeData);
           stateRef.current = safeData;
+          setLastDataSource('drive');
+
           try {
             localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
             lastSavedPayloadRef.current = JSON.stringify(safeData);
@@ -678,6 +693,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           hasUnsavedLocalEditsRef.current = false;
           setHasPendingChanges(false);
           setPendingSyncCount(0);
+
+          // CRITICAL: Synchronize fresh Google Drive data to Firebase Firestore
+          // Prevents Firebase from staying stuck on old state (e.g. 66 students)
+          if (firebaseConfig.projectId) {
+            writeModularSchoolState(db, safeData, {}, 'main').catch(err => {
+              console.warn('Background sync to Firebase after Drive hydration notice:', err);
+            });
+          }
+
+          setDriveStartupStatusText(`Google Drive kütüğü başarıyla yüklendi: ${studentCount} Öğrenci, ${examCount} Sınav.`);
           return true;
         }
       }
@@ -685,6 +710,72 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     } catch (e) {
       console.warn('Google Drive startup sync notice:', e);
       return false;
+    }
+  };
+
+  const downloadLatestFromDrive = async (): Promise<{ success: boolean; studentCount?: number; examCount?: number; fileName?: string; error?: string }> => {
+    try {
+      let token = getCachedAccessToken();
+      if (!token) {
+        token = await connectGoogleDrive(false, true);
+      }
+      if (!token) {
+        return { success: false, error: 'Google Drive oturumu açılamadı. Lütfen giriş yapın.' };
+      }
+
+      const file = await findLiveMasterDriveFile(token);
+      if (!file?.id) {
+        return { success: false, error: 'Google Drive üzerinde geçerli bir kütük dosyası bulunamadı.' };
+      }
+
+      const rawData = await downloadBackupFromGoogleDrive(file.id);
+      const targetData = rawData.data || rawData;
+      if (!targetData || (!Array.isArray(targetData.students) && !Array.isArray(targetData.exams))) {
+        return { success: false, error: 'İndirilen dosya geçerli okul verisi içermiyor.' };
+      }
+
+      const safeData = sanitizeSchoolState(targetData);
+      const studentCount = safeData.students?.length || 0;
+      const examCount = safeData.exams?.length || 0;
+      const fileName = file.name || LIVE_MASTER_FILE_NAME;
+
+      setState(safeData);
+      stateRef.current = safeData;
+      setLastDataSource('drive');
+      setActiveMasterFileName(fileName);
+
+      try {
+        localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+        lastSavedPayloadRef.current = JSON.stringify(safeData);
+      } catch (e) {}
+
+      if (file.modifiedTime) {
+        const formatted = new Date(file.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        setLastDriveSyncedAt(formatted);
+        lastKnownDriveModifiedTimeRef.current = file.modifiedTime;
+        try {
+          localStorage.setItem('akademi_last_drive_sync_time', formatted);
+        } catch {}
+      }
+
+      // Automatically sync downloaded state to Firebase
+      if (firebaseConfig.projectId) {
+        writeModularSchoolState(db, safeData, {}, 'main').catch(() => {});
+      }
+
+      hasUnsavedLocalEditsRef.current = false;
+      setHasPendingChanges(false);
+      setPendingSyncCount(0);
+
+      return {
+        success: true,
+        studentCount,
+        examCount,
+        fileName
+      };
+    } catch (err: any) {
+      console.warn('Manual download from drive error:', err);
+      return { success: false, error: err?.message || 'Google Drive indirme işlemi başarısız oldu.' };
     }
   };
 
@@ -784,7 +875,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       const cachedToken = getCachedAccessToken();
       if (cachedToken) {
         // Active Drive token exists -> download immediately from Google Drive!
-        setDriveStartupStatusText('Google Drive üzerindeki en güncel canlı okul kütüğü indiriliyor...');
+        setDriveStartupStatusText('Google Drive üzerindeki en güncel canlı okul kütüğü taranıyor ve indiriliyor...');
         syncFromGoogleDriveOnStartup().then((syncedFromDrive) => {
           if (syncedFromDrive) {
             isInitialCloudHydrationDoneRef.current = true;
@@ -812,15 +903,12 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           });
         });
       } else {
-        // No Drive token yet: DO NOT block or prompt the user with scary popups on launch!
-        // Immediately hydrate from Firebase Cloud Storage (instant, 100% automated, zero permission prompts)
-        syncFromCloudStorage(true).finally(() => {
-          isInitialCloudHydrationDoneRef.current = true;
-          setIsInitialHydrating(false);
-          setLoading(false);
-          setSyncStatus('synced');
-          setSyncErrorMessage(null);
-        });
+        // No Drive token yet:
+        // DO NOT silently load an older Firebase snapshot with 66 students!
+        // Show clear 1-click Drive connect card so admin gets all 120 students.
+        setIsWaitingForDriveAuth(true);
+        setDriveStartupStatusText('Sınava kayıtlı 120 öğrencinin bulunduğu canlı kütüğü indirmek için Google Drive yetkilendirmesi bekleniyor.');
+        setLoading(false);
       }
     } else {
       // 2. If Teacher: Hydrate directly from Firebase Modular Storage
@@ -899,6 +987,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         const safeData = sanitizeSchoolState(remoteData);
         setState(safeData);
         stateRef.current = safeData;
+        setLastDataSource('firebase');
         try {
           localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
           lastSavedPayloadRef.current = JSON.stringify(safeData);
@@ -2164,6 +2253,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       driveStartupStatusText,
       connectDriveAndHydrateOnStartup,
       skipDriveAndUseCloudStorage,
+      downloadLatestFromDrive,
+      lastDataSource,
+      activeMasterFileName,
       syncStatus, 
       syncErrorMessage, 
       pendingSyncCount,

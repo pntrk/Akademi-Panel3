@@ -4,6 +4,7 @@ export interface DriveBackupItem {
   id: string;
   name: string;
   createdTime: string;
+  modifiedTime?: string;
   size?: string;
   webViewLink?: string;
   owners?: { displayName?: string; emailAddress?: string }[];
@@ -86,8 +87,8 @@ export const uploadBackupToGoogleDrive = async (
 export const listBackupsFromGoogleDrive = async (): Promise<DriveBackupItem[]> => {
   try {
     const token = await ensureDriveAccessToken();
-    const query = "name contains 'AkademiPanel' and trashed = false";
-    const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,createdTime,size,webViewLink,owners)&orderBy=createdTime desc&pageSize=30&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+    const query = "(name contains 'AkademiPanel' or name contains 'Canli_Kutuk') and trashed = false";
+    const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,createdTime,modifiedTime,size,webViewLink,owners)&orderBy=modifiedTime desc&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`;
 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` }
@@ -356,41 +357,85 @@ export const lockToCanonicalDriveFile = async (
   }
 };
 
+export interface LiveMasterFileInfo {
+  id: string;
+  name?: string;
+  modifiedTime?: string;
+  webViewLink?: string;
+  size?: string;
+}
+
 /**
  * Finds the canonical live master file.
- * Prioritizes the locked canonical ID; if missing, searches shared & owned files across Google Drive.
+ * Checks candidate files across Google Drive, compares modified times, and ensures
+ * the latest updated backup (e.g. 120 students) is prioritized over older stale files.
  */
-export const findLiveMasterDriveFile = async (token: string): Promise<{ id: string; modifiedTime?: string; webViewLink?: string } | null> => {
+export const findLiveMasterDriveFile = async (
+  token: string,
+  preferredId?: string | null
+): Promise<LiveMasterFileInfo | null> => {
   try {
-    // 1. Check known canonical File ID (Primary Lock)
-    const knownId = getLiveMasterFileId();
+    const knownId = preferredId || getLiveMasterFileId();
+    let knownMeta: any = null;
     if (knownId) {
-      const meta = await getDriveFileMetadata(knownId, token);
-      if (meta && !meta.trashed) {
-        if (meta.webViewLink) setLiveMasterFileId(meta.id, meta.webViewLink);
-        return { id: meta.id, modifiedTime: meta.modifiedTime, webViewLink: meta.webViewLink };
+      knownMeta = await getDriveFileMetadata(knownId, token);
+    }
+
+    // Search across Google Drive for any AkademiPanel or Canli_Kutuk files
+    const query = "(name contains 'AkademiPanel' or name contains 'Canli_Kutuk') and trashed = false";
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,size,webViewLink,owners,description)&orderBy=modifiedTime desc&pageSize=25&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    let candidateFiles: any[] = [];
+    if (res.ok) {
+      const data = await res.json();
+      candidateFiles = data.files || [];
+    }
+
+    // If knownId exists and is valid
+    if (knownMeta && !knownMeta.trashed) {
+      const knownTime = knownMeta.modifiedTime ? new Date(knownMeta.modifiedTime).getTime() : 0;
+      // Check if another candidate file is substantially newer (more than 1 minute newer)
+      const newerCandidate = candidateFiles.find(f => {
+        if (f.id === knownMeta.id) return false;
+        const candidateTime = f.modifiedTime ? new Date(f.modifiedTime).getTime() : 0;
+        return candidateTime > knownTime + 60000;
+      });
+
+      if (!newerCandidate) {
+        if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink);
+        return {
+          id: knownMeta.id,
+          name: knownMeta.name || LIVE_MASTER_FILE_NAME,
+          modifiedTime: knownMeta.modifiedTime,
+          webViewLink: knownMeta.webViewLink
+        };
+      } else {
+        const webLink = newerCandidate.webViewLink || `https://drive.google.com/file/d/${newerCandidate.id}/view`;
+        setLiveMasterFileId(newerCandidate.id, webLink);
+        return {
+          id: newerCandidate.id,
+          name: newerCandidate.name,
+          modifiedTime: newerCandidate.modifiedTime,
+          webViewLink: webLink
+        };
       }
     }
 
-    // 2. Search owned or shared files across all drives
-    const queries = [
-      `(name = '${LIVE_MASTER_FILE_NAME}' or name contains 'AkademiPanel_Canli_Kutuk') and trashed = false`,
-      `sharedWithMe = true and (name contains 'AkademiPanel_Canli_Kutuk' or name contains 'Canli_Kutuk') and trashed = false`,
-      `name contains 'AkademiPanel' and trashed = false`
-    ];
-
-    for (const q of queries) {
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime,webViewLink,owners)&orderBy=modifiedTime desc&pageSize=1&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.files && data.files.length > 0) {
-          const found = data.files[0];
-          setLiveMasterFileId(found.id, found.webViewLink);
-          return { id: found.id, modifiedTime: found.modifiedTime, webViewLink: found.webViewLink };
-        }
-      }
+    // If no valid knownId, choose the most recently modified candidate
+    if (candidateFiles.length > 0) {
+      const liveMasterMatch = candidateFiles.find(f => f.name === LIVE_MASTER_FILE_NAME);
+      const chosen = liveMasterMatch || candidateFiles[0];
+      const webLink = chosen.webViewLink || `https://drive.google.com/file/d/${chosen.id}/view`;
+      setLiveMasterFileId(chosen.id, webLink);
+      return {
+        id: chosen.id,
+        name: chosen.name,
+        modifiedTime: chosen.modifiedTime,
+        webViewLink: webLink
+      };
     }
   } catch (e) {
     console.warn('Find live master file notice:', e);
@@ -531,7 +576,7 @@ export const syncLiveMasterToGoogleDrive = async (
  */
 export const fetchLiveMasterFromGoogleDriveIfNewer = async (
   lastKnownModifiedTime?: string | null
-): Promise<{ hasUpdate: boolean; data?: any; modifiedTime?: string; syncedBy?: string }> => {
+): Promise<{ hasUpdate: boolean; data?: any; modifiedTime?: string; syncedBy?: string; fileName?: string; studentCount?: number }> => {
   try {
     const token = await ensureDriveAccessToken();
     const existing = await findLiveMasterDriveFile(token);
@@ -556,7 +601,9 @@ export const fetchLiveMasterFromGoogleDriveIfNewer = async (
       hasUpdate: true,
       data: targetState,
       modifiedTime: existing.modifiedTime,
-      syncedBy: rawData.syncedBy
+      syncedBy: rawData.syncedBy,
+      fileName: existing.name,
+      studentCount: targetState?.students?.length || 0
     };
   } catch (e) {
     return { hasUpdate: false };
