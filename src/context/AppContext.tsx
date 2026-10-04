@@ -1771,51 +1771,66 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   };
 
   const restoreBackup = async (rawBackup: any): Promise<{ success: boolean; message: string; summary?: any }> => {
-    if (userRole !== 'admin') {
+    const cleanUserEmail = (user?.email || '').trim().toLowerCase();
+    const isAdminUser = userRole === 'admin' || cleanUserEmail === 'bahadirkumcu@gmail.com' || cleanUserEmail === 'kirklareliataturkortaokulu@gmail.com';
+    if (!isAdminUser) {
       return { success: false, message: 'Yedek yükleme işlemi yalnızca yetkili yöneticiler tarafından gerçekleştirilebilir.' };
     }
 
-    if (!rawBackup || typeof rawBackup !== 'object') {
+    if (!rawBackup) {
       return { success: false, message: 'Geçersiz yedek dosyası formatı.' };
     }
 
-    // Support nested payload if wrapped under .data or .appState
-    const source = (rawBackup.students || rawBackup.exams || rawBackup.results || rawBackup.budget || rawBackup.examHalls)
-      ? rawBackup
-      : (rawBackup.data || rawBackup.appState || rawBackup);
+    // Support direct array of students or nested payloads (.data, .appState, .modules, or Turkish keys)
+    let source: any = rawBackup;
+    if (Array.isArray(rawBackup)) {
+      source = { students: rawBackup };
+    } else if (rawBackup.data && (Array.isArray(rawBackup.data) || typeof rawBackup.data === 'object')) {
+      source = Array.isArray(rawBackup.data) ? { students: rawBackup.data } : rawBackup.data;
+    } else if (rawBackup.appState && typeof rawBackup.appState === 'object') {
+      source = rawBackup.appState;
+    } else if (rawBackup.modules && typeof rawBackup.modules === 'object') {
+      source = rawBackup.modules;
+    }
+
+    const rawStudents = source.students || source.ogrenciler || source.studentList || source.ogrenciListesi || [];
+    const rawExams = source.exams || source.sinavlar || source.examList || [];
+    const rawResults = source.results || source.sonuclar || source.resultList || [];
+    const rawHalls = source.examHalls || source.halls || source.salonlar || [];
+    const rawBudget = source.budget || source.butce || {};
 
     const hasRecognizableData = 
-      Array.isArray(source.students) || 
-      Array.isArray(source.exams) || 
-      Array.isArray(source.results) || 
-      Array.isArray(source.examHalls) || 
-      (source.budget && typeof source.budget === 'object');
+      (Array.isArray(rawStudents) && rawStudents.length > 0) || 
+      (Array.isArray(rawExams) && rawExams.length > 0) || 
+      (Array.isArray(rawResults) && rawResults.length > 0) || 
+      (Array.isArray(rawHalls) && rawHalls.length > 0) || 
+      (rawBudget && typeof rawBudget === 'object' && (rawBudget.incomes || rawBudget.expenses));
 
     if (!hasRecognizableData) {
       return { success: false, message: 'Yedek dosyasında geçerli okul verisi (öğrenci, sınav, salon veya bütçe) bulunamadı.' };
     }
 
     // 1. Sanitize students
-    const cleanStudents: Student[] = Array.isArray(source.students)
-      ? source.students.map((s: any) => ({
+    const cleanStudents: Student[] = Array.isArray(rawStudents)
+      ? rawStudents.map((s: any) => ({
           id: s.id || generateId(),
-          no: Number(s.no) || 0,
-          name: String(s.name || '').trim(),
-          className: String(s.className || '').trim(),
+          no: Number(s.no || s.numara || s.studentNo) || 0,
+          name: String(s.name || s.adSoyad || s.ad || '').trim(),
+          className: String(s.className || s.sinif || s.classStr || '').trim(),
           examRegistrations: Array.isArray(s.examRegistrations) ? s.examRegistrations : [],
-          leagueTeam: s.leagueTeam || 'Atanmadı',
-          leaguePoints: Number(s.leaguePoints) || 0,
+          leagueTeam: s.leagueTeam || s.takim || 'Atanmadı',
+          leaguePoints: Number(s.leaguePoints || s.puan) || 0,
           badges: s.badges || undefined,
           lastTransfer: s.lastTransfer || undefined,
-          classStr: s.classStr || undefined,
-          sectionStr: s.sectionStr || undefined,
-          booklet: s.booklet || undefined
+          classStr: s.classStr || s.className || undefined,
+          sectionStr: s.sectionStr || s.sube || undefined,
+          booklet: s.booklet || s.kitapcik || undefined
         }))
-      : [];
+      : (stateRef.current.students || []);
 
     // 2. Sanitize exams
-    const cleanExams: Exam[] = Array.isArray(source.exams)
-      ? source.exams.map((e: any) => {
+    const cleanExams: Exam[] = Array.isArray(rawExams)
+      ? rawExams.map((e: any) => {
           let resolvedExamType: 'publisher' | 'internal' = 'publisher';
           if (e.examType === 'internal' || e.examType === 'kurum_ici' || e.examType === 'okul_ici') {
             resolvedExamType = 'internal';
@@ -1828,9 +1843,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           return {
             id: String(e.id || generateId()),
             no: Number(e.no) || 0,
-            date: String(e.date || ''),
-            name: String(e.name || '').trim(),
-            participantCount: Number(e.participantCount) || 0,
+            date: String(e.date || e.tarih || ''),
+            name: String(e.name || e.ad || '').trim(),
+            participantCount: Number(e.participantCount || e.katilimciSayisi) || 0,
             examType: resolvedExamType,
             publisher: e.publisher ? String(e.publisher) : (resolvedExamType === 'internal' ? 'Kurum İçi' : undefined),
             publisherFee: e.publisherFee !== undefined ? Number(e.publisherFee) : undefined,
@@ -1851,11 +1866,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             results: Array.isArray(e.results) ? e.results : undefined
           };
         })
-      : [];
+      : (stateRef.current.exams || []);
 
     // 3. Sanitize results
-    const cleanResults: ExamResult[] = Array.isArray(source.results)
-      ? source.results.map((r: any) => ({
+    const cleanResults: ExamResult[] = Array.isArray(rawResults)
+      ? rawResults.map((r: any) => ({
           id: String(r.id || generateId()),
           studentId: r.studentId ? String(r.studentId) : undefined,
           studentNo: r.studentNo !== undefined ? Number(r.studentNo) : (r.no !== undefined ? Number(r.no) : 0),
@@ -1874,45 +1889,44 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           answers: Array.isArray(r.answers) ? r.answers : undefined,
           evaluatedScore: r.evaluatedScore && typeof r.evaluatedScore === 'object' ? r.evaluatedScore : undefined
         }))
-      : [];
+      : (stateRef.current.results || []);
 
     // 4. Sanitize halls
-    const cleanHalls: ExamHall[] = Array.isArray(source.examHalls)
-      ? source.examHalls.map((h: any) => ({
+    const cleanHalls: ExamHall[] = Array.isArray(rawHalls)
+      ? rawHalls.map((h: any) => ({
           id: h.id || generateId(),
-          name: String(h.name || '').trim(),
-          capacity: Number(h.capacity) || 0,
+          name: String(h.name || h.ad || '').trim(),
+          capacity: Number(h.capacity || h.kapasite) || 0,
           examId: h.examId ? String(h.examId) : undefined,
           examIds: Array.isArray(h.examIds) ? h.examIds : (h.examId ? [String(h.examId)] : []),
           selectedClasses: Array.isArray(h.selectedClasses) ? h.selectedClasses : [],
           seatingPlan: Array.isArray(h.seatingPlan) ? h.seatingPlan : [],
           columns: Array.isArray(h.columns) ? h.columns : []
         }))
-      : [];
+      : (stateRef.current.examHalls || []);
 
     // 5. Sanitize budget
-    const rawBudget = source.budget || {};
     const cleanBudget: BudgetData = {
-      incomes: Array.isArray(rawBudget.incomes) ? rawBudget.incomes : [],
-      expenses: Array.isArray(rawBudget.expenses) ? rawBudget.expenses : [],
-      debts: Array.isArray(rawBudget.debts) ? rawBudget.debts : []
+      incomes: Array.isArray(rawBudget.incomes || rawBudget.gelirler) ? (rawBudget.incomes || rawBudget.gelirler) : (stateRef.current.budget?.incomes || []),
+      expenses: Array.isArray(rawBudget.expenses || rawBudget.giderler) ? (rawBudget.expenses || rawBudget.giderler) : (stateRef.current.budget?.expenses || []),
+      debts: Array.isArray(rawBudget.debts || rawBudget.borclar) ? (rawBudget.debts || rawBudget.borclar) : (stateRef.current.budget?.debts || [])
     };
 
     // 6. Sanitize arena
     const cleanLeagueMentors: Record<string, string> = 
-      source.leagueMentors && typeof source.leagueMentors === 'object' ? source.leagueMentors : {};
+      source.leagueMentors && typeof source.leagueMentors === 'object' ? source.leagueMentors : (stateRef.current.leagueMentors || {});
     const cleanLeagueTeamPoints: Record<string, number> = 
-      source.leagueTeamPoints && typeof source.leagueTeamPoints === 'object' ? source.leagueTeamPoints : {};
-    const cleanApprovedTransfers = Array.isArray(source.approvedTransfers) ? source.approvedTransfers : [];
+      source.leagueTeamPoints && typeof source.leagueTeamPoints === 'object' ? source.leagueTeamPoints : (stateRef.current.leagueTeamPoints || {});
+    const cleanApprovedTransfers = Array.isArray(source.approvedTransfers) ? source.approvedTransfers : (stateRef.current.approvedTransfers || []);
 
     // 7. Sanitize admins & teachers (preserving super admin)
     const superAdminEmails = ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'];
     const adminSet = new Set<string>(superAdminEmails);
     if (Array.isArray(source.admins)) {
-      source.admins.forEach((a: string) => { if (a && typeof a === 'string') adminSet.add(a); });
+      source.admins.forEach((a: string) => { if (a && typeof a === 'string') adminSet.add(a.trim().toLowerCase()); });
     }
     const cleanAdmins = Array.from(adminSet);
-    const cleanTeachers: string[] = Array.isArray(source.teachers) ? source.teachers.filter(Boolean) : [];
+    const cleanTeachers: string[] = Array.isArray(source.teachers) ? source.teachers.filter(Boolean) : (stateRef.current.teachers || []);
 
     // 8. Cross-module calculations
     const syncedBudget = syncFinancials(cleanStudents, cleanExams, cleanBudget);
@@ -1928,14 +1942,21 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       leagueTeamPoints: cleanLeagueTeamPoints,
       approvedTransfers: cleanApprovedTransfers,
       admins: cleanAdmins,
-      teachers: cleanTeachers
+      teachers: cleanTeachers,
+      version: (stateRef.current.version || 1) + 1
     };
 
     // 9. Update state and local storage immediately
     stateRef.current = fullState;
     setState(fullState);
+    isInitialCloudHydrationDoneRef.current = true;
+    hasUnsavedLocalEditsRef.current = true;
+    setHasPendingChanges(true);
+    setLastDataSource('local');
+
     try {
       localStorage.setItem('okulYonetimState', JSON.stringify(fullState));
+      lastSavedPayloadRef.current = JSON.stringify(fullState);
       if (source.examCalendarPrintSettings) {
         localStorage.setItem('akademi_exam_calendar_print_config', JSON.stringify(source.examCalendarPrintSettings));
         window.dispatchEvent(new CustomEvent('exam-calendar-settings-restored', { detail: source.examCalendarPrintSettings }));
@@ -1944,8 +1965,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       console.warn('LocalStorage save error:', e);
     }
 
-    // 10. Persist state immediately
-    await executeFirestoreWrite(fullState, true);
+    // 10. Persist state to Drive and Firebase
+    syncToDriveNow().catch(() => {});
+    executeFirestoreWrite(fullState, true).catch(() => {});
 
     const summary = {
       studentCount: updatedStudents.length,
