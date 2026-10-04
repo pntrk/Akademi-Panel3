@@ -584,8 +584,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           snapshot = await getDoc(doc(db, 'schools', 'main', 'modules', 'meta'));
         }
       } catch (err: any) {
-        console.warn('Error fetching role from cloud:', err);
-        throw err;
+        console.warn('Role cloud check notice:', err?.message || err);
+        const localRole = evaluateUserRole(cleanEmail, stateRef.current.admins, stateRef.current.teachers);
+        setUserRole(localRole);
+        return localRole;
       }
       
       if (snapshot.exists()) {
@@ -923,10 +925,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       });
     }
 
-    // Register user profile to access_requests once per daily session (throttled)
-    const dailyRegKey = `access_request_daily_${cleanUserEmail}_${getTodayDateStr()}`;
-    if (cleanUserEmail && !localStorage.getItem(dailyRegKey) && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
-      localStorage.setItem(dailyRegKey, '1');
+    // Register or update user profile in access_requests on login so admin sees request immediately
+    if (cleanUserEmail && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
       setDoc(doc(db, 'access_requests', cleanUserEmail), {
         email: cleanUserEmail,
         name: user.displayName || cleanUserEmail.split('@')[0],
@@ -937,6 +937,29 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         timestamp: new Date().toISOString()
       }, { merge: true }).catch(() => {});
     }
+
+    // Real-time listener for current user's approval status in access_requests
+    let unsubUserApproval: (() => void) | null = null;
+    if (cleanUserEmail && firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
+      try {
+        const userDocRef = doc(db, 'access_requests', cleanUserEmail);
+        unsubUserApproval = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const grantedRole = data.role as 'admin' | 'teacher' | 'guest';
+            if (grantedRole && (grantedRole === 'admin' || grantedRole === 'teacher')) {
+              setCachedAuthorizedRole(cleanUserEmail, grantedRole);
+              setUserRole(grantedRole);
+              syncFromCloudStorage(true).catch(() => {});
+            }
+          }
+        }, () => {});
+      } catch (e) {}
+    }
+
+    return () => {
+      if (unsubUserApproval) unsubUserApproval();
+    };
   }, [user.uid, user.email]);
 
   // Sync state from Modular Firestore (schools/main/modules/*) with fallback to Storage and Legacy docs
