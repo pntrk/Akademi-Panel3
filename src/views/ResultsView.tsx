@@ -1045,6 +1045,14 @@ export function ResultsView() {
   const isTyt = isTytExam(exam);
   const isAyt = isAytExam(exam);
 
+  // Soru & Madde Analizi sekmesi yalnızca Kurum İçi Optik sınavlarda aktiftir.
+  // Yayıncı sınavı seçilirse otomatik olarak Sonuçlar / Sıralama sekmesine dönülür.
+  useEffect(() => {
+    if (exam && exam.examType !== 'internal' && activeMainTab === 'analysis') {
+      setActiveMainTab('results');
+    }
+  }, [exam?.id, exam?.examType, activeMainTab]);
+
   // Modal states
   const [selectedStudent, setSelectedStudent] = useState<(ExamResult & { scores: EvaluatedScore }) | null>(null);
   const [editingStudent, setEditingStudent] = useState<ExamResult | null>(null);
@@ -2399,15 +2407,28 @@ export function ResultsView() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveMainTab('analysis')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeMainTab === 'analysis'
-                  ? 'bg-white text-slate-900 shadow-2xs ring-1 ring-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900'
+              onClick={() => {
+                if (exam.examType === 'internal') {
+                  setActiveMainTab('analysis');
+                }
+              }}
+              disabled={exam.examType !== 'internal'}
+              title={exam.examType === 'internal' ? 'Soru ve madde analizini görüntüle' : 'Soru ve madde analizi yalnızca Kurum İçi Optik denemelerde aktiftir'}
+              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                exam.examType === 'internal'
+                  ? activeMainTab === 'analysis'
+                    ? 'bg-white text-slate-900 shadow-2xs ring-1 ring-slate-200/60 cursor-pointer'
+                    : 'text-slate-600 hover:text-slate-900 cursor-pointer'
+                  : 'text-slate-400 bg-slate-200/40 cursor-not-allowed opacity-60'
               }`}
             >
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <TrendingUp className={`w-3.5 h-3.5 shrink-0 ${exam.examType === 'internal' ? 'text-emerald-600' : 'text-slate-400'}`} />
               <span>Soru Analizi</span>
+              {exam.examType !== 'internal' && (
+                <span className="text-[9px] font-bold text-slate-400 bg-slate-200/70 px-1 py-0.2 rounded border border-slate-300/50">
+                  Optik
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -2442,26 +2463,42 @@ export function ResultsView() {
 
             <button
               type="button"
-              onClick={() => setActiveMainTab('analysis')}
-              className={`flex-1 flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                activeMainTab === 'analysis'
-                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200/70 scale-[1.01]'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              onClick={() => {
+                if (exam.examType === 'internal') {
+                  setActiveMainTab('analysis');
+                }
+              }}
+              disabled={exam.examType !== 'internal'}
+              title={exam.examType === 'internal' ? 'Soru ve madde analizini görüntüle' : 'Soru ve madde analizi yalnızca Kurum İçi Optik denemelerde aktiftir'}
+              className={`flex-1 flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                exam.examType === 'internal'
+                  ? activeMainTab === 'analysis'
+                    ? 'bg-white text-slate-900 shadow-sm border border-slate-200/70 scale-[1.01] cursor-pointer'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 cursor-pointer'
+                  : 'text-slate-400 bg-slate-200/30 cursor-not-allowed opacity-60'
               }`}
             >
               <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
-                activeMainTab === 'analysis' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200/50 text-slate-500'
+                exam.examType === 'internal'
+                  ? activeMainTab === 'analysis' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200/50 text-slate-500'
+                  : 'bg-slate-200/40 text-slate-400'
               }`}>
                 <TrendingUp className="w-3.5 h-3.5" />
               </div>
               <span>Soru & Madde Analizi</span>
-              <span className={`text-[11px] font-mono tabular-nums px-2 py-0.5 rounded-full font-bold transition-colors ${
-                activeMainTab === 'analysis' 
-                  ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200' 
-                  : 'bg-slate-200/70 text-slate-600'
-              }`}>
-                {exam.subjects?.reduce((acc, s) => acc + (s.count || 0), 0) || 90} Soru
-              </span>
+              {exam.examType === 'internal' ? (
+                <span className={`text-[11px] font-mono tabular-nums px-2 py-0.5 rounded-full font-bold transition-colors ${
+                  activeMainTab === 'analysis' 
+                    ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200' 
+                    : 'bg-slate-200/70 text-slate-600'
+                }`}>
+                  {exam.subjects?.reduce((acc, s) => acc + (s.count || 0), 0) || 90} Soru
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-slate-400 bg-slate-200/60 px-2 py-0.5 rounded-full border border-slate-300/40">
+                  Yalnızca Kurum İçi
+                </span>
+              )}
             </button>
           </div>
 
