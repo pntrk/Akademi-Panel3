@@ -887,41 +887,27 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       isInitialCloudHydrationDoneRef.current = true;
       setSyncStatus('synced');
     } else if (initialComputedRole === 'admin') {
-      // 2. If ADMIN: Only Admin connects and downloads the canonical live master from Google Drive
+      // 2. If ADMIN: Strictly connect and download the canonical live master from Google Drive (NOT Firebase!)
       setLoading(true);
       setIsInitialHydrating(true);
       const cachedToken = getCachedAccessToken();
       if (cachedToken) {
-        // Active Drive token exists -> download immediately from Google Drive!
-        setDriveStartupStatusText('Google Drive üzerindeki en güncel canlı okul kütüğü taranıyor ve indiriliyor...');
+        // Active Drive token exists -> download canonical master directly from Google Drive!
+        setDriveStartupStatusText('Google Drive üzerindeki en güncel canlı okul kütüğü taranıyor ve sisteme yükleniyor...');
         syncFromGoogleDriveOnStartup().then((syncedFromDrive) => {
-          if (syncedFromDrive) {
-            isInitialCloudHydrationDoneRef.current = true;
-            setIsInitialHydrating(false);
-            setLoading(false);
-            setSyncStatus('synced');
-            setSyncErrorMessage(null);
-          } else {
-            // Fallback to Modular Cloud Storage if Google Drive file is not found
-            syncFromCloudStorage(true).finally(() => {
-              isInitialCloudHydrationDoneRef.current = true;
-              setIsInitialHydrating(false);
-              setLoading(false);
-              setSyncStatus('synced');
-              setSyncErrorMessage(null);
-            });
-          }
+          isInitialCloudHydrationDoneRef.current = true;
+          setIsInitialHydrating(false);
+          setLoading(false);
+          setSyncStatus('synced');
+          setSyncErrorMessage(null);
         }).catch(() => {
-          syncFromCloudStorage(true).finally(() => {
-            isInitialCloudHydrationDoneRef.current = true;
-            setIsInitialHydrating(false);
-            setLoading(false);
-            setSyncStatus('synced');
-            setSyncErrorMessage(null);
-          });
+          isInitialCloudHydrationDoneRef.current = true;
+          setIsInitialHydrating(false);
+          setLoading(false);
+          setSyncStatus('synced');
         });
       } else {
-        // No Drive token yet:
+        // No Drive token yet -> prompt admin to authorize Google Drive
         setIsWaitingForDriveAuth(true);
         setDriveStartupStatusText('Sınava kayıtlı 120 öğrencinin bulunduğu canlı kütüğü indirmek için Google Drive yetkilendirmesi bekleniyor.');
         setLoading(false);
@@ -1085,38 +1071,26 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   };
 
-  // Real-time Firestore listener (anti-echo protected) & throttled focus check
+  // Real-time Firestore listener for teachers & throttled focus check
   useEffect(() => {
-    // Real-time Firestore Meta listener for instant multi-admin synchronization
+    // Real-time Firestore Meta listener for teachers (Admins sync strictly via Google Drive!)
     let unsubMeta: (() => void) | null = null;
     const cleanUserEmail = (user?.email || '').trim().toLowerCase();
 
-    if (firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
+    if (userRole === 'teacher' && firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
       try {
         const metaDocRef = doc(db, 'schools', 'main', 'modules', 'meta');
         unsubMeta = onSnapshot(metaDocRef, (snap) => {
           if (snap.exists()) {
             const remoteMeta = snap.data();
             const remoteVer = Number(remoteMeta?.version) || 0;
-            const remoteAuthor = (remoteMeta?.lastPublishedBy || '').trim().toLowerCase();
             const localVer = Number((stateRef.current as any).version) || 0;
-
-            // Disarm echo loop: Ignore if this client/user authored this update
-            if (remoteAuthor && remoteAuthor === cleanUserEmail && remoteVer <= localVer) {
-              return;
-            }
-
-            // Do not clobber pending local edits with equal or older version
-            if (hasUnsavedLocalEditsRef.current && remoteVer <= localVer) {
-              return;
-            }
 
             if (remoteVer > localVer) {
               syncFromCloudStorage(true).catch(() => {});
             }
           }
         }, (err: any) => {
-          // Gracefully suppress temporary offline/unavailable notice since client works in local offline mode
           if (err?.code !== 'unavailable') {
             console.warn('Realtime cloud meta listener notice:', err?.message || err);
           }
@@ -1124,10 +1098,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       } catch (e) {}
     }
 
-    // Sync on tab focus so teachers/admins see updates when they switch back, throttled to max once per 60 seconds
+    // Sync on tab focus for teachers so they see published updates when they switch back
     const handleFocus = () => {
       const now = Date.now();
-      if (now - lastFocusSyncRef.current > 60000 && isInitialCloudHydrationDoneRef.current) {
+      if (userRole === 'teacher' && now - lastFocusSyncRef.current > 60000 && isInitialCloudHydrationDoneRef.current) {
         lastFocusSyncRef.current = now;
         syncFromCloudStorage().catch(() => {});
       }
@@ -1138,7 +1112,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       if (unsubMeta) unsubMeta();
       window.removeEventListener('focus', handleFocus);
     };
-  }, [user?.email]);
+  }, [user?.email, userRole]);
 
   // Performs cloud sync using Modular Firestore (schools/main/modules/*) with smart diff updates
   const executeFirestoreWrite = async (newState: AppState, forceRetry = false) => {
