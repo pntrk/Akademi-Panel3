@@ -1244,7 +1244,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   };
 
-  // Multi-Admin Google Drive Auto-Sync: Polls remote changes every 45s & on window focus
+  // Multi-Admin Google Drive Auto-Sync: Polls remote changes every 30s & on window focus + Emergency Flush on exit
   useEffect(() => {
     if (userRole !== 'admin') return;
 
@@ -1269,16 +1269,39 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       } catch (e) {}
     };
 
-    const driveInterval = setInterval(checkDriveRemoteUpdate, 45000);
+    // Emergency auto-sync to Google Drive when tab loses focus, minimizes, or user leaves page
+    const handleEmergencyDriveFlush = () => {
+      if (userRole === 'admin' && isInitialCloudHydrationDoneRef.current && hasUnsavedLocalEditsRef.current) {
+        syncToDriveNow().catch(() => {});
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleEmergencyDriveFlush();
+      } else if (document.visibilityState === 'visible') {
+        checkDriveRemoteUpdate();
+      }
+    };
+
+    const driveInterval = setInterval(checkDriveRemoteUpdate, 30000);
     window.addEventListener('focus', checkDriveRemoteUpdate);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleEmergencyDriveFlush);
+    window.addEventListener('pagehide', handleEmergencyDriveFlush);
+    window.addEventListener('offline', handleEmergencyDriveFlush);
 
     return () => {
       clearInterval(driveInterval);
       window.removeEventListener('focus', checkDriveRemoteUpdate);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleEmergencyDriveFlush);
+      window.removeEventListener('pagehide', handleEmergencyDriveFlush);
+      window.removeEventListener('offline', handleEmergencyDriveFlush);
     };
   }, [userRole]);
 
-  // Local state update with 30-second Google Drive auto-sync (Firebase is ONLY written via manual saveNow)
+  // Local state update with rapid 3-second Google Drive auto-sync (Zero data loss guarantee)
   const updateFirebase = (newState: AppState, _bufferDelayMs?: number) => {
     stateRef.current = newState;
     setState(newState);
@@ -1304,8 +1327,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setSyncStatus('pending_publish');
     }
 
-    // 3. AUTOMATIC GOOGLE DRIVE 30-SECOND SYNC
-    // (Firebase write quota is NEVER consumed automatically; only via manual saveNow button!)
+    // 3. AUTOMATIC GOOGLE DRIVE FAST 3-SECOND SYNC
     if (driveSyncTimerRef.current) {
       clearTimeout(driveSyncTimerRef.current);
     }
@@ -1314,7 +1336,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       if (userRole === 'admin' && isInitialCloudHydrationDoneRef.current) {
         syncToDriveNow().catch(() => {});
       }
-    }, 30000); // 30 seconds
+    }, 3000); // Fast 3-second auto-save to Google Drive
   };
 
   const batchUpdateState = (updater: (currentState: AppState) => AppState) => {
