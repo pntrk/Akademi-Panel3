@@ -1175,10 +1175,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
       setSyncStatus('saving');
 
-      // 1. Primary: Write ONLY changed subcollections to Modular Firestore (schools/main/modules/*)
+      // 1. Primary: Write subcollections to Modular Firestore (schools/main/modules/*)
       if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
         try {
-          const modRes = await writeModularSchoolState(db, cleanState, lastSavedModuleHashesRef.current, 'main');
+          const modRes = await writeModularSchoolState(db, cleanState, lastSavedModuleHashesRef.current, 'main', forceRetry);
           if (modRes.success) {
             lastSavedModuleHashesRef.current = modRes.newHashes;
           }
@@ -1200,10 +1200,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         }
       }
 
-      // 2. Auxiliary: Mirror snapshot to Storage if bucket exists
-      try {
-        await uploadSnapshotToStorage(cleanState);
-      } catch (stErr) {}
+      // 2. Auxiliary: Non-blocking background Storage mirror snapshot (never freezes UI)
+      uploadSnapshotToStorage(cleanState).catch(() => {});
 
       // 3. Guaranteed state update: Local Mirror & Sync Status
       lastSavedPayloadRef.current = payloadString;

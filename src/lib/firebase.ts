@@ -454,8 +454,9 @@ export const uploadSnapshotToStorage = async (data: any): Promise<{ success: boo
       return { success: true, url: downloadUrl, nativeStorage: true };
     });
 
+    // Fast non-blocking timeout for storage mirror (max 4 seconds)
     const timeoutPromise = new Promise<{ success: boolean; url?: string; error?: string; nativeStorage?: boolean }>((resolve) =>
-      setTimeout(() => resolve({ success: false, error: 'Storage upload timeout' }), 25000)
+      setTimeout(() => resolve({ success: false, error: 'Storage upload timeout' }), 4000)
     );
 
     const result = await Promise.race([uploadPromise, timeoutPromise]);
@@ -648,7 +649,8 @@ export const writeModularSchoolState = async (
   dbInstance: any,
   cleanState: any,
   lastHashes: Record<string, string>,
-  schoolId = 'main'
+  schoolId = 'main',
+  forceAll = false
 ): Promise<ModularWriteResult> => {
   const updatedModules: string[] = [];
   const newHashes: Record<string, string> = { ...lastHashes };
@@ -696,7 +698,7 @@ export const writeModularSchoolState = async (
 
     for (const [modKey, modPayload] of Object.entries(modulesData)) {
       const payloadStr = JSON.stringify(modPayload);
-      if (lastHashes[modKey] !== payloadStr) {
+      if (forceAll || lastHashes[modKey] !== payloadStr) {
         const modDocRef = doc(dbInstance, 'schools', schoolId, 'modules', modKey);
         promises.push(setDoc(modDocRef, modPayload));
         updatedModules.push(modKey);
