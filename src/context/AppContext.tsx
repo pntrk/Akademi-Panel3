@@ -33,7 +33,12 @@ import {
   writeModularSchoolState,
   fetchSchoolMeta,
   fetchTeacherSelectiveModules,
-  fastHash
+  fastHash,
+  sanitizeDocId,
+  fetchSingleExamResultPartition,
+  fetchAllExamResultsPartitions,
+  fetchSingleArenaMonthlyPartition,
+  fetchAllArenaMonthlyPartitions
 } from '../lib/firebase';
 import { 
   subscribeToNotifications, 
@@ -130,6 +135,7 @@ interface AppContextType {
   markNotificationsAsSeen: () => void;
   sendPushNotification: (notif: Omit<AppNotification, 'id' | 'createdAt'>) => Promise<{ success: boolean; id?: string; error?: string }>;
   checkTeacherUpdatesNow: () => Promise<{ updated: boolean; changedModules?: string[]; message?: string }>;
+  fetchMonthArenaPartition: (monthKey: string) => Promise<any | null>;
 }
 
 const defaultState: AppState = {
@@ -1148,10 +1154,32 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         if (selectiveData.results?.results) {
           next.results = selectiveData.results.results;
         }
+        if (selectiveData.exam_results_partitions) {
+          const partitions = selectiveData.exam_results_partitions;
+          next.exams = (next.exams || []).map((ex: any) => {
+            const key = sanitizeDocId(ex.id || ex.name);
+            const part = partitions[key] || Object.values(partitions).find((p: any) => String(p.examId) === String(ex.id) || p.examName === ex.name);
+            if (part && Array.isArray(part.results) && part.results.length > 0) {
+              return {
+                ...ex,
+                results: part.results,
+                participantCount: Math.max(ex.participantCount || 0, part.results.length)
+              };
+            }
+            return ex;
+          });
+        }
         if (selectiveData.league) {
           if (selectiveData.league.leagueMentors) next.leagueMentors = selectiveData.league.leagueMentors;
           if (selectiveData.league.leagueTeamPoints) next.leagueTeamPoints = selectiveData.league.leagueTeamPoints;
           if (selectiveData.league.approvedTransfers) next.approvedTransfers = selectiveData.league.approvedTransfers;
+          if (selectiveData.league.monthSummaries) next.arenaMonthSummaries = selectiveData.league.monthSummaries;
+        }
+        if (selectiveData.arena_monthly_partitions) {
+          next.arenaMonthlyData = {
+            ...(next.arenaMonthlyData || {}),
+            ...selectiveData.arena_monthly_partitions
+          };
         }
         if (selectiveData.exams?.exams) {
           next.exams = selectiveData.exams.exams;
@@ -1226,6 +1254,36 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     } catch (e: any) {
       return { updated: false, message: e?.message || 'Bağlantı hatası' };
     }
+  };
+
+  // On-demand fetch for specific month Arena partition snapshot
+  const fetchMonthArenaPartition = async (monthKey: string): Promise<any | null> => {
+    if (!monthKey || monthKey === 'all') return null;
+    const cleanKey = sanitizeDocId(monthKey);
+    if (stateRef.current.arenaMonthlyData?.[cleanKey]) {
+      return stateRef.current.arenaMonthlyData[cleanKey];
+    }
+    if (checkIsQuotaExceededToday() || isQuotaExceededRef.current) return null;
+    try {
+      const partition = await fetchSingleArenaMonthlyPartition(db, cleanKey);
+      if (partition) {
+        setState(prev => {
+          const next = {
+            ...prev,
+            arenaMonthlyData: {
+              ...(prev.arenaMonthlyData || {}),
+              [cleanKey]: partition
+            }
+          };
+          stateRef.current = next;
+          return next;
+        });
+        return partition;
+      }
+    } catch (e) {
+      console.warn('fetchMonthArenaPartition notice:', e);
+    }
+    return null;
   };
 
   // Ultra-lightweight Real-time Firestore listener for teachers (Only listens to 1 single 'meta' doc!)
@@ -2524,7 +2582,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       openNotificationModal,
       markNotificationsAsSeen,
       sendPushNotification,
-      checkTeacherUpdatesNow
+      checkTeacherUpdatesNow,
+      fetchMonthArenaPartition
     }}>
       {children}
     </AppContext.Provider>

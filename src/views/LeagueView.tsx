@@ -10,7 +10,7 @@ import { determineLeagueTeam, calculateAtaLigPoints, parseDate } from '../lib/ut
 import RulesView from './RulesView';
 
 export const LeagueView = () => {
-  const { state, updateLeagueSettings, approveTransfer, userRole } = useAppContext();
+  const { state, updateLeagueSettings, approveTransfer, userRole, fetchMonthArenaPartition } = useAppContext();
   const [activeView, setActiveView] = useState<'dashboard' | 'rules'>('dashboard');
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [showTactics, setShowTactics] = useState(false);
@@ -29,6 +29,13 @@ export const LeagueView = () => {
   // Tactics modal active month
   const [activeTacticsMonth, setActiveTacticsMonth] = useState<number>(0);
 
+  // Auto-fetch partitioned month data when user selects a specific month
+  useEffect(() => {
+    if (selectedMonth && selectedMonth !== 'all') {
+      fetchMonthArenaPartition(selectedMonth).catch(() => {});
+    }
+  }, [selectedMonth]);
+
   // Set default to latest month available if not manually changed
   useEffect(() => {
     if (selectedMonth === 'all' && state.exams.length > 0) {
@@ -39,15 +46,22 @@ export const LeagueView = () => {
           months.add(`${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`);
         }
       });
+      if (state.arenaMonthSummaries) {
+        state.arenaMonthSummaries.forEach(s => months.add(s.monthKey));
+      }
       const sorted = Array.from(months).sort((a, b) => b.localeCompare(a));
       if (sorted.length > 0) {
         setSelectedMonth(sorted[0]);
       }
     }
-  }, [state.exams]);
+  }, [state.exams, state.arenaMonthSummaries]);
 
   const mentors = state.leagueMentors || {};
   const bonusPoints = state.leagueTeamPoints || {};
+
+  const monthPartition = useMemo(() => {
+    return selectedMonth !== 'all' ? (state.arenaMonthlyData?.[selectedMonth] || null) : null;
+  }, [selectedMonth, state.arenaMonthlyData]);
 
   const getGradeLevel = (cls: string) => {
     const match = cls?.trim().match(/^(\d+)/);
@@ -72,8 +86,14 @@ export const LeagueView = () => {
         months.add(`${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`);
       }
     });
+    if (state.arenaMonthSummaries) {
+      state.arenaMonthSummaries.forEach(s => months.add(s.monthKey));
+    }
+    if (state.arenaMonthlyData) {
+      Object.keys(state.arenaMonthlyData).forEach(k => months.add(k));
+    }
     return Array.from(months).sort((a, b) => b.localeCompare(a));
-  }, [state.exams]);
+  }, [state.exams, state.arenaMonthSummaries, state.arenaMonthlyData]);
 
   const availableGradeLevels = useMemo(() => {
     const levels = new Set<string>(['5', '6', '7', '8']);
@@ -556,6 +576,29 @@ export const LeagueView = () => {
                 <span>Taktik Avcıları ({taktik.length})</span>
               </button>
             </div>
+
+            {/* 2.1. Aylık Parçalı Arşiv Bilgilendirmesi */}
+            {selectedMonth !== 'all' && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-amber-50/70 border border-amber-200/80 rounded-xl px-3.5 py-2.5 text-amber-900 shadow-2xs mt-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                    <span>📅</span>
+                    {(() => {
+                      const [y, m] = selectedMonth.split('-');
+                      const mNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+                      return `${mNames[parseInt(m) - 1]} ${y}`;
+                    })()} Arena Dönemi
+                  </span>
+                  <span className="text-[11px] text-amber-800/80">
+                    ({monthPartition?.examCount || state.exams.filter(e => e.date && parseDate(e.date).getFullYear() === parseInt(selectedMonth.split('-')[0]) && (parseDate(e.date).getMonth() + 1) === parseInt(selectedMonth.split('-')[1])).length} Deneme Sınavı Analizi)
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-100/80 border border-emerald-300/70 px-2.5 py-1 rounded-lg shrink-0 self-start sm:self-auto">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Parçalı Aylık Arşiv</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 3. Takım Kartları (Responsive Grid) */}

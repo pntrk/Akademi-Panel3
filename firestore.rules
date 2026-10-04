@@ -73,6 +73,18 @@ service cloud.firestore {
         allow write: if isSchoolAdmin() || isSuperAdmin();
       }
 
+      // Partitioned Exam Results Subcollection (exam_results/{examId}) - Max scalability under 1MB limit
+      match /exam_results/{examId} {
+        allow read: if isSignedIn();
+        allow write: if isSchoolAdmin() || isSuperAdmin();
+      }
+
+      // Partitioned Arena Monthly Snapshots (arena_monthly/{monthKey}) - High performance per-month league archives
+      match /arena_monthly/{monthKey} {
+        allow read: if isSignedIn();
+        allow write: if isSchoolAdmin() || isSuperAdmin();
+      }
+
       // Cloud Backups subcollection
       match /backups/{backupId} {
         allow read: if isSignedIn();

@@ -184,12 +184,92 @@
         }
       },
       "required": ["email", "timestamp"]
+    },
+    "ExamResultPartition": {
+      "title": "ExamResultPartition",
+      "description": "Partitioned exam results for a specific exam to ensure high scalability under Firestore 1MB limits",
+      "type": "object",
+      "properties": {
+        "examId": {
+          "type": "string",
+          "description": "Identifier or key of the exam"
+        },
+        "examName": {
+          "type": "string",
+          "description": "Human readable name of the exam"
+        },
+        "results": {
+          "type": "array",
+          "description": "List of student scores and evaluation records for this exam"
+        },
+        "studentCount": {
+          "type": "number",
+          "description": "Number of student records in this partition"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["examId", "results"]
+    },
+    "ArenaMonthlyPartition": {
+      "title": "ArenaMonthlyPartition",
+      "description": "Partitioned monthly league summary and student performance snapshot for Akademi Arena",
+      "type": "object",
+      "properties": {
+        "monthKey": {
+          "type": "string",
+          "description": "Year and month key (e.g. 2026-10)"
+        },
+        "monthLabel": {
+          "type": "string",
+          "description": "Formatted month title (e.g. Ekim 2026)"
+        },
+        "examCount": {
+          "type": "number",
+          "description": "Number of trial exams evaluated in this month"
+        },
+        "studentCount": {
+          "type": "number",
+          "description": "Number of active league students in this month"
+        },
+        "teamStandings": {
+          "type": "object",
+          "description": "Total and average points per team"
+        },
+        "podium": {
+          "type": "array",
+          "description": "Top 3 student rankings for the month"
+        },
+        "mvp": {
+          "type": "object",
+          "description": "MVP student of the month"
+        },
+        "studentsSummary": {
+          "type": "array",
+          "description": "Monthly student points, badges, and league rankings"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of compilation"
+        }
+      },
+      "required": ["monthKey", "studentsSummary"]
     }
   },
   "firestore": {
     "/schools/{schoolId}": {
       "schema": "SchoolState",
       "description": "Core state document for a school instance"
+    },
+    "/schools/{schoolId}/exam_results/{examId}": {
+      "schema": "ExamResultPartition",
+      "description": "Partitioned exam result sets per exam for high scalability"
+    },
+    "/schools/{schoolId}/arena_monthly/{monthKey}": {
+      "schema": "ArenaMonthlyPartition",
+      "description": "Partitioned monthly league performance snapshots for Akademi Arena"
     },
     "/schools/{schoolId}/backups/{backupId}": {
       "schema": "BackupRecord",

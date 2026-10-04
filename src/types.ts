@@ -265,6 +265,60 @@ export interface AppState {
   examCalendarPrintSettings?: any;
   canonicalDriveFileId?: string;
   canonicalDriveFileLink?: string;
+  arenaMonthlyData?: Record<string, ArenaMonthlyPartition>;
+  arenaMonthSummaries?: ArenaMonthSummary[];
+}
+
+export interface ArenaMonthlyStudentSummary {
+  studentNo: number;
+  name: string;
+  className?: string;
+  classStr?: string;
+  sectionStr?: string;
+  team: string;
+  monthlyLP: number;
+  badges?: Record<string, number>;
+  rank?: number;
+}
+
+export interface ArenaMonthlyPartition {
+  monthKey: string;
+  monthLabel: string;
+  examCount: number;
+  examNames: string[];
+  studentCount: number;
+  teamStandings: Record<string, {
+    totalLP: number;
+    studentCount: number;
+    averageLP: number;
+    badgesCount?: number;
+  }>;
+  podium: {
+    rank: number;
+    studentNo: number;
+    name: string;
+    team: string;
+    monthlyLP: number;
+  }[];
+  mvp?: {
+    studentNo: number;
+    name: string;
+    team: string;
+    monthlyLP: number;
+    reason?: string;
+  };
+  studentsSummary: ArenaMonthlyStudentSummary[];
+  updatedAt: string;
+}
+
+export interface ArenaMonthSummary {
+  monthKey: string;
+  monthLabel: string;
+  examCount: number;
+  studentCount: number;
+  topTeam?: string;
+  leaderStudent?: string;
+  updatedAt?: string;
 }
 
 export interface FullBackupData {

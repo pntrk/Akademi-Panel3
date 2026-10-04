@@ -612,3 +612,137 @@ export function recalculateLeagueForStudents(students: any[], results: any[], ex
 
 export { getStudentInfoFit, getStudentNameFontSize } from './studentTextFit';
 
+export function compileMonthlyArenaSnapshots(
+  students: any[],
+  exams: any[],
+  results: any[],
+  mentors: Record<string, string> = {},
+  teamBonus: Record<string, number> = {}
+): Record<string, any> {
+  const snapshots: Record<string, any> = {};
+
+  const turkishMonthNames: Record<string, string> = {
+    '01': 'Ocak', '02': 'Şubat', '03': 'Mart', '04': 'Nisan',
+    '05': 'Mayıs', '06': 'Haziran', '07': 'Temmuz', '08': 'Ağustos',
+    '09': 'Eylül', '10': 'Ekim', '11': 'Kasım', '12': 'Aralık'
+  };
+
+  // 1. Gather all month keys from exams
+  const monthsMap = new Map<string, { exams: any[] }>();
+  (exams || []).forEach(e => {
+    if (e.date) {
+      const d = parseDate(e.date);
+      const mStr = String(d.getMonth() + 1).padStart(2, '0');
+      const yStr = String(d.getFullYear());
+      const monthKey = `${yStr}-${mStr}`;
+      if (!monthsMap.has(monthKey)) {
+        monthsMap.set(monthKey, { exams: [] });
+      }
+      monthsMap.get(monthKey)!.exams.push(e);
+    }
+  });
+
+  monthsMap.forEach(({ exams: monthExams }, monthKey) => {
+    const [yStr, mStr] = monthKey.split('-');
+    const monthLabel = `${turkishMonthNames[mStr] || mStr} ${yStr}`;
+    const examNames = monthExams.map(e => e.name);
+
+    // Filter students who have points or participated in this month
+    const studentEntries: any[] = [];
+    const teamLPAccum: Record<string, { totalLP: number; count: number; badgesCount: number }> = {
+      'Kutup Yıldızları': { totalLP: 0, count: 0, badgesCount: 0 },
+      'Sıçrama Ustaları': { totalLP: 0, count: 0, badgesCount: 0 },
+      'Taktik Avcıları': { totalLP: 0, count: 0, badgesCount: 0 }
+    };
+
+    (students || []).forEach(s => {
+      const mData = s.monthlyLeagueData?.[monthKey];
+      const monthlyLP = mData?.points || 0;
+      const badges = mData?.badges || {};
+      const team = s.leagueTeam || 'Taktik Avcıları';
+
+      // Check if student participated in any exam this month
+      const participated = monthExams.some(e => {
+        const r = (results || []).find(res => res.studentNo === s.no && s.no !== 0);
+        return r && r.scores && r.scores[e.name] !== undefined && r.scores[e.name] > 0;
+      });
+
+      if (participated || monthlyLP > 0) {
+        studentEntries.push({
+          studentNo: s.no,
+          name: s.name,
+          className: s.className || '',
+          classStr: s.classStr || s.className || '',
+          sectionStr: s.sectionStr || '',
+          team,
+          monthlyLP,
+          badges
+        });
+
+        if (teamLPAccum[team]) {
+          teamLPAccum[team].totalLP += monthlyLP;
+          teamLPAccum[team].count += 1;
+          let totalBadges = 0;
+          for (const val of Object.values(badges || {})) {
+            totalBadges += Number(val) || 0;
+          }
+          teamLPAccum[team].badgesCount = (teamLPAccum[team].badgesCount || 0) + totalBadges;
+        }
+      }
+    });
+
+    // Sort students by monthly LP descending
+    studentEntries.sort((a, b) => b.monthlyLP - a.monthlyLP);
+    studentEntries.forEach((s, idx) => {
+      s.rank = idx + 1;
+    });
+
+    // Add bonus points to teams if any
+    const teamStandings: Record<string, any> = {};
+    Object.keys(teamLPAccum).forEach(team => {
+      const bonus = teamBonus?.[team] || 0;
+      const count = teamLPAccum[team].count;
+      const totalLP = teamLPAccum[team].totalLP + bonus;
+      teamStandings[team] = {
+        totalLP,
+        studentCount: count,
+        averageLP: count > 0 ? Math.round((totalLP / count) * 10) / 10 : 0,
+        badgesCount: teamLPAccum[team].badgesCount
+      };
+    });
+
+    // Podium (Top 3)
+    const podium = studentEntries.slice(0, 3).map((s, idx) => ({
+      rank: idx + 1,
+      studentNo: s.studentNo,
+      name: s.name,
+      team: s.team,
+      monthlyLP: s.monthlyLP
+    }));
+
+    // MVP
+    const mvp = studentEntries.length > 0 ? {
+      studentNo: studentEntries[0].studentNo,
+      name: studentEntries[0].name,
+      team: studentEntries[0].team,
+      monthlyLP: studentEntries[0].monthlyLP,
+      reason: 'Ayın En Yüksek Lig Puanı (LP) Lideri'
+    } : undefined;
+
+    snapshots[monthKey] = {
+      monthKey,
+      monthLabel,
+      examCount: monthExams.length,
+      examNames,
+      studentCount: studentEntries.length,
+      teamStandings,
+      podium,
+      mvp,
+      studentsSummary: studentEntries,
+      updatedAt: new Date().toISOString()
+    };
+  });
+
+  return snapshots;
+}
+

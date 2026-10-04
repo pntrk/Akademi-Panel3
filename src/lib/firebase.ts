@@ -37,6 +37,7 @@ import {
   getBytes,
   type FirebaseStorage
 } from 'firebase/storage';
+import { compileMonthlyArenaSnapshots } from './utils';
 import rawFirebaseConfig from '../../firebase-applet-config.json';
 
 export interface FirebaseAppConfig {
@@ -640,6 +641,67 @@ export const fetchModularSchoolState = async (
       });
     }
 
+    // 3. Fetch partitioned exam results from schools/{schoolId}/exam_results/*
+    // Enables storing unbounded 400+ student exam batches without hitting the 1MB limit
+    try {
+      const examResultsColRef = collection(dbInstance, 'schools', schoolId, 'exam_results');
+      const examResSnap = await getDocs(examResultsColRef).catch(() => null);
+      if (examResSnap && !examResSnap.empty) {
+        hasModular = true;
+        const partitionedResults: any[] = [];
+        examResSnap.forEach(partDoc => {
+          const partData = partDoc.data();
+          if (Array.isArray(partData.results) && partData.results.length > 0) {
+            // Find corresponding exam in merged.exams to hydrate its results directly
+            const matchingIdx = merged.exams.findIndex((e: any) =>
+              String(e.id) === String(partData.examId) || 
+              e.name === partData.examName || 
+              sanitizeDocId(e.id || e.name) === partDoc.id
+            );
+            if (matchingIdx >= 0) {
+              merged.exams[matchingIdx].results = partData.results;
+              merged.exams[matchingIdx].participantCount = Math.max(
+                merged.exams[matchingIdx].participantCount || 0,
+                partData.results.length
+              );
+            }
+            partitionedResults.push(...partData.results);
+          }
+        });
+
+        if (partitionedResults.length > 0) {
+          const mergedMap = new Map();
+          (merged.results || []).forEach((r: any) => {
+            const k = r.id || `${r.studentNo || r.no}_${r.examId || ''}`;
+            mergedMap.set(k, r);
+          });
+          partitionedResults.forEach((r: any) => {
+            const k = r.id || `${r.studentNo || r.no}_${r.examId || ''}`;
+            mergedMap.set(k, r);
+          });
+          merged.results = Array.from(mergedMap.values());
+        }
+      }
+    } catch (e) {
+      console.warn('Notice loading partitioned exam results:', e);
+    }
+
+    // 4. Fetch partitioned Arena monthly snapshots from schools/{schoolId}/arena_monthly/*
+    try {
+      const arenaColRef = collection(dbInstance, 'schools', schoolId, 'arena_monthly');
+      const arenaSnap = await getDocs(arenaColRef).catch(() => null);
+      if (arenaSnap && !arenaSnap.empty) {
+        hasModular = true;
+        const arenaMonthlyData: Record<string, any> = {};
+        arenaSnap.forEach(partDoc => {
+          arenaMonthlyData[partDoc.id] = partDoc.data();
+        });
+        merged.arenaMonthlyData = arenaMonthlyData;
+      }
+    } catch (e) {
+      console.warn('Notice loading partitioned arena monthly data:', e);
+    }
+
     if (hasModular || (rootSnap && rootSnap.exists())) {
       return { data: merged, source: hasModular ? 'modular' : 'legacy' };
     }
@@ -674,6 +736,90 @@ export const fetchSchoolMeta = async (dbInstance: any, schoolId = 'main'): Promi
   }
 };
 
+export const sanitizeDocId = (id: string | number): string => {
+  return String(id || 'default')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_\-]/g, '_')
+    .slice(0, 100) || 'exam_default';
+};
+
+export const fetchSingleExamResultPartition = async (
+  dbInstance: any,
+  examId: string | number,
+  schoolId = 'main'
+): Promise<any | null> => {
+  try {
+    const docKey = sanitizeDocId(examId);
+    const partRef = doc(dbInstance, 'schools', schoolId, 'exam_results', docKey);
+    const snap = await getDoc(partRef).catch(() => null);
+    if (snap && snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch (err) {
+    console.warn('fetchSingleExamResultPartition notice:', err);
+    return null;
+  }
+};
+
+export const fetchAllExamResultsPartitions = async (
+  dbInstance: any,
+  schoolId = 'main'
+): Promise<Record<string, any>> => {
+  const partitions: Record<string, any> = {};
+  try {
+    const colRef = collection(dbInstance, 'schools', schoolId, 'exam_results');
+    const snap = await getDocs(colRef).catch(() => null);
+    if (snap && !snap.empty) {
+      snap.forEach(d => {
+        partitions[d.id] = d.data();
+      });
+    }
+  } catch (e) {
+    console.warn('fetchAllExamResultsPartitions notice:', e);
+  }
+  return partitions;
+};
+
+export const fetchSingleArenaMonthlyPartition = async (
+  dbInstance: any,
+  monthKey: string,
+  schoolId = 'main'
+): Promise<any | null> => {
+  try {
+    const docKey = sanitizeDocId(monthKey);
+    const docRef = doc(dbInstance, 'schools', schoolId, 'arena_monthly', docKey);
+    const snap = await getDoc(docRef).catch(() => null);
+    if (snap && snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch (e) {
+    console.warn('fetchSingleArenaMonthlyPartition notice:', e);
+    return null;
+  }
+};
+
+export const fetchAllArenaMonthlyPartitions = async (
+  dbInstance: any,
+  schoolId = 'main'
+): Promise<Record<string, any>> => {
+  const partitions: Record<string, any> = {};
+  try {
+    const colRef = collection(dbInstance, 'schools', schoolId, 'arena_monthly');
+    const snap = await getDocs(colRef).catch(() => null);
+    if (snap && !snap.empty) {
+      snap.forEach(d => {
+        partitions[d.id] = d.data();
+      });
+    }
+  } catch (e) {
+    console.warn('fetchAllArenaMonthlyPartitions notice:', e);
+  }
+  return partitions;
+};
+
 export const fetchTeacherSelectiveModules = async (
   dbInstance: any,
   neededModules: string[],
@@ -690,6 +836,36 @@ export const fetchTeacherSelectiveModules = async (
         result[modKey] = snap.data();
       }
     });
+
+    // If teacher needs results, also fetch partitioned exam results from schools/{schoolId}/exam_results/*
+    if (neededModules.includes('results')) {
+      fetchPromises.push((async () => {
+        const partitions = await fetchAllExamResultsPartitions(dbInstance, schoolId);
+        result['exam_results_partitions'] = partitions;
+        const allPartResults: any[] = [];
+        Object.values(partitions).forEach((p: any) => {
+          if (Array.isArray(p.results)) {
+            allPartResults.push(...p.results);
+          }
+        });
+        if (allPartResults.length > 0) {
+          result['results'] = {
+            ...(result['results'] || {}),
+            results: allPartResults,
+            isPartitioned: true
+          };
+        }
+      })());
+    }
+
+    // If teacher needs league, also fetch partitioned arena monthly snapshots from schools/{schoolId}/arena_monthly/*
+    if (neededModules.includes('league')) {
+      fetchPromises.push((async () => {
+        const monthlyPartitions = await fetchAllArenaMonthlyPartitions(dbInstance, schoolId);
+        result['arena_monthly_partitions'] = monthlyPartitions;
+      })());
+    }
+
     await Promise.all(fetchPromises);
   } catch (err) {
     console.warn('fetchTeacherSelectiveModules notice:', err);
@@ -748,16 +924,85 @@ export const writeModularSchoolState = async (
 
   const safeState = deepCleanForFirestore(cleanState || {});
 
+  // Group and partition exam results by examId/examName to prevent exceeding Firestore 1MB limit
+  const examsList = safeState.exams || [];
+  const allResults = safeState.results || [];
+  const resultsByExam: Record<string, { examId: string; examName: string; results: any[] }> = {};
+
+  examsList.forEach((e: any) => {
+    const docKey = sanitizeDocId(e.id || e.name);
+    resultsByExam[docKey] = {
+      examId: String(e.id || docKey),
+      examName: e.name || docKey,
+      results: Array.isArray(e.results) ? [...e.results] : []
+    };
+  });
+
+  allResults.forEach((r: any) => {
+    const matchingExam = examsList.find((e: any) =>
+      (r.examId && String(e.id) === String(r.examId)) ||
+      (r.scores && (r.scores[String(e.id)] !== undefined || r.scores[e.name] !== undefined))
+    );
+    const docKey = matchingExam ? sanitizeDocId(matchingExam.id || matchingExam.name) : sanitizeDocId(r.examName || 'general');
+    if (!resultsByExam[docKey]) {
+      resultsByExam[docKey] = {
+        examId: matchingExam ? String(matchingExam.id) : docKey,
+        examName: matchingExam ? matchingExam.name : (r.examName || docKey),
+        results: []
+      };
+    }
+    if (!resultsByExam[docKey].results.some((er: any) => (er.id && er.id === r.id) || (er.studentNo && er.studentNo === r.studentNo))) {
+      resultsByExam[docKey].results.push(r);
+    }
+  });
+
+  const isSmallResults = allResults.length <= 100;
+  const examSummaries = Object.entries(resultsByExam).map(([examKey, group]) => ({
+    examKey,
+    examId: group.examId,
+    examName: group.examName,
+    studentCount: group.results.length
+  }));
+
+  // Compile partitioned monthly Arena snapshots
+  const arenaSnapshots = compileMonthlyArenaSnapshots(
+    safeState.students || [],
+    safeState.exams || [],
+    safeState.results || [],
+    safeState.leagueMentors || {},
+    safeState.leagueTeamPoints || {}
+  );
+
+  const monthSummaries = Object.values(arenaSnapshots).map((snap: any) => ({
+    monthKey: snap.monthKey,
+    monthLabel: snap.monthLabel,
+    examCount: snap.examCount,
+    studentCount: snap.studentCount,
+    topTeam: Object.entries(snap.teamStandings || {}).sort((a: any, b: any) => ((b[1] as any)?.totalLP || 0) - ((a[1] as any)?.totalLP || 0))[0]?.[0] || 'Kutup Yıldızları',
+    leaderStudent: snap.podium?.[0]?.name || '',
+    updatedAt: snap.updatedAt
+  }));
+
   const modulesData: Record<string, any> = {
     students: { students: safeState.students || [] },
     exams: { exams: safeState.exams || [] },
-    results: { results: safeState.results || [] },
+    results: { 
+      results: isSmallResults ? safeState.results || [] : [],
+      examSummaries,
+      totalCount: allResults.length,
+      isPartitioned: true,
+      updatedAt: new Date().toISOString()
+    },
     budget: { budget: safeState.budget || { incomes: [], expenses: [], debts: [] } },
     halls: { examHalls: safeState.examHalls || [] },
     league: {
       leagueMentors: safeState.leagueMentors || {},
       leagueTeamPoints: safeState.leagueTeamPoints || {},
-      approvedTransfers: safeState.approvedTransfers || []
+      approvedTransfers: safeState.approvedTransfers || [],
+      monthSummaries,
+      totalMonthsCount: Object.keys(arenaSnapshots).length,
+      isPartitioned: true,
+      updatedAt: new Date().toISOString()
     },
     meta: {
       version: safeState.version || 1,
@@ -784,7 +1029,7 @@ export const writeModularSchoolState = async (
   try {
     const promises: Promise<void>[] = [];
 
-    // Always write complete root school document with all full data arrays
+    // Always write complete root school document without unbounded results array to protect 1MB limit
     const rootSchoolRef = doc(dbInstance, 'schools', schoolId);
     promises.push(setDoc(rootSchoolRef, deepCleanForFirestore({
       name: "Kırklareli Atatürk Ortaokulu",
@@ -795,7 +1040,8 @@ export const writeModularSchoolState = async (
       teachers: safeState.teachers || [],
       students: safeState.students || [],
       exams: safeState.exams || [],
-      results: safeState.results || [],
+      results: isSmallResults ? safeState.results || [] : [],
+      resultCount: allResults.length,
       examHalls: safeState.examHalls || [],
       budget: safeState.budget || { incomes: [], expenses: [], debts: [] },
       leagueMentors: safeState.leagueMentors || {},
@@ -807,6 +1053,37 @@ export const writeModularSchoolState = async (
       canonicalDriveFileId: safeState.canonicalDriveFileId || null,
       canonicalDriveFileLink: safeState.canonicalDriveFileLink || null
     }), { merge: true }));
+
+    // Write partitioned exam results to schools/{schoolId}/exam_results/{examId}
+    for (const [examKey, examGroup] of Object.entries(resultsByExam)) {
+      if (examGroup.results.length > 0) {
+        const partPayload = {
+          examId: examGroup.examId,
+          examName: examGroup.examName,
+          studentCount: examGroup.results.length,
+          updatedAt: new Date().toISOString(),
+          results: examGroup.results
+        };
+        const payloadStr = JSON.stringify(partPayload);
+        const partHashKey = `exam_results_${examKey}`;
+        if (forceAll || lastHashes[partHashKey] !== payloadStr) {
+          const partDocRef = doc(dbInstance, 'schools', schoolId, 'exam_results', examKey);
+          promises.push(setDoc(partDocRef, deepCleanForFirestore(partPayload)));
+          newHashes[partHashKey] = payloadStr;
+        }
+      }
+    }
+
+    // Write partitioned monthly arena snapshots to schools/{schoolId}/arena_monthly/{monthKey}
+    for (const [mKey, snapshotPayload] of Object.entries(arenaSnapshots)) {
+      const payloadStr = JSON.stringify(snapshotPayload);
+      const partHashKey = `arena_monthly_${mKey}`;
+      if (forceAll || lastHashes[partHashKey] !== payloadStr) {
+        const partDocRef = doc(dbInstance, 'schools', schoolId, 'arena_monthly', mKey);
+        promises.push(setDoc(partDocRef, deepCleanForFirestore(snapshotPayload)));
+        newHashes[partHashKey] = payloadStr;
+      }
+    }
 
     for (const [modKey, modPayload] of Object.entries(modulesData)) {
       const payloadStr = JSON.stringify(modPayload);
