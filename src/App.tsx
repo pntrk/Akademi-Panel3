@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AppProvider } from './context/AppContext';
 import { Layout } from './components/Layout';
 import { StudentsView } from './views/StudentsView';
@@ -63,13 +63,68 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
     isConnectingDriveStartup,
     driveStartupStatusText,
     connectDriveAndHydrateOnStartup,
-    skipDriveAndUseCloudStorage
+    skipDriveAndUseCloudStorage,
+    lastDriveSyncedAt,
+    state
   } = useAppContext();
   const [activeTab, setActiveTab] = useState<'students' | 'halls' | 'results' | 'scan' | 'keys_print' | 'omr-setup' | 'analysis' | 'exams' | 'league' | 'budget'>(
     'results'
   );
   const [isCheckingRole, setIsCheckingRole] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Formatted date and time of the live Google Drive file (Guaranteed to include date: DD.MM.YYYY HH:MM)
+  const driveDateText = useMemo(() => {
+    let raw: string | null = lastDriveSyncedAt || null;
+    if (!raw) {
+      try {
+        raw = localStorage.getItem('akademi_last_drive_sync_datetime') || localStorage.getItem('akademi_last_drive_sync_time');
+      } catch {}
+    }
+    if (!raw && state?.lastPublishedAt) {
+      raw = state.lastPublishedAt;
+    }
+    if (!raw) {
+      try {
+        const local = localStorage.getItem('okulYonetimState');
+        if (local) {
+          const parsed = JSON.parse(local);
+          raw = parsed.lastPublishedAt || parsed.lastDriveSyncedAt;
+        }
+      } catch {}
+    }
+
+    const todayDateStr = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const nowTimeStr = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+    if (!raw) {
+      return `${todayDateStr} ${nowTimeStr}`;
+    }
+
+    const cleanRaw = String(raw).trim();
+
+    // If it already has a full date formatted like "04.10.2026 12:30"
+    if (/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(cleanRaw)) {
+      return cleanRaw;
+    }
+
+    // If it's just a time string like "12:30"
+    if (/^\d{1,2}:\d{2}/.test(cleanRaw)) {
+      return `${todayDateStr} ${cleanRaw}`;
+    }
+
+    // Try parsing as ISO date or timestamp
+    try {
+      const d = new Date(cleanRaw);
+      if (!isNaN(d.getTime())) {
+        const formattedDate = d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const formattedTime = d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        return `${formattedDate} ${formattedTime}`;
+      }
+    } catch {}
+
+    return `${todayDateStr} ${cleanRaw}`;
+  }, [lastDriveSyncedAt, state?.lastPublishedAt]);
 
   // Auto-refresh role if in guest mode (fast 3-second check for instant entry once admin approves)
   useEffect(() => {
@@ -201,7 +256,7 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
               Google Drive Canlı Kütük İndirme
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-5">
-              Sınava kayıtlı en son <strong>120 öğrencinin</strong> bulunduğu ortak canlı kütüğü doğrudan Google Drive üzerinden cihazınıza eksiksiz indirmek için yetkilendirmeyi onaylayın.
+              Google Drive üzerindeki ortak canlı kütüğü doğrudan cihazınıza eksiksiz indirmek için yetkilendirmeyi onaylayın.
             </p>
 
             <div className="w-full space-y-2.5">
@@ -210,8 +265,12 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
                 disabled={isConnectingDriveStartup}
                 className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
               >
-                <HardDriveDownload className="w-4 h-4" />
-                <span>{isConnectingDriveStartup ? 'Drive Bağlanıyor & İndiriliyor...' : 'Google Drive\'a Bağlan & Canlı Kütüğü İndir (120 Öğrenci)'}</span>
+                <HardDriveDownload className="w-4 h-4 shrink-0" />
+                <span className="leading-snug">
+                  {isConnectingDriveStartup 
+                    ? 'Drive Bağlanıyor & İndiriliyor...' 
+                    : `Google Drive'a Bağlan & Canlı Kütüğü İndir (${driveDateText})`}
+                </span>
               </button>
 
               <button

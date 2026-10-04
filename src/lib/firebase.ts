@@ -651,6 +651,53 @@ export const fetchModularSchoolState = async (
   }
 };
 
+export const fastHash = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+};
+
+export const fetchSchoolMeta = async (dbInstance: any, schoolId = 'main'): Promise<any | null> => {
+  try {
+    const metaRef = doc(dbInstance, 'schools', schoolId, 'modules', 'meta');
+    const snap = await getDoc(metaRef).catch(() => null);
+    if (snap && snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const fetchTeacherSelectiveModules = async (
+  dbInstance: any,
+  neededModules: string[],
+  schoolId = 'main'
+): Promise<Record<string, any>> => {
+  const result: Record<string, any> = {};
+  if (!neededModules || neededModules.length === 0) return result;
+
+  try {
+    const fetchPromises = neededModules.map(async (modKey) => {
+      const modDocRef = doc(dbInstance, 'schools', schoolId, 'modules', modKey);
+      const snap = await getDoc(modDocRef).catch(() => null);
+      if (snap && snap.exists()) {
+        result[modKey] = snap.data();
+      }
+    });
+    await Promise.all(fetchPromises);
+  } catch (err) {
+    console.warn('fetchTeacherSelectiveModules notice:', err);
+  }
+
+  return result;
+};
+
 export const saveCanonicalDriveFileToFirestore = async (fileId: string, fileLink?: string) => {
   try {
     if (!firebaseConfig.projectId) return;
@@ -720,9 +767,19 @@ export const writeModularSchoolState = async (
       teachers: safeState.teachers || [],
       examCalendarPrintSettings: safeState.examCalendarPrintSettings || null,
       canonicalDriveFileId: safeState.canonicalDriveFileId || null,
-      canonicalDriveFileLink: safeState.canonicalDriveFileLink || null
+      canonicalDriveFileLink: safeState.canonicalDriveFileLink || null,
+      moduleHashes: {}
     }
   };
+
+  // Compute fingerprints for each individual data module
+  const moduleHashes: Record<string, string> = {};
+  for (const [key, val] of Object.entries(modulesData)) {
+    if (key !== 'meta') {
+      moduleHashes[key] = fastHash(JSON.stringify(val));
+    }
+  }
+  modulesData.meta.moduleHashes = moduleHashes;
 
   try {
     const promises: Promise<void>[] = [];

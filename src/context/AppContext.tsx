@@ -30,7 +30,10 @@ import {
   ref,
   getBytes,
   fetchModularSchoolState,
-  writeModularSchoolState
+  writeModularSchoolState,
+  fetchSchoolMeta,
+  fetchTeacherSelectiveModules,
+  fastHash
 } from '../lib/firebase';
 import { 
   subscribeToNotifications, 
@@ -126,6 +129,7 @@ interface AppContextType {
   openNotificationModal: (prefilledData?: Partial<AppNotification>) => void;
   markNotificationsAsSeen: () => void;
   sendPushNotification: (notif: Omit<AppNotification, 'id' | 'createdAt'>) => Promise<{ success: boolean; id?: string; error?: string }>;
+  checkTeacherUpdatesNow: () => Promise<{ updated: boolean; changedModules?: string[]; message?: string }>;
 }
 
 const defaultState: AppState = {
@@ -909,16 +913,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       } else {
         // No Drive token yet -> prompt admin to authorize Google Drive
         setIsWaitingForDriveAuth(true);
-        setDriveStartupStatusText('Sınava kayıtlı 120 öğrencinin bulunduğu canlı kütüğü indirmek için Google Drive yetkilendirmesi bekleniyor.');
+        setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü indirmek için yetkilendirme bekleniyor.');
         setLoading(false);
       }
     } else {
-      // 3. If TEACHER: NEVER touch Google Drive! Hydrate exclusively from Firebase published data
+      // 3. If TEACHER: NEVER touch Google Drive! Hydrate via cache-first selective delta sync
       setLoading(true);
       setIsInitialHydrating(true);
       setIsWaitingForDriveAuth(false);
-      setDriveStartupStatusText('Yönetim tarafından yayınlanmış sınav ve sonuç verileri Firebase üzerinden alınıyor...');
-      syncFromCloudStorage(true).finally(() => {
+      setDriveStartupStatusText('Yönetim tarafından yayınlanmış güncel sınav verileri kontrol ediliyor...');
+      syncTeacherDelta().finally(() => {
         isInitialCloudHydrationDoneRef.current = true;
         setIsInitialHydrating(false);
         setLoading(false);
@@ -942,7 +946,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           if (existingRole) {
             setCachedAuthorizedRole(cleanUserEmail, existingRole);
             setUserRole(existingRole);
-            syncFromCloudStorage(true).catch(() => {});
+            if (existingRole === 'teacher') {
+              syncTeacherDelta().catch(() => {});
+            } else {
+              syncFromCloudStorage(true).catch(() => {});
+            }
           }
 
           // ONLY update lastLoginAt and profile info WITHOUT overwriting role or status!
@@ -986,7 +994,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             if (grantedRole) {
               setCachedAuthorizedRole(cleanUserEmail, grantedRole);
               setUserRole(grantedRole);
-              syncFromCloudStorage(true).catch(() => {});
+              if (grantedRole === 'teacher') {
+                syncTeacherDelta().catch(() => {});
+              } else {
+                syncFromCloudStorage(true).catch(() => {});
+              }
             }
           }
         }, (err) => {
@@ -1071,45 +1083,182 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   };
 
-  // Real-time Firestore listener for teachers & throttled focus check
+  // Teacher smart caching: track local module hashes in localStorage and ref to prevent duplicate reads
+  const lastTeacherModuleHashesRef = useRef<Record<string, string>>((() => {
+    try {
+      const saved = localStorage.getItem('akademi_teacher_module_hashes');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  })());
+
+  // Selective delta synchronization for teachers & guests:
+  // 1. Checks meta document only (1 read or 0 if from onSnapshot).
+  // 2. If hashes match local cache -> 0 reads! (Instant response from localStorage).
+  // 3. If any of ['halls', 'results', 'league', 'exams', 'students'] changed -> only downloads that specific doc.
+  const syncTeacherDelta = async (injectedMeta?: any): Promise<boolean> => {
+    if (userRole !== 'teacher' && userRole !== 'guest') return false;
+    if (checkIsQuotaExceededToday() || isQuotaExceededRef.current) return false;
+
+    try {
+      // Step 1: Read ONLY meta document (1 read, or 0 if injected from onSnapshot)
+      const meta = injectedMeta || (await fetchSchoolMeta(db, 'main'));
+      if (!meta) return false;
+
+      const remoteVer = Number(meta.version) || 0;
+      const remoteHashes: Record<string, string> = meta.moduleHashes || {};
+      const localHashes = lastTeacherModuleHashesRef.current || {};
+
+      // Modules relevant to teacher / viewer roles
+      const teacherTargetModules = ['halls', 'results', 'league', 'exams', 'students'];
+      const changedModules = teacherTargetModules.filter(m => {
+        const rH = remoteHashes[m];
+        const lH = localHashes[m];
+        // If remote has a hash for this module and it doesn't match our local hash, it needs update!
+        return rH && rH !== lH;
+      });
+
+      // If local state is completely empty or initial, fetch all target modules
+      const isLocalEmpty = !stateRef.current.students || stateRef.current.students.length <= 1;
+      const modulesToFetch = isLocalEmpty 
+        ? teacherTargetModules 
+        : changedModules;
+
+      // If nothing changed and local state has data, WE ARE 100% UP TO DATE! (0 reads!)
+      if (modulesToFetch.length === 0 && !isLocalEmpty) {
+        setSyncStatus('synced');
+        setPendingSyncCount(0);
+        setLastSyncedAt(new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
+        return true;
+      }
+
+      // Step 2: Fetch ONLY the changed modules (exactly 1 read per changed module!)
+      const selectiveData = await fetchTeacherSelectiveModules(db, modulesToFetch, 'main');
+      if (Object.keys(selectiveData).length === 0 && !isLocalEmpty) {
+        return false;
+      }
+
+      // Step 3: Merge updated modules into current local state
+      setState(prev => {
+        const next: any = { ...prev };
+        if (selectiveData.halls?.examHalls) {
+          next.examHalls = selectiveData.halls.examHalls;
+        }
+        if (selectiveData.results?.results) {
+          next.results = selectiveData.results.results;
+        }
+        if (selectiveData.league) {
+          if (selectiveData.league.leagueMentors) next.leagueMentors = selectiveData.league.leagueMentors;
+          if (selectiveData.league.leagueTeamPoints) next.leagueTeamPoints = selectiveData.league.leagueTeamPoints;
+          if (selectiveData.league.approvedTransfers) next.approvedTransfers = selectiveData.league.approvedTransfers;
+        }
+        if (selectiveData.exams?.exams) {
+          next.exams = selectiveData.exams.exams;
+        }
+        if (selectiveData.students?.students && selectiveData.students.students.length > 0) {
+          next.students = selectiveData.students.students;
+        }
+        if (meta.admins) next.admins = meta.admins;
+        if (meta.teachers) next.teachers = meta.teachers;
+        next.version = remoteVer || next.version;
+        next.lastPublishedAt = meta.lastPublishedAt || next.lastPublishedAt;
+
+        const sanitized = sanitizeSchoolState(next);
+        stateRef.current = sanitized;
+        try {
+          localStorage.setItem('okulYonetimState', JSON.stringify(sanitized));
+          lastSavedPayloadRef.current = JSON.stringify(sanitized);
+        } catch (e) {}
+        return sanitized;
+      });
+
+      // Update local hashes
+      const updatedHashes = { ...localHashes };
+      modulesToFetch.forEach(m => {
+        if (remoteHashes[m]) {
+          updatedHashes[m] = remoteHashes[m];
+        }
+      });
+      lastTeacherModuleHashesRef.current = updatedHashes;
+      try {
+        localStorage.setItem('akademi_teacher_module_hashes', JSON.stringify(updatedHashes));
+      } catch (e) {}
+
+      // Update role if changed
+      const cleanEmail = (user?.email || '').trim().toLowerCase();
+      const computedRole = evaluateUserRole(cleanEmail, meta.admins || stateRef.current.admins, meta.teachers || stateRef.current.teachers, userRole);
+      setUserRole(computedRole);
+
+      setSyncStatus('synced');
+      setPendingSyncCount(0);
+      setLastSyncedAt(new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
+      return true;
+    } catch (err: any) {
+      console.warn('syncTeacherDelta notice:', err);
+      return false;
+    }
+  };
+
+  // Manual button / check for teacher updates with informative report
+  const checkTeacherUpdatesNow = async (): Promise<{ updated: boolean; changedModules?: string[]; message?: string }> => {
+    try {
+      const meta = await fetchSchoolMeta(db, 'main');
+      if (!meta) {
+        return { updated: false, message: 'Bulut sunucusuna ulaşılamadı veya kota koruma modunda.' };
+      }
+
+      const remoteHashes: Record<string, string> = meta.moduleHashes || {};
+      const localHashes = lastTeacherModuleHashesRef.current || {};
+      const teacherTargetModules = ['halls', 'results', 'league', 'exams', 'students'];
+      const changed = teacherTargetModules.filter(m => remoteHashes[m] && remoteHashes[m] !== localHashes[m]);
+
+      if (changed.length === 0) {
+        setSyncStatus('synced');
+        return { updated: false, message: 'Verileriniz zaten en güncel versiyonda (0 bayt indirildi).' };
+      }
+
+      const success = await syncTeacherDelta(meta);
+      if (success) {
+        return { updated: true, changedModules: changed, message: `Güncellenen modüller: ${changed.join(', ')}` };
+      }
+      return { updated: false, message: 'Güncelleme alınırken bir sorun oluştu.' };
+    } catch (e: any) {
+      return { updated: false, message: e?.message || 'Bağlantı hatası' };
+    }
+  };
+
+  // Ultra-lightweight Real-time Firestore listener for teachers (Only listens to 1 single 'meta' doc!)
   useEffect(() => {
-    // Real-time Firestore Modules listener for teachers (Admins sync strictly via Google Drive!)
-    let unsubModules: (() => void) | null = null;
-    let unsubRoot: (() => void) | null = null;
+    let unsubMeta: (() => void) | null = null;
 
     if (userRole === 'teacher' && firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
       try {
-        const modulesColRef = collection(db, 'schools', 'main', 'modules');
-        unsubModules = onSnapshot(modulesColRef, (snapshot) => {
-          if (!snapshot.empty) {
-            syncFromCloudStorage(true).catch(() => {});
+        const metaDocRef = doc(db, 'schools', 'main', 'modules', 'meta');
+        unsubMeta = onSnapshot(metaDocRef, (snap) => {
+          if (snap.exists()) {
+            syncTeacherDelta(snap.data()).catch(() => {});
           }
         }, (err: any) => {
           if (err?.code !== 'unavailable') {
-            console.warn('Realtime cloud modules listener notice:', err?.message || err);
+            console.warn('Realtime cloud meta listener notice:', err?.message || err);
           }
         });
-
-        const rootDocRef = doc(db, 'schools', 'main');
-        unsubRoot = onSnapshot(rootDocRef, () => {
-          syncFromCloudStorage(true).catch(() => {});
-        }, () => {});
       } catch (e) {}
     }
 
-    // Sync on tab focus for teachers so they see published updates when they switch back
+    // Sync on tab focus for teachers - throttled to at most once per 30 seconds, checking ONLY meta
     const handleFocus = () => {
       const now = Date.now();
-      if (userRole === 'teacher' && now - lastFocusSyncRef.current > 10000 && isInitialCloudHydrationDoneRef.current) {
+      if (userRole === 'teacher' && now - lastFocusSyncRef.current > 30000 && isInitialCloudHydrationDoneRef.current) {
         lastFocusSyncRef.current = now;
-        syncFromCloudStorage(true).catch(() => {});
+        syncTeacherDelta().catch(() => {});
       }
     };
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      if (unsubModules) unsubModules();
-      if (unsubRoot) unsubRoot();
+      if (unsubMeta) unsubMeta();
       window.removeEventListener('focus', handleFocus);
     };
   }, [user?.email, userRole]);
@@ -2374,7 +2523,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       setIsNotificationModalOpen,
       openNotificationModal,
       markNotificationsAsSeen,
-      sendPushNotification
+      sendPushNotification,
+      checkTeacherUpdatesNow
     }}>
       {children}
     </AppContext.Provider>

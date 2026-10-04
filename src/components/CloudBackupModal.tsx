@@ -703,7 +703,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                           onClick={handlePullFromDrive}
                           disabled={isPullingFromDrive || isDriveAutoSyncing}
                           className="w-full sm:w-auto px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
-                          title="Google Drive'daki en son 120 kişilik kütüğü hemen indir"
+                          title="Google Drive'daki en son canlı kütüğü hemen indir"
                         >
                           <Download className={`w-3.5 h-3.5 ${isPullingFromDrive ? 'animate-bounce' : ''}`} />
                           <span>{isPullingFromDrive ? 'Drive\'dan İndiriliyor...' : 'Drive\'dan Canlı Kütüğü İndir'}</span>

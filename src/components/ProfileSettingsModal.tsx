@@ -51,9 +51,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   saveFeedback,
   syncStatus = 'synced'
 }) => {
-  const { state } = useAppContext();
+  const { state, checkTeacherUpdatesNow } = useAppContext();
   const [activeTab, setActiveTab] = useState<'profile' | 'backup' | 'cloud'>('profile');
   const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [checkFeedback, setCheckFeedback] = useState<string | null>(null);
   const [permissionState, setPermissionState] = useState<NotificationPermission>('default');
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
@@ -591,6 +593,34 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <UploadCloud className={cn("w-3.5 h-3.5", isSaving && "animate-bounce")} />
                     <span>{isSaving ? 'Yayınlanıyor...' : 'Yayınla (Firebase)'}</span>
                   </button>
+                )}
+
+                {userRole === 'teacher' && checkTeacherUpdatesNow && (
+                  <div className="space-y-1.5 pt-1">
+                    <button
+                      onClick={async () => {
+                        setIsCheckingUpdates(true);
+                        setCheckFeedback(null);
+                        try {
+                          const res = await checkTeacherUpdatesNow();
+                          setCheckFeedback(res.message || 'Denetlendi.');
+                        } finally {
+                          setIsCheckingUpdates(false);
+                          setTimeout(() => setCheckFeedback(null), 4000);
+                        }
+                      }}
+                      disabled={isCheckingUpdates}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-98 disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn("w-3.5 h-3.5 text-amber-400", isCheckingUpdates && "animate-spin")} />
+                      <span>{isCheckingUpdates ? 'Kontrol Ediliyor...' : 'Yayın Güncellemelerini Denetle'}</span>
+                    </button>
+                    {checkFeedback && (
+                      <p className="text-[11px] text-amber-300/90 text-center font-medium animate-fade-in">
+                        {checkFeedback}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

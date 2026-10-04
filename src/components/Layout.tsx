@@ -147,7 +147,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     unreadNotificationsCount,
     isNotificationModalOpen,
     setIsNotificationModalOpen,
-    openNotificationModal
+    openNotificationModal,
+    checkTeacherUpdatesNow
   } = useAppContext();
   
   const [isPublishing, setIsPublishing] = useState(false);
@@ -460,6 +461,36 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     <span className="truncate">JSON İndir</span>
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Teacher Cloud Sync Status Area */}
+            {userRole === 'teacher' && (
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white truncate">
+                      {syncStatus === 'synced' ? 'Bulutla Eşit (Akıllı Önbellek)' : 'Veriler Güncelleniyor...'}
+                    </p>
+                    <p className="text-[10px] text-white/50 truncate">
+                      {saveFeedback || (lastSyncedAt ? `Son kontrol: ${lastSyncedAt}` : 'Salon & Sınav verileri güncel')}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setSaveFeedback('Kontrol ediliyor...');
+                    const res = await checkTeacherUpdatesNow();
+                    setSaveFeedback(res.message || 'Güncel');
+                    setTimeout(() => setSaveFeedback(null), 3500);
+                  }}
+                  className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer active:scale-95"
+                  title="Yayınlanan yeni sınav veya salon verilerini kontrol et"
+                >
+                  Yenile
+                </button>
               </div>
             )}
 
