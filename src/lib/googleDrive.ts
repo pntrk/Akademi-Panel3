@@ -393,10 +393,10 @@ export const findLiveMasterDriveFile = async (
       };
     }
 
-    // Search across Google Drive for any AkademiPanel, Canli_Kutuk, or backup files
-    const query = "(name contains 'AkademiPanel' or name contains 'Canli_Kutuk' or name contains 'Kutuk' or name contains 'Okul_Yedegi' or name contains 'Tam_Yedek' or name contains 'Ogrenci') and trashed = false";
+    // Search across Google Drive for any AkademiPanel, Canli_Kutuk, or backup JSON files
+    const query = "trashed = false and (name contains 'Canli_Kutuk' or name contains 'Akademi' or name contains 'Kutuk' or name contains 'Ogrenci' or name contains 'Yedek' or name contains '.json' or mimeType = 'application/json')";
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,size,webViewLink,owners,description)&orderBy=modifiedTime desc&pageSize=30&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,size,webViewLink,owners,description)&orderBy=modifiedTime desc&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 

@@ -355,7 +355,11 @@ export const loginWithGoogle = async () => {
     }
     return result;
   } catch (err: any) {
-    console.error('Google Sign In error:', err);
+    if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+      // Gracefully handle user cancelling or closing the popup
+      return null;
+    }
+    console.warn('Google Sign In notice:', err?.message || err);
     throw err;
   }
 };
@@ -382,6 +386,10 @@ export const connectGoogleDrive = async (silentOnly = false, forceRefresh = fals
       return credential.accessToken;
     }
   } catch (error: any) {
+    if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+      // User closed drive popup
+      return null;
+    }
     console.warn('Drive connection notice:', error?.message);
     if (!silentOnly) {
       throw error;
