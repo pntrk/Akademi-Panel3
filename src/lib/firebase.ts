@@ -606,11 +606,23 @@ export const fetchModularSchoolState = async (
       snap.forEach(docSnap => {
         const id = docSnap.id;
         const d = docSnap.data();
-        if (id === 'students' && Array.isArray(d.students)) merged.students = d.students;
-        else if (id === 'exams' && Array.isArray(d.exams)) merged.exams = d.exams;
-        else if (id === 'results' && Array.isArray(d.results)) merged.results = d.results;
+        if (id === 'students' && Array.isArray(d.students) && d.students.length > 0) merged.students = d.students;
+        else if (id === 'exams' && Array.isArray(d.exams) && d.exams.length > 0) merged.exams = d.exams;
+        else if (id === 'results' && Array.isArray(d.results) && d.results.length > 0) merged.results = d.results;
         else if (id === 'budget' && d.budget) merged.budget = d.budget;
-        else if (id === 'halls' && Array.isArray(d.examHalls)) merged.examHalls = d.examHalls;
+        else if (id === 'halls' && Array.isArray(d.examHalls)) {
+          if (d.examHalls.length > 0) {
+            merged.examHalls = d.examHalls.map((h: any) => {
+              const rootHall = (rootData.examHalls || []).find((rh: any) => rh.id === h.id);
+              if ((!h.seatingPlan || h.seatingPlan.length === 0) && rootHall && rootHall.seatingPlan && rootHall.seatingPlan.length > 0) {
+                return { ...h, seatingPlan: rootHall.seatingPlan };
+              }
+              return h;
+            });
+          } else if (rootData.examHalls && rootData.examHalls.length > 0) {
+            merged.examHalls = rootData.examHalls;
+          }
+        }
         else if (id === 'league') {
           if (d.leagueMentors) merged.leagueMentors = d.leagueMentors;
           if (d.leagueTeamPoints) merged.leagueTeamPoints = d.leagueTeamPoints;

@@ -1162,7 +1162,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       // 1. Primary: Write subcollections to Modular Firestore (schools/main/modules/*)
       if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
         try {
-          const modRes = await writeModularSchoolState(db, cleanState, lastSavedModuleHashesRef.current, 'main', forceRetry);
+          const modRes = await writeModularSchoolState(db, cleanState, lastSavedModuleHashesRef.current, 'main', true);
           if (modRes.success) {
             lastSavedModuleHashesRef.current = modRes.newHashes;
           }
