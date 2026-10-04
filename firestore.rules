@@ -56,37 +56,33 @@ service cloud.firestore {
       );
     }
 
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128;
-    }
-
     // Connection test document
     match /test/{testId} {
       allow read: if true;
       allow write: if false;
     }
 
-    // School collection & data
+    // School collection & subcollections (Students, Exams, Results, Halls, Budget, League, Meta)
     match /schools/{schoolId} {
-      allow get, list: if isSignedIn();
+      allow read: if isSignedIn();
       allow write: if isSchoolAdmin() || isSuperAdmin();
 
-      // Modular Data Subcollection
+      // Modular Data Subcollection (modules/students, modules/exams, modules/results, modules/budget, modules/halls, modules/league, modules/meta)
       match /modules/{moduleId} {
-        allow get, list: if isSignedIn();
+        allow read: if isSignedIn();
         allow write: if isSchoolAdmin() || isSuperAdmin();
       }
 
       // Cloud Backups subcollection
       match /backups/{backupId} {
-        allow get, list: if isSignedIn();
+        allow read: if isSignedIn();
         allow write: if isSchoolAdmin() || isSuperAdmin();
       }
     }
 
-    // Cloud Snapshots (akademi_data.json mirror)
+    // Cloud Snapshots (Full state snapshot mirrors)
     match /snapshots/{snapshotId} {
-      allow get, list: if isSignedIn();
+      allow read: if isSignedIn();
       allow write: if isSchoolAdmin() || isSuperAdmin();
     }
 
@@ -98,7 +94,7 @@ service cloud.firestore {
       allow delete: if isSchoolAdmin() || isSuperAdmin();
     }
 
-    // Access Requests & User Registrations
+    // Access Requests & User Role Approvals
     match /access_requests/{requestId} {
       allow read: if isSignedIn();
       allow write: if isSignedIn();

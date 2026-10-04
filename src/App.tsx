@@ -94,6 +94,15 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   }, [userRole, activeTab]);
 
+  // Automatic live polling for guest approval status every 3 seconds
+  useEffect(() => {
+    if (userRole !== 'guest') return;
+    const interval = setInterval(() => {
+      checkAndRefreshRole().catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [userRole, checkAndRefreshRole]);
+
   // 1. GUEST USER: Immediately show "Erişim İsteğiniz Alındı - Yönetici Onayı Bekleniyor" screen!
   if (userRole === 'guest') {
     const handleCheckStatus = async () => {
