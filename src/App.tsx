@@ -16,36 +16,40 @@ import { ScanView } from './views/ScanView';
 import { KeysAndPrintView } from './views/KeysAndPrintView';
 import { OmrSetupView } from './views/OmrSetupView';
 import { AnalysisView } from './views/AnalysisView';
-import { auth, loginWithGoogle, logout, firebaseConfig, onAuthStateChanged, User, createSyntheticUser, db, doc, setDoc } from './lib/firebase';
+import { auth, loginWithGoogle, logout, firebaseConfig, onAuthStateChanged, User, createSyntheticUser, db, doc, getDoc, setDoc } from './lib/firebase';
 import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck, Database, Cloud, HardDriveDownload } from 'lucide-react';
 import { useAppContext, checkIsQuotaExceededToday, markQuotaExceededToday } from './context/AppContext';
 
-// Record user login into access_requests collection so administrators see all registered users (throttled to once/day)
+// Record user login into access_requests collection so administrators see all registered users
 const syncUserRegistration = async (targetUser: User) => {
   const cleanEmail = (targetUser.email || '').trim().toLowerCase();
   if (!cleanEmail || !firebaseConfig.projectId) return;
-  if (checkIsQuotaExceededToday()) return;
-
-  const todayKey = `app_user_synced_${cleanEmail}_${new Date().toISOString().slice(0, 10)}`;
-  if (localStorage.getItem(todayKey)) return;
 
   try {
     const docRef = doc(db, 'access_requests', cleanEmail);
-    await setDoc(docRef, {
-      email: cleanEmail,
-      name: targetUser.displayName || cleanEmail.split('@')[0],
-      photoURL: targetUser.photoURL || null,
-      lastLoginAt: new Date().toISOString(),
-      timestamp: new Date().toISOString()
-    }, { merge: true });
-    localStorage.setItem(todayKey, '1');
-  } catch (err: any) {
-    const errStr = String(err?.message || err || '');
-    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted') || err?.code === 'resource-exhausted' || errStr.includes('Free daily write units') || errStr.includes('Quota limit exceeded')) {
-      markQuotaExceededToday();
+    const snap = await getDoc(docRef).catch(() => null);
+    if (snap && snap.exists()) {
+      // Document already exists: update lastLoginAt and profile info without modifying role
+      await setDoc(docRef, {
+        email: cleanEmail,
+        name: targetUser.displayName || cleanEmail.split('@')[0],
+        photoURL: targetUser.photoURL || null,
+        lastLoginAt: new Date().toISOString()
+      }, { merge: true });
     } else {
-      console.warn('User registration sync notice:', err);
+      // First time login: create new pending access request for admin approval!
+      await setDoc(docRef, {
+        email: cleanEmail,
+        name: targetUser.displayName || cleanEmail.split('@')[0],
+        photoURL: targetUser.photoURL || null,
+        role: 'guest',
+        status: 'pending',
+        lastLoginAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      }, { merge: true });
     }
+  } catch (err: any) {
+    console.warn('User registration sync notice:', err);
   }
 };
 
