@@ -33,8 +33,14 @@ export const HallsView = () => {
   const [draggedSeatNum, setDraggedSeatNum] = useState<number | null>(null);
   const [dragOverSeatNum, setDragOverSeatNum] = useState<number | null>(null);
   const [showSaveToast, setShowSaveToast] = useState(false);
+  const [highlightStudentQuery, setHighlightStudentQuery] = useState('');
 
   const capacity = columns.reduce((acc, col) => acc + (col.deskCount * col.seatsPerDesk), 0);
+
+  const connectedExamNames = useMemo(() => {
+    if (!selectedExamIds || selectedExamIds.length === 0) return [];
+    return state.exams.filter(ex => selectedExamIds.includes(ex.id)).map(e => e.name);
+  }, [state.exams, selectedExamIds]);
 
   const uniqueClasses = useMemo(() => {
     return Array.from(new Set(state.students.map(s => s.className).filter(Boolean))).sort();
@@ -176,6 +182,7 @@ export const HallsView = () => {
     const seatedIds = (hall.seatingPlan || []).map(sp => sp.studentId);
     const initialDeselected = registered.filter(s => !seatedIds.includes(s.id)).map(s => s.id);
     setDeselectedStudentIds(initialDeselected);
+    setHighlightStudentQuery('');
     setMobileModalTab(isReadOnly ? 'preview' : 'settings');
     setIsModalOpen(true);
   };
@@ -183,6 +190,7 @@ export const HallsView = () => {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingHallId(null);
+    setHighlightStudentQuery('');
   };
 
   // Keep active modal seating plan synced when state updates from Firebase
@@ -908,12 +916,12 @@ export const HallsView = () => {
                   onClick={() => openEditModal(hall)} 
                   className={`w-full mt-2.5 py-2.5 px-3 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer ${
                     isReadOnly 
-                      ? 'bg-amber-50/80 border border-amber-200/80 text-amber-900 hover:bg-amber-100 hover:border-amber-400' 
+                      ? 'bg-indigo-50/90 border border-indigo-200/90 text-indigo-900 hover:bg-indigo-100 hover:border-indigo-400' 
                       : 'bg-[#FAF9F6] border border-brand-border/80 text-brand-ink hover:bg-white hover:border-brand-accent hover:text-brand-accent'
                   }`}
                 >
-                  <Eye className={`w-3.5 h-3.5 shrink-0 ${isReadOnly ? 'text-amber-600' : 'text-brand-ink/60 group-hover:text-brand-accent'}`} />
-                  <span>{isReadOnly ? 'Oturma Düzeni Önizlemesini Gör' : 'Detayları ve Oturma Düzenini Gör'}</span>
+                  <Eye className={`w-3.5 h-3.5 shrink-0 ${isReadOnly ? 'text-indigo-600' : 'text-brand-ink/60 group-hover:text-brand-accent'}`} />
+                  <span>{isReadOnly ? 'Oturma Düzenini Görüntüle' : 'Detayları ve Oturma Düzenini Gör'}</span>
                 </button>
               </div>
             </div>
@@ -957,36 +965,42 @@ export const HallsView = () => {
       {/* ========================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl sm:rounded-[32px] border border-[#e6e2d3] shadow-2xl w-full max-w-4xl h-[92vh] sm:h-[85vh] flex flex-col overflow-hidden animate-slide-up max-h-[92vh]">
+          <div className={`bg-white rounded-2xl sm:rounded-[32px] border border-[#e6e2d3] shadow-2xl w-full ${isReadOnly ? 'max-w-5xl lg:max-w-6xl' : 'max-w-4xl'} h-[94vh] sm:h-[88vh] flex flex-col overflow-hidden animate-slide-up max-h-[94vh]`}>
             
             {/* Header */}
             <div className="bg-[#FAF9F6] border-b border-brand-border/70 p-3.5 sm:p-5 flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-2.5 sm:space-x-3">
-                <div className="bg-indigo-500/15 p-2 rounded-xl text-indigo-700">
+              <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+                <div className="bg-indigo-500/15 p-2 rounded-xl text-indigo-700 shrink-0">
                   <MapPin className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <div>
-                  <h3 className="text-base sm:text-xl font-serif text-brand-ink font-bold leading-tight">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-xl font-serif text-brand-ink font-bold leading-tight truncate">
+                      {hallName || 'Sınav Salonu'}
+                    </h3>
+                    {isReadOnly && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 shrink-0">
+                        Oturma Düzeni Önizleme
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] sm:text-xs text-brand-ink/60 mt-0.5 truncate">
                     {isReadOnly 
-                      ? `${hallName || 'Sınav Salonu'} - Oturma Düzeni Önizleme` 
-                      : (editingHallId ? 'Sınav Salonu Düzenle' : 'Yeni Sınav Salonu Oluştur')}
-                  </h3>
-                  <p className="text-[10px] sm:text-xs text-brand-ink/60">
-                    {isReadOnly 
-                      ? 'Admin tarafından oluşturulan sınav oturma düzeni ve yerleşim şeması (Salt Okunur)' 
-                      : 'Salon detayları, kapasite ve otomatik oturma düzeni'}
+                      ? 'Sınav salonu oturma planı ve yerleşim şeması (Gözetmenlik & Yoklama Ekranı)' 
+                      : (editingHallId ? 'Sınav salonu detayları, kapasite ve otomatik oturma düzeni' : 'Yeni salon detayları, kapasite ve otomatik oturma düzeni')}
                   </p>
                 </div>
               </div>
               <button 
                 onClick={closeModal}
-                className="p-2 text-brand-ink/50 hover:text-brand-ink hover:bg-black/5 rounded-xl transition-all cursor-pointer"
+                className="p-2 text-brand-ink/50 hover:text-brand-ink hover:bg-black/5 rounded-xl transition-all cursor-pointer shrink-0 ml-2"
+                title="Pencereyi Kapat"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Mobile Tab Switcher */}
+            {/* Mobile Tab Switcher (Yalnızca İdareci / Admin Düzenleme Modunda Görünür) */}
             {!isReadOnly && (
               <div className="md:hidden flex border-b border-brand-border/70 bg-[#FAF9F6] p-1.5 gap-1 shrink-0">
                 <button
@@ -1019,391 +1033,485 @@ export const HallsView = () => {
             {/* Content */}
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-[#fcfbf7]/40">
               
-              {/* Left Sidebar Form */}
-              <div className={`w-full md:w-1/3 border-r border-[#e6e2d3] p-4 sm:p-6 overflow-y-auto space-y-5 bg-white ${
-                mobileModalTab === 'settings' ? 'block' : 'hidden md:block'
-              }`}>
-                
-                <div>
-                  <label className="block text-xs font-bold text-[#8e8d82] mb-1.5 uppercase tracking-wider">Salon Adı / Yeri</label>
-                  <input 
-                    type="text" 
-                    value={hallName} 
-                    onChange={e => setHallName(e.target.value)}
-                    className="w-full bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl px-3 py-2.5 text-sm font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
-                    placeholder="Örn: 1. Kat - Salon A"
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">Oturma Düzeni (Sütunlar)</label>
-                    <span className="text-xs font-bold text-[#5a5a40] bg-[#f5f5f0] px-2 py-1 rounded-full border border-[#e6e2d3]">Toplam: {capacity}</span>
-                  </div>
+              {/* Left Sidebar Form - Yalnızca İdareciler / Adminler İçin (Öğretmenler salon adı veya oturma düzeni oluşturamaz) */}
+              {!isReadOnly && (
+                <div className={`w-full md:w-1/3 border-r border-[#e6e2d3] p-4 sm:p-6 overflow-y-auto space-y-5 bg-white ${
+                  mobileModalTab === 'settings' ? 'block' : 'hidden md:block'
+                }`}>
                   
-                  <div className="space-y-2">
-                    {columns.map((col, idx) => (
-                      <div key={col.id} className="flex flex-col bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 gap-2 relative group">
-                        <button 
-                          type="button"
-                          onClick={() => setColumns(columns.filter(c => c.id !== col.id))}
-                          className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                        <input 
-                          type="text" 
-                          value={col.name} 
-                          onChange={e => {
-                            const newCols = [...columns];
-                            newCols[idx].name = e.target.value;
-                            setColumns(newCols);
-                          }}
-                          className="w-full bg-white border border-[#e6e2d3] rounded-lg px-2 py-1.5 text-xs font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
-                          placeholder="Sütun Adı (örn: Cam Kenarı)"
-                        />
-                        <div className="flex gap-2">
-                          <div className="flex-1">
-                            <label className="text-[10px] text-[#8e8d82] font-semibold mb-1 block">Sıra Sayısı</label>
-                            <input 
-                              type="number" 
-                              value={col.deskCount || ''} 
-                              onChange={e => {
-                                const newCols = [...columns];
-                                newCols[idx].deskCount = parseInt(e.target.value) || 0;
-                                setColumns(newCols);
-                              }}
-                              className="w-full bg-white border border-[#e6e2d3] rounded-lg px-2 py-1.5 text-xs font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
-                              min="1"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="text-[10px] text-[#8e8d82] font-semibold mb-1 block">Sıra Tipi</label>
-                            <select 
-                              value={col.seatsPerDesk}
-                              onChange={e => {
-                                const newCols = [...columns];
-                                newCols[idx].seatsPerDesk = parseInt(e.target.value);
-                                setColumns(newCols);
-                              }}
-                              className="w-full bg-white border border-[#e6e2d3] rounded-lg px-2 py-1.5 text-xs font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
-                            >
-                              <option value={1}>Tekli</option>
-                              <option value={2}>İkili</option>
-                              <option value={3}>Üçlü</option>
-                            </select>
+                  <div>
+                    <label className="block text-xs font-bold text-[#8e8d82] mb-1.5 uppercase tracking-wider">Salon Adı / Yeri</label>
+                    <input 
+                      type="text" 
+                      value={hallName} 
+                      onChange={e => setHallName(e.target.value)}
+                      className="w-full bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl px-3 py-2.5 text-sm font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
+                      placeholder="Örn: 1. Kat - Salon A"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">Oturma Düzeni (Sütunlar)</label>
+                      <span className="text-xs font-bold text-[#5a5a40] bg-[#f5f5f0] px-2 py-1 rounded-full border border-[#e6e2d3]">Toplam: {capacity}</span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {columns.map((col, idx) => (
+                        <div key={col.id} className="flex flex-col bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 gap-2 relative group">
+                          <button 
+                            type="button"
+                            onClick={() => setColumns(columns.filter(c => c.id !== col.id))}
+                            className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                          <input 
+                            type="text" 
+                            value={col.name} 
+                            onChange={e => {
+                              const newCols = [...columns];
+                              newCols[idx].name = e.target.value;
+                              setColumns(newCols);
+                            }}
+                            className="w-full bg-white border border-[#e6e2d3] rounded-lg px-2 py-1.5 text-xs font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
+                            placeholder="Sütun Adı (örn: Cam Kenarı)"
+                          />
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-[#8e8d82] font-semibold mb-1 block">Sıra Sayısı</label>
+                              <input 
+                                type="number" 
+                                value={col.deskCount || ''} 
+                                onChange={e => {
+                                  const newCols = [...columns];
+                                  newCols[idx].deskCount = parseInt(e.target.value) || 0;
+                                  setColumns(newCols);
+                                }}
+                                className="w-full bg-white border border-[#e6e2d3] rounded-lg px-2 py-1.5 text-xs font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
+                                min="1"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[10px] text-[#8e8d82] font-semibold mb-1 block">Sıra Tipi</label>
+                              <select 
+                                value={col.seatsPerDesk}
+                                onChange={e => {
+                                  const newCols = [...columns];
+                                  newCols[idx].seatsPerDesk = parseInt(e.target.value);
+                                  setColumns(newCols);
+                                }}
+                                className="w-full bg-white border border-[#e6e2d3] rounded-lg px-2 py-1.5 text-xs font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
+                              >
+                                <option value={1}>Tekli</option>
+                                <option value={2}>İkili</option>
+                                <option value={3}>Üçlü</option>
+                              </select>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => setColumns([...columns, { id: generateId(), name: `Sütun ${columns.length + 1}`, deskCount: 5, seatsPerDesk: 2 }])}
+                      className="w-full py-2 border-2 border-dashed border-[#d4d19d] text-[#5a5a40] text-xs font-bold rounded-xl hover:bg-[#f5f5f0] transition-colors flex items-center justify-center cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Sütun Ekle
+                    </button>
                   </div>
-                  <button 
-                    type="button"
-                    onClick={() => setColumns([...columns, { id: generateId(), name: `Sütun ${columns.length + 1}`, deskCount: 5, seatsPerDesk: 2 }])}
-                    className="w-full py-2 border-2 border-dashed border-[#d4d19d] text-[#5a5a40] text-xs font-bold rounded-xl hover:bg-[#f5f5f0] transition-colors flex items-center justify-center"
-                  >
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Sütun Ekle
-                  </button>
-                </div>
 
-                {/* Katılacak Sınıf Seviyeleri */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">
-                    Katılacak Sınıf Seviyeleri
-                  </label>
-                  <p className="text-[11px] text-[#8e8d82] leading-tight">
-                    Salonun atanacağı sınıf seviyelerini seçin.
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {availableGradeLevels.map(lvl => {
-                      const isChecked = selectedGrades.includes(lvl);
-                      const classesOfThisGrade = uniqueClasses.filter(c => getGradeLevel(c) === lvl);
-                      const selectedCount = classesOfThisGrade.filter(c => selectedClasses.includes(c)).length;
-                      
-                      return (
-                        <button
-                          key={lvl}
-                          type="button"
-                          onClick={() => toggleGrade(lvl)}
-                          className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-center flex flex-col justify-center items-center ${
-                            isChecked 
-                              ? 'bg-[#5a5a40] text-white border-transparent shadow-sm' 
-                              : 'bg-white text-[#5a5a40] border-[#e6e2d3] hover:bg-[#f5f5f0]'
-                          }`}
-                        >
-                          <span>{lvl === 'Diğer' ? 'Diğer Sınıflar' : `${lvl}. Sınıflar`}</span>
-                          {classesOfThisGrade.length > 0 && (
-                            <span className={`text-[9px] mt-0.5 font-normal ${isChecked ? 'text-gray-200' : 'text-[#8e8d82]'}`}>
-                              ({selectedCount}/{classesOfThisGrade.length} Şube)
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {availableGradeLevels.length === 0 && (
-                    <div className="text-xs text-[#8e8d82] italic">Sistemde henüz sınıf tanımlanmamış.</div>
-                  )}
-                </div>
-
-                {/* Sınıf Şubeleri Filtreleme */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  {/* Katılacak Sınıf Seviyeleri */}
+                  <div className="space-y-2">
                     <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">
-                      Şube Filtreleme / Seçimi
+                      Katılacak Sınıf Seviyeleri
                     </label>
-                    {selectedClasses.length > 0 && (
-                      <span className="text-[10px] font-bold text-[#5a5a40] bg-[#f5f5f0] px-2 py-0.5 rounded-full border border-[#e6e2d3]">
-                        {selectedClasses.length} Şube Seçili
-                      </span>
+                    <p className="text-[11px] text-[#8e8d82] leading-tight">
+                      Salonun atanacağı sınıf seviyelerini seçin.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {availableGradeLevels.map(lvl => {
+                        const isChecked = selectedGrades.includes(lvl);
+                        const classesOfThisGrade = uniqueClasses.filter(c => getGradeLevel(c) === lvl);
+                        const selectedCount = classesOfThisGrade.filter(c => selectedClasses.includes(c)).length;
+                        
+                        return (
+                          <button
+                            key={lvl}
+                            type="button"
+                            onClick={() => toggleGrade(lvl)}
+                            className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-center flex flex-col justify-center items-center cursor-pointer ${
+                              isChecked 
+                                ? 'bg-[#5a5a40] text-white border-transparent shadow-sm' 
+                                : 'bg-white text-[#5a5a40] border-[#e6e2d3] hover:bg-[#f5f5f0]'
+                            }`}
+                          >
+                            <span>{lvl === 'Diğer' ? 'Diğer Sınıflar' : `${lvl}. Sınıflar`}</span>
+                            {classesOfThisGrade.length > 0 && (
+                              <span className={`text-[9px] mt-0.5 font-normal ${isChecked ? 'text-gray-200' : 'text-[#8e8d82]'}`}>
+                                ({selectedCount}/{classesOfThisGrade.length} Şube)
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {availableGradeLevels.length === 0 && (
+                      <div className="text-xs text-[#8e8d82] italic">Sistemde henüz sınıf tanımlanmamış.</div>
                     )}
                   </div>
-                  
-                  {selectedGrades.length === 0 ? (
-                    <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic">
-                      Yukarıdan sınıf seviyesi seçtiğinizde şubeler burada listelenir.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-3 gap-1.5 max-h-[120px] overflow-y-auto pr-1">
-                      {uniqueClasses
-                        .filter(c => selectedGrades.includes(getGradeLevel(c)))
-                        .map(clsName => {
-                          const isChecked = selectedClasses.includes(clsName);
-                          return (
-                            <button
-                              key={clsName}
-                              type="button"
-                              onClick={() => toggleBranch(clsName)}
-                              className={`p-1.5 rounded-lg text-xs font-bold border transition-all text-center ${
-                                isChecked 
-                                  ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm font-bold' 
-                                  : 'bg-white text-[#5a5a40] border-[#e6e2d3] hover:bg-gray-50'
-                              }`}
-                            >
-                              {clsName}
-                            </button>
-                          );
-                        })}
-                    </div>
-                  )}
-                </div>
 
-                {/* Bağlantılı Deneme Sınavları */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-[#8e8d82] mb-1 uppercase tracking-wider">
-                    Bağlantılı Deneme Sınavları
-                  </label>
-                  <p className="text-[11px] text-[#8e8d82] leading-tight mb-2">
-                    Bu sınav salonunda uygulanacak olan ve seçili sınıf seviyelerine uygun deneme sınavlarını seçin.
-                  </p>
-                  <div className="flex flex-col gap-2 max-h-[140px] overflow-y-auto pr-1">
+                  {/* Sınıf Şubeleri Filtreleme */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">
+                        Şube Filtreleme / Seçimi
+                      </label>
+                      {selectedClasses.length > 0 && (
+                        <span className="text-[10px] font-bold text-[#5a5a40] bg-[#f5f5f0] px-2 py-0.5 rounded-full border border-[#e6e2d3]">
+                          {selectedClasses.length} Şube Seçili
+                        </span>
+                      )}
+                    </div>
+                    
                     {selectedGrades.length === 0 ? (
                       <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic">
-                        Bağlantılı sınavları görebilmek için önce katılacak sınıf seviyelerini seçin.
+                        Yukarıdan sınıf seviyesi seçtiğinizde şubeler burada listelenir.
                       </div>
-                    ) : filteredExams.length > 0 ? (
-                      filteredExams.map(ex => {
-                        const isChecked = selectedExamIds.includes(ex.id);
-                        return (
-                          <label key={ex.id} className="flex items-start space-x-2 cursor-pointer p-2 rounded-xl hover:bg-[#f5f5f0] border border-transparent hover:border-[#e6e2d3] transition-all bg-white shadow-sm">
-                            <input 
-                              type="checkbox" 
-                              checked={isChecked}
-                              onChange={() => {
-                                if (isChecked) {
-                                  setSelectedExamIds(selectedExamIds.filter(id => id !== ex.id));
-                                } else {
-                                  setSelectedExamIds([...selectedExamIds, ex.id]);
-                                }
-                              }}
-                              className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40] mt-1 shrink-0"
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-xs font-bold text-[#5a5a40] truncate">{ex.name}</span>
-                              <span className="text-[9px] text-[#8e8d82] mt-0.5">
-                                Sınıf Seviyeleri: {ex.participatingClasses?.map(g => `${g}. Sınıf`).join(', ') || 'Belirtilmemiş'}
-                              </span>
-                            </div>
-                          </label>
-                        );
-                      })
                     ) : (
-                      <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic leading-normal">
-                        Seçili sınıf seviyelerine ({selectedGrades.map(g => `${g === 'Diğer' ? 'Diğer' : `${g}. Sınıf`}`).join(', ')}) uygun tanımlanmış aktif deneme sınavı bulunamadı.
+                      <div className="grid grid-cols-3 gap-1.5 max-h-[120px] overflow-y-auto pr-1">
+                        {uniqueClasses
+                          .filter(c => selectedGrades.includes(getGradeLevel(c)))
+                          .map(clsName => {
+                            const isChecked = selectedClasses.includes(clsName);
+                            return (
+                              <button
+                                key={clsName}
+                                type="button"
+                                onClick={() => toggleBranch(clsName)}
+                                className={`p-1.5 rounded-lg text-xs font-bold border transition-all text-center cursor-pointer ${
+                                  isChecked 
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm font-bold' 
+                                    : 'bg-white text-[#5a5a40] border-[#e6e2d3] hover:bg-gray-50'
+                                }`}
+                              >
+                                {clsName}
+                              </button>
+                            );
+                          })}
                       </div>
                     )}
                   </div>
-                </div>
 
-                {/* Sınava Kayıtlı Öğrenciler ve Toplu Seçim */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">
-                      Sınava Kayıtlı Öğrenciler
+                  {/* Bağlantılı Deneme Sınavları */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-[#8e8d82] mb-1 uppercase tracking-wider">
+                      Bağlantılı Deneme Sınavları
                     </label>
-                    {registeredStudentsForSeating.length > 0 && (
-                      <span className="text-[10px] font-bold text-[#5a5a40] bg-[#f5f5f0] px-2 py-0.5 rounded-full border border-[#e6e2d3]">
-                        {activeStudentsForSeating.length} / {registeredStudentsForSeating.length} Seçili
-                      </span>
-                    )}
-                  </div>
-                  
-                  {selectedClasses.length === 0 ? (
-                    <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic">
-                      Katılacak sınıfları seçtiğinizde kayıtlı öğrenciler burada listelenir.
-                    </div>
-                  ) : selectedExamIds.length === 0 ? (
-                    <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic">
-                      Lütfen önce yukarıdan deneme sınavı seçin.
-                    </div>
-                  ) : registeredStudentsForSeating.length === 0 ? (
-                    <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic">
-                      Seçilen sınıflarda bu sınava kayıtlı öğrenci bulunamadı.
-                    </div>
-                  ) : (
-                    <div className="border border-[#e6e2d3] rounded-xl bg-[#fcfbf7] overflow-hidden">
-                      {/* Toplu Seçim Başlığı */}
-                      <div className="flex items-center justify-between px-3 py-2 bg-[#f5f5f0] border-b border-[#e6e2d3]">
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input 
-                            type="checkbox"
-                            checked={registeredStudentsForSeating.length > 0 && deselectedStudentIds.length === 0}
-                            ref={el => {
-                              if (el) {
-                                el.indeterminate = deselectedStudentIds.length > 0 && deselectedStudentIds.length < registeredStudentsForSeating.length;
-                              }
-                            }}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setDeselectedStudentIds([]);
-                              } else {
-                                setDeselectedStudentIds(registeredStudentsForSeating.map(s => s.id));
-                              }
-                            }}
-                            className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40] h-3.5 w-3.5"
-                          />
-                          <span className="text-xs font-bold text-[#5a5a40]">Tümünü Seç</span>
-                        </label>
-                      </div>
-                      
-                      {/* Öğrenci Listesi */}
-                      <div className="max-h-[160px] overflow-y-auto p-1.5 space-y-1">
-                        {registeredStudentsForSeating.map(student => {
-                          const isSelected = !deselectedStudentIds.includes(student.id);
+                    <p className="text-[11px] text-[#8e8d82] leading-tight mb-2">
+                      Bu sınav salonunda uygulanacak olan ve seçili sınıf seviyelerine uygun deneme sınavlarını seçin.
+                    </p>
+                    <div className="flex flex-col gap-2 max-h-[140px] overflow-y-auto pr-1">
+                      {selectedGrades.length === 0 ? (
+                        <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic">
+                          Bağlantılı sınavları görebilmek için önce katılacak sınıf seviyelerini seçin.
+                        </div>
+                      ) : filteredExams.length > 0 ? (
+                        filteredExams.map(ex => {
+                          const isChecked = selectedExamIds.includes(ex.id);
                           return (
-                            <label 
-                              key={student.id} 
-                              className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
-                                isSelected 
-                                  ? 'bg-white border-[#d4d19d]/50 hover:bg-[#fcfbf7]' 
-                                  : 'bg-gray-50 border-transparent text-gray-400 hover:bg-gray-100/50'
-                              }`}
-                            >
-                              <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                                <input 
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => {
-                                    if (isSelected) {
-                                      setDeselectedStudentIds([...deselectedStudentIds, student.id]);
-                                    } else {
-                                      setDeselectedStudentIds(deselectedStudentIds.filter(id => id !== student.id));
-                                    }
-                                  }}
-                                  className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40] shrink-0 h-3.5 w-3.5"
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <div className={`font-bold truncate ${isSelected ? 'text-[#5a5a40]' : 'text-gray-400'}`}>
-                                    {student.name}
-                                  </div>
-                                  <div className="text-[10px] text-[#8e8d82] flex items-center gap-1.5 mt-0.5">
-                                    <span>No: {student.no}</span>
-                                    <span>•</span>
-                                    <span className="font-bold text-[#5a5a40]">{student.className}</span>
-                                  </div>
-                                </div>
+                            <label key={ex.id} className="flex items-start space-x-2 cursor-pointer p-2 rounded-xl hover:bg-[#f5f5f0] border border-transparent hover:border-[#e6e2d3] transition-all bg-white shadow-sm">
+                              <input 
+                                type="checkbox" 
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setSelectedExamIds(selectedExamIds.filter(id => id !== ex.id));
+                                  } else {
+                                    setSelectedExamIds([...selectedExamIds, ex.id]);
+                                  }
+                                }}
+                                className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40] mt-1 shrink-0"
+                              />
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-bold text-[#5a5a40] truncate">{ex.name}</span>
+                                <span className="text-[9px] text-[#8e8d82] mt-0.5">
+                                  Sınıf Seviyeleri: {ex.participatingClasses?.map(g => `${g}. Sınıf`).join(', ') || 'Belirtilmemiş'}
+                                </span>
                               </div>
                             </label>
                           );
-                        })}
+                        })
+                      ) : (
+                        <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic leading-normal">
+                          Seçili sınıf seviyelerine ({selectedGrades.map(g => `${g === 'Diğer' ? 'Diğer' : `${g}. Sınıf`}`).join(', ')}) uygun tanımlanmış aktif deneme sınavı bulunamadı.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sınava Kayıtlı Öğrenciler ve Toplu Seçim */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">
+                        Sınava Kayıtlı Öğrenciler
+                      </label>
+                      {registeredStudentsForSeating.length > 0 && (
+                        <span className="text-[10px] font-bold text-[#5a5a40] bg-[#f5f5f0] px-2 py-0.5 rounded-full border border-[#e6e2d3]">
+                          {activeStudentsForSeating.length} / {registeredStudentsForSeating.length} Seçili
+                        </span>
+                      )}
+                    </div>
+                    
+                    {selectedClasses.length === 0 ? (
+                      <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic">
+                        Katılacak sınıfları seçtiğinizde kayıtlı öğrenciler burada listelenir.
+                      </div>
+                    ) : selectedExamIds.length === 0 ? (
+                      <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic">
+                        Lütfen önce yukarıdan deneme sınavı seçin.
+                      </div>
+                    ) : registeredStudentsForSeating.length === 0 ? (
+                      <div className="text-xs text-[#8e8d82] bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 italic">
+                        Seçilen sınıflarda bu sınava kayıtlı öğrenci bulunamadı.
+                      </div>
+                    ) : (
+                      <div className="border border-[#e6e2d3] rounded-xl bg-[#fcfbf7] overflow-hidden">
+                        {/* Toplu Seçim Başlığı */}
+                        <div className="flex items-center justify-between px-3 py-2 bg-[#f5f5f0] border-b border-[#e6e2d3]">
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={registeredStudentsForSeating.length > 0 && deselectedStudentIds.length === 0}
+                              ref={el => {
+                                if (el) {
+                                  el.indeterminate = deselectedStudentIds.length > 0 && deselectedStudentIds.length < registeredStudentsForSeating.length;
+                                }
+                              }}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setDeselectedStudentIds([]);
+                                } else {
+                                  setDeselectedStudentIds(registeredStudentsForSeating.map(s => s.id));
+                                }
+                              }}
+                              className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40] h-3.5 w-3.5"
+                            />
+                            <span className="text-xs font-bold text-[#5a5a40]">Tümünü Seç</span>
+                          </label>
+                        </div>
+                        
+                        {/* Öğrenci Listesi */}
+                        <div className="max-h-[160px] overflow-y-auto p-1.5 space-y-1">
+                          {registeredStudentsForSeating.map(student => {
+                            const isSelected = !deselectedStudentIds.includes(student.id);
+                            return (
+                              <label 
+                                key={student.id} 
+                                className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                                  isSelected 
+                                    ? 'bg-white border-[#d4d19d]/50 hover:bg-[#fcfbf7]' 
+                                    : 'bg-gray-50 border-transparent text-gray-400 hover:bg-gray-100/50'
+                                }`}
+                              >
+                                <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      if (isSelected) {
+                                        setDeselectedStudentIds([...deselectedStudentIds, student.id]);
+                                      } else {
+                                        setDeselectedStudentIds(deselectedStudentIds.filter(id => id !== student.id));
+                                      }
+                                    }}
+                                    className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40] shrink-0 h-3.5 w-3.5"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className={`font-bold truncate ${isSelected ? 'text-[#5a5a40]' : 'text-gray-400'}`}>
+                                      {student.name}
+                                    </div>
+                                    <div className="text-[10px] text-[#8e8d82] flex items-center gap-1.5 mt-0.5">
+                                      <span>No: {student.no}</span>
+                                      <span>•</span>
+                                      <span className="font-bold text-[#5a5a40]">{student.className}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2">
+                    <button 
+                      onClick={handleGenerateSeating}
+                      className="w-full flex items-center justify-center space-x-2 bg-[#d4d19d] text-[#5a5a40] font-bold text-sm py-3 rounded-xl hover:bg-[#e6e2d3] transition-all shadow-sm cursor-pointer"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span>Oturma Düzeni Oluştur</span>
+                    </button>
+                    <p className="text-[10px] text-[#8e8d82] text-center mt-2 leading-tight">
+                      Seçili sınıflardaki öğrenciler rastgele karıştırılarak belirtilen kapasiteye göre sıralanır.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Right Content - Seating Plan Preview (Öğretmenler için Tam Ekran, Ferah ve Optimize Önizleme) */}
+              <div className={`w-full ${!isReadOnly ? 'md:w-2/3' : 'w-full'} p-3.5 sm:p-6 flex flex-col overflow-hidden ${
+                !isReadOnly && mobileModalTab !== 'preview' ? 'hidden md:flex' : 'flex'
+              }`}>
+                
+                {/* Öğretmen Bilgi ve İşlem Şeridi (Kapasite, Yerleşen, Şubeler, Arama & Export) */}
+                {isReadOnly ? (
+                  <div className="mb-3 p-3 sm:p-4 bg-gradient-to-r from-indigo-50/80 via-white to-amber-50/60 border border-brand-border/80 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-base sm:text-lg font-serif font-bold text-brand-ink truncate">
+                          {hallName || 'Sınav Salonu'}
+                        </h4>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 shrink-0">
+                          Yoklama & Oturma Planı
+                        </span>
+                        {seatingPlan.length >= capacity && capacity > 0 ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                            Tam Dolu
+                          </span>
+                        ) : seatingPlan.length > 0 ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                            %{Math.round((seatingPlan.length / (capacity || 1)) * 100)} Dolu
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
+                            Yerleşim Yapılmamış
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 sm:gap-3 text-xs text-brand-ink/70 flex-wrap">
+                        <span className="flex items-center gap-1 font-semibold text-brand-ink">
+                          <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>Yerleşen: <strong className="text-indigo-900 font-bold">{seatingPlan.length}</strong> / {capacity} Kişi</span>
+                        </span>
+                        {selectedClasses.length > 0 && (
+                          <span className="flex items-center gap-1 text-[11px]">
+                            <span className="text-brand-ink/30">•</span>
+                            <span className="font-medium text-brand-ink/60">Şubeler:</span>
+                            <span className="font-bold text-brand-ink">{selectedClasses.join(', ')}</span>
+                          </span>
+                        )}
+                        {connectedExamNames.length > 0 && (
+                          <span className="flex items-center gap-1 text-[11px] truncate max-w-xs sm:max-w-sm">
+                            <span className="text-brand-ink/30">•</span>
+                            <span className="font-medium text-brand-ink/60">Sınav:</span>
+                            <span className="font-bold text-brand-ink truncate">{connectedExamNames.join(' & ')}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
 
-                <div className="pt-2">
-                  <button 
-                    onClick={handleGenerateSeating}
-                    className="w-full flex items-center justify-center space-x-2 bg-[#d4d19d] text-[#5a5a40] font-bold text-sm py-3 rounded-xl hover:bg-[#e6e2d3] transition-all shadow-sm"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    <span>Oturma Düzeni Oluştur</span>
-                  </button>
-                  <p className="text-[10px] text-[#8e8d82] text-center mt-2 leading-tight">
-                    Seçili sınıflardaki öğrenciler rastgele karıştırılarak belirtilen kapasiteye göre sıralanır.
-                  </p>
-                </div>
-              </div>
+                    {/* Öğrenci Hızlı Arama & İndirme Butonları */}
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                      <div className="relative flex-1 sm:flex-initial">
+                        <Search className="w-3.5 h-3.5 text-brand-ink/40 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={highlightStudentQuery}
+                          onChange={e => setHighlightStudentQuery(e.target.value)}
+                          placeholder="Öğrenci veya No ara..."
+                          className="w-full sm:w-44 pl-8 pr-7 py-1.5 bg-white border border-brand-border/80 rounded-xl text-xs text-brand-ink placeholder:text-brand-ink/40 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
+                        />
+                        {highlightStudentQuery && (
+                          <button
+                            onClick={() => setHighlightStudentQuery('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-ink/40 hover:text-brand-ink cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
 
-              {/* Right Content - Seating Plan Preview */}
-              <div className={`w-full ${!isReadOnly ? 'md:w-2/3' : 'md:w-full'} p-4 sm:p-6 flex flex-col overflow-hidden ${
-                mobileModalTab === 'preview' ? 'flex' : 'hidden md:flex'
-              }`}>
-                {/* Read-Only Notice Banner for Teacher */}
-                {isReadOnly && (
-                  <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 flex items-center justify-between gap-2 text-xs shrink-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Eye className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span className="truncate"><strong>Öğretmen İnceleme Modu:</strong> Admin tarafından oluşturulan sınav oturma düzeni salt okunur önizleme modundadır. Değişiklik yapılamaz.</span>
+                      {seatingPlan.length > 0 && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button 
+                            onClick={() => handleExport({ id: editingHallId || '', name: hallName, capacity, columns, seatingPlan } as any)}
+                            className="flex items-center px-2.5 sm:px-3 py-1.5 bg-white border border-brand-border/80 text-brand-ink hover:text-emerald-700 text-xs font-bold rounded-xl hover:border-emerald-300 transition-colors shadow-2xs cursor-pointer"
+                            title="Excel Yoklama Listesi İndir"
+                          >
+                            <Download className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                            <span className="hidden sm:inline">Excel</span>
+                          </button>
+                          <button 
+                            onClick={handlePrintSchematic}
+                            className="flex items-center px-2.5 sm:px-3 py-1.5 bg-white border border-brand-border/80 text-brand-ink hover:text-indigo-700 text-xs font-bold rounded-xl hover:border-indigo-300 transition-colors shadow-2xs cursor-pointer"
+                            title="PDF Şema Yazdır / İndir"
+                          >
+                            <Download className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+                            <span className="hidden sm:inline">PDF</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <span className="bg-amber-200/80 text-amber-900 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase shrink-0">
-                      Salt Okunur
-                    </span>
+                  </div>
+                ) : (
+                  /* Admin Üst Çubuğu */
+                  <div className="flex justify-between items-center mb-4 shrink-0">
+                    <div>
+                      <h4 className="text-base sm:text-lg font-serif font-bold text-[#5a5a40]">Oturma Düzeni Önizlemesi</h4>
+                      {seatingPlan.length > 0 && (
+                        <p className="text-[11px] sm:text-xs font-medium text-amber-700 mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          <span>
+                            {draggedSeatNum 
+                              ? `${draggedSeatNum}. sıra seçildi. Taşımak için hedef sıraya dokunun.`
+                              : 'Öğrenciye dokunup ardından hedef sıraya dokunarak kolayca yer değiştirebilirsiniz.'}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {seatingPlan.length > 0 && (
+                        <>
+                          <button 
+                            onClick={() => handleExport({ id: editingHallId || '', name: hallName, capacity, columns, seatingPlan } as any)}
+                            className="flex items-center px-3 py-1.5 bg-[#fcfbf7] border border-[#e6e2d3] text-[#5a5a40] text-xs font-bold rounded-full hover:bg-[#f5f5f0] transition-colors cursor-pointer"
+                            title="Excel Yoklama Listesi İndir"
+                          >
+                            <Download className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Excel
+                          </button>
+                          <button 
+                            onClick={handlePrintSchematic}
+                            className="flex items-center px-3 py-1.5 bg-[#fcfbf7] border border-[#e6e2d3] text-[#5a5a40] text-xs font-bold rounded-full hover:bg-[#f5f5f0] transition-colors cursor-pointer"
+                            title="PDF Şema Yazdır"
+                          >
+                            <Download className="w-3.5 h-3.5 mr-1 text-indigo-600" /> PDF İndir
+                          </button>
+                        </>
+                      )}
+                      <span className="bg-[#f5f5f0] border border-[#e6e2d3] text-[#5a5a40] px-3 py-1.5 rounded-full text-xs font-bold">
+                        Yerleşen: {seatingPlan.length} / {capacity}
+                      </span>
+                    </div>
                   </div>
                 )}
 
-                <div className="flex justify-between items-center mb-4 shrink-0">
-                  <div>
-                    <h4 className="text-base sm:text-lg font-serif font-bold text-[#5a5a40]">Oturma Düzeni Önizlemesi</h4>
-                    {seatingPlan.length > 0 && (
-                      <p className="text-[11px] sm:text-xs font-medium text-amber-700 mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3 shrink-0" />
-                        <span>
-                          {isReadOnly 
-                            ? 'Admin tarafından oluşturulan oturma şeması görüntülenmektedir.' 
-                            : (draggedSeatNum 
-                              ? `${draggedSeatNum}. sıra seçildi. Taşımak için hedef sıraya dokunun.`
-                              : 'Öğrenciye dokunup ardından hedef sıraya dokunarak kolayca yer değiştirebilirsiniz.')}
-                        </span>
-                      </p>
-                    )}
+                {/* Sınıf Yönü / Yazı Tahtası Göstergesi */}
+                {seatingPlan.length > 0 && (
+                  <div className="w-full flex items-center justify-center my-1.5 sm:my-2 shrink-0">
+                    <div className="px-3.5 py-1 bg-white border border-brand-border/80 rounded-xl text-center shadow-2xs flex items-center gap-1.5 sm:gap-2">
+                      <span className="text-[10px] sm:text-xs font-bold text-brand-ink/70 uppercase tracking-wider">
+                        👨‍🏫 YAZI TAHTASI / KÜRSÜ (ÖN TARAF)
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    {seatingPlan.length > 0 && (
-                      <>
-                        <button 
-                          onClick={() => handleExport({ id: editingHallId || '', name: hallName, capacity, columns, seatingPlan } as any)}
-                          className="flex items-center px-3 py-1.5 bg-[#fcfbf7] border border-[#e6e2d3] text-[#5a5a40] text-xs font-bold rounded-full hover:bg-[#f5f5f0] transition-colors cursor-pointer"
-                          title="Excel Yoklama Listesi İndir"
-                        >
-                          <Download className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Excel
-                        </button>
-                        <button 
-                          onClick={handlePrintSchematic}
-                          className="flex items-center px-3 py-1.5 bg-[#fcfbf7] border border-[#e6e2d3] text-[#5a5a40] text-xs font-bold rounded-full hover:bg-[#f5f5f0] transition-colors cursor-pointer"
-                          title="PDF Şema Yazdır"
-                        >
-                          <Download className="w-3.5 h-3.5 mr-1 text-indigo-600" /> PDF İndir
-                        </button>
-                      </>
-                    )}
-                    <span className="bg-[#f5f5f0] border border-[#e6e2d3] text-[#5a5a40] px-3 py-1.5 rounded-full text-xs font-bold">
-                      Yerleşen: {seatingPlan.length} / {capacity}
-                    </span>
-                  </div>
-                </div>
+                )}
 
-                <div className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/50 border border-[#e6e2d3] rounded-2xl shadow-inner p-2 sm:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible" id="seating-plan-printable">
+                {/* Oturma Düzeni Grid Konteyneri */}
+                <div className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-2xl shadow-inner p-2 sm:p-5 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x" id="seating-plan-printable">
                   {showSaveToast && (
                     <div className="absolute top-4 right-4 z-50 bg-green-50 text-green-700 px-3 py-1.5 rounded-full shadow-sm border border-green-200 text-xs font-bold flex items-center print:hidden animate-in fade-in slide-in-from-top-2 duration-300">
                       <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
@@ -1435,6 +1543,13 @@ export const HallsView = () => {
                                 seatNum += (rowIdx * col.seatsPerDesk) + seatIdx + 1;
                                 
                                 const student = seatingPlan.find(s => s.deskNumber === seatNum);
+                                const isHighlighted = Boolean(
+                                  highlightStudentQuery.trim() && student && (
+                                    student.studentName.toLowerCase().includes(highlightStudentQuery.trim().toLowerCase()) ||
+                                    String(student.studentNo).includes(highlightStudentQuery.trim()) ||
+                                    (student.studentClass && student.studentClass.toLowerCase().includes(highlightStudentQuery.trim().toLowerCase()))
+                                  )
+                                );
                                 
                                 return (
                                   <div 
@@ -1447,21 +1562,29 @@ export const HallsView = () => {
                                     onDragOver={(e) => !isReadOnly && handleDragOver(e, seatNum)}
                                     onDragLeave={(e) => !isReadOnly && handleDragLeave(e, seatNum)}
                                     onDrop={(e) => !isReadOnly && handleDrop(e, seatNum)}
-                                    className={`flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg border relative min-h-[4.5rem] sm:min-h-[5rem] flex-1 min-w-0 print:h-24 print:w-32 transition-transform ${
+                                    className={`flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg border relative min-h-[4.5rem] sm:min-h-[5.2rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all ${
                                       !isReadOnly ? 'hover:scale-105 hover:z-10 cursor-pointer' : 'cursor-default'
                                     } ${
                                       student 
                                         ? `bg-white border-[#d4d19d] shadow-2xs print:border-black ${!isReadOnly ? 'cursor-grab active:cursor-grabbing' : ''}` 
                                         : 'bg-[#fcfbf7] border-dashed border-[#e6e2d3] print:border-gray-300'
+                                    } ${
+                                      isHighlighted 
+                                        ? 'ring-3 ring-indigo-600 bg-indigo-50 font-extrabold scale-105 z-20 shadow-md border-indigo-400' 
+                                        : ''
                                     } ${draggedSeatNum === seatNum ? 'opacity-90 ring-2 ring-amber-500 bg-amber-50 scale-105 z-20 shadow-md' : ''} ${dragOverSeatNum === seatNum ? 'ring-2 ring-amber-500 bg-amber-50 scale-105' : ''}`}
                                   >
-                                    <span className="absolute top-0.5 left-1 sm:top-1 sm:left-1.5 text-[8px] sm:text-[10px] font-bold text-[#8e8d82] print:text-black print:text-xs">
+                                    <span className={`absolute top-0.5 left-1 sm:top-1 sm:left-1.5 text-[8px] sm:text-[10px] font-bold print:text-black print:text-xs ${
+                                      isHighlighted ? 'text-indigo-800' : 'text-[#8e8d82]'
+                                    }`}>
                                       {seatNum}
                                     </span>
                                     
                                     {student ? (
                                       <>
-                                        <span className="text-[9px] sm:text-[11px] font-bold text-[#5a5a40] text-center line-clamp-2 leading-tight px-0.5 mt-2 sm:mt-2 print:text-black print:text-sm break-words">
+                                        <span className={`text-[9px] sm:text-[11px] font-bold text-center line-clamp-2 leading-tight px-0.5 mt-2 sm:mt-2 print:text-black print:text-sm break-words ${
+                                          isHighlighted ? 'text-indigo-950 font-extrabold' : 'text-[#5a5a40]'
+                                        }`}>
                                           {student.studentName}
                                         </span>
                                         <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1 w-full print:mt-1 flex-wrap">
@@ -1491,31 +1614,47 @@ export const HallsView = () => {
                       </div>
                       <p className="text-sm">
                         {isReadOnly 
-                          ? 'Bu salon için henüz bir oturma düzeni oluşturulmamış.' 
+                          ? 'Bu sınav salonu için henüz bir oturma düzeni oluşturulmamış.' 
                           : <>Henüz oturma düzeni oluşturulmadı.<br/>Sınıf seçip <strong>"Oturma Düzeni Oluştur"</strong> butonuna tıklayın.</>}
                       </p>
                     </div>
                   )}
                 </div>
+
+                {/* Mobilde Yatay Kaydırma Yönlendirmesi */}
+                {seatingPlan.length > 0 && (
+                  <div className="sm:hidden text-center text-[10px] text-brand-ink/50 pt-1.5 font-medium flex items-center justify-center gap-1 shrink-0">
+                    <span>↔️ Tüm sıraları görmek için parmağınızla sağa/sola kaydırabilirsiniz</span>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Footer */}
-            <div className="bg-[#FAF9F6] border-t border-brand-border/70 p-3 sm:p-4 flex items-center justify-end space-x-2 sm:space-x-3 shrink-0">
-              <button
-                onClick={closeModal}
-                className="px-4 py-2 text-xs sm:text-sm text-brand-ink/70 hover:text-brand-ink font-bold rounded-xl hover:bg-black/5 transition-colors cursor-pointer"
-              >
-                {isReadOnly ? 'Pencereyi Kapat' : 'İptal'}
-              </button>
-              {!isReadOnly && (
+            <div className="bg-[#FAF9F6] border-t border-brand-border/70 p-3 sm:p-4 flex items-center justify-between shrink-0">
+              <div className="text-xs text-brand-ink/60">
+                {isReadOnly && (
+                  <span className="hidden sm:inline">
+                    Sınav Salonu: <strong className="text-brand-ink">{hallName}</strong> ({capacity} Kişi Kapasite)
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center space-x-2 sm:space-x-3">
                 <button
-                  onClick={handleSaveHall}
-                  className="px-5 sm:px-6 py-2 sm:py-2.5 bg-[#151618] hover:bg-black text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+                  onClick={closeModal}
+                  className="px-4 py-2 text-xs sm:text-sm text-brand-ink/70 hover:text-brand-ink font-bold rounded-xl hover:bg-black/5 transition-colors cursor-pointer"
                 >
-                  Salonu Kaydet
+                  {isReadOnly ? 'Pencereyi Kapat' : 'İptal'}
                 </button>
-              )}
+                {!isReadOnly && (
+                  <button
+                    onClick={handleSaveHall}
+                    className="px-5 sm:px-6 py-2 sm:py-2.5 bg-[#151618] hover:bg-black text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+                  >
+                    Salonu Kaydet
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
