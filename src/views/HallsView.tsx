@@ -269,14 +269,13 @@ export const HallsView = () => {
     setActiveExamForAttendance(matchedExam);
 
     // Eğer bu sınav ve salon için önceden kaydedilmiş yoklama varsa devamsızları yükle
-    if (matchedExam) {
-      const existingKey = `${matchedExam.id}_${hall.id}`;
-      const existingRecord = attendances[existingKey] || (Object.values(attendances) as HallAttendance[]).find(a => a.hallId === hall.id && a.examId === matchedExam.id);
-      if (existingRecord && existingRecord.absentStudents) {
-        setAbsentStudentIds(existingRecord.absentStudents.map(s => s.studentId));
-      } else {
-        setAbsentStudentIds([]);
-      }
+    const existingKey = matchedExam ? `${matchedExam.id}_${hall.id}` : '';
+    const existingRecord = existingKey ? attendances[existingKey] : undefined;
+    const fallbackRecord = (Object.values(attendances) as HallAttendance[]).find(a => a.hallId === hall.id);
+    const targetRecord = existingRecord || fallbackRecord;
+
+    if (targetRecord && targetRecord.absentStudents && targetRecord.absentStudents.length > 0) {
+      setAbsentStudentIds(targetRecord.absentStudents.map(s => s.studentId));
     } else {
       setAbsentStudentIds([]);
     }
@@ -298,6 +297,15 @@ export const HallsView = () => {
     setModalMode('layout');
     setActiveExamForAttendance(null);
   };
+
+  // Aktif salona ait kaydedilmiş yoklamadaki devamsız öğrenci ID'leri (Oturma Planı sekmesinde de kırmızı çerçeve ile gösterilir)
+  const savedAbsentStudentIds = useMemo(() => {
+    if (!editingHallId) return [];
+    const relatedAttendances = (Object.values(attendances) as HallAttendance[]).filter(a => a.hallId === editingHallId);
+    if (relatedAttendances.length === 0) return [];
+    const latest = relatedAttendances.sort((a, b) => new Date(b.takenAt).getTime() - new Date(a.takenAt).getTime())[0];
+    return latest?.absentStudents?.map(s => s.studentId) || [];
+  }, [editingHallId, attendances]);
 
   // Keep active modal seating plan synced when state updates from Firebase
   useEffect(() => {
@@ -360,16 +368,16 @@ export const HallsView = () => {
   };
 
   const handleSeatClick = (seatNum: number) => {
-    if (modalMode === 'attendance') {
-      // Yoklama modunda sıraya tıklanırsa öğrencinin devamsızlık durumu değişir
-      const seatedStudent = seatingPlan.find(s => s.deskNumber === seatNum);
-      if (seatedStudent) {
-        toggleStudentAbsent(seatedStudent.studentId);
+    const seatedStudent = seatingPlan.find(s => s.deskNumber === seatNum);
+    const targetStudentId = seatedStudent?.studentId || (seatedStudent as any)?.id;
+
+    // Yoklama modunda VEYA öğretmen inceleme modunda sıraya/öğrenciye dokunulduğunda devamsızlık durumu değişir
+    if (modalMode === 'attendance' || isReadOnly) {
+      if (targetStudentId) {
+        toggleStudentAbsent(targetStudentId);
       }
       return;
     }
-
-    if (isReadOnly) return;
     if (draggedSeatNum === null) {
       const hasStudent = seatingPlan.some(s => s.deskNumber === seatNum);
       if (hasStudent) {
@@ -418,6 +426,11 @@ export const HallsView = () => {
 
   // Öğrenci devamsızlık durumunu aç/kapat
   const toggleStudentAbsent = (studentId: string) => {
+    try {
+      if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(35);
+      }
+    } catch {}
     setAbsentStudentIds(prev => {
       const isAlreadyAbsent = prev.includes(studentId);
       if (isAlreadyAbsent) {
@@ -1276,56 +1289,56 @@ export const HallsView = () => {
       {/* EXAM HALL & ATTENDANCE MODAL */}
       {/* ========================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in">
-          <div className={`bg-white rounded-2xl sm:rounded-[32px] border border-[#e6e2d3] shadow-2xl w-full ${isReadOnly || modalMode === 'attendance' ? 'max-w-5xl lg:max-w-6xl' : 'max-w-4xl'} h-[94vh] sm:h-[90vh] flex flex-col overflow-hidden animate-slide-up max-h-[94vh]`}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-1 sm:p-4 animate-fade-in">
+          <div className={`bg-white rounded-2xl sm:rounded-[32px] border border-[#e6e2d3] shadow-2xl w-full ${isReadOnly || modalMode === 'attendance' ? 'max-w-5xl lg:max-w-6xl' : 'max-w-4xl'} h-[98vh] sm:h-[90vh] flex flex-col overflow-hidden animate-slide-up max-h-[98vh] sm:max-h-[90vh]`}>
             
-            {/* Modal Header */}
-            <div className="bg-[#FAF9F6] border-b border-brand-border/70 p-3.5 sm:p-5 flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
-                <div className={`p-2 rounded-xl shrink-0 ${modalMode === 'attendance' ? 'bg-amber-500/15 text-amber-800' : 'bg-indigo-500/15 text-indigo-700'}`}>
-                  {modalMode === 'attendance' ? <UserCheck className="h-5 w-5 sm:h-6 sm:w-6" /> : <MapPin className="h-5 w-5 sm:h-6 sm:w-6" />}
+            {/* Modal Header (Selector 5) */}
+            <div className="bg-[#FAF9F6] border-b border-brand-border/70 p-2.5 sm:p-4.5 flex items-center justify-between shrink-0 gap-2">
+              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                <div className={`p-1.5 sm:p-2 rounded-xl shrink-0 ${modalMode === 'attendance' ? 'bg-amber-500/15 text-amber-800' : 'bg-indigo-500/15 text-indigo-700'}`}>
+                  {modalMode === 'attendance' ? <UserCheck className="h-4.5 w-4.5 sm:h-6 sm:w-6" /> : <MapPin className="h-4.5 w-4.5 sm:h-6 sm:w-6" />}
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base sm:text-xl font-serif text-brand-ink font-bold leading-tight truncate">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2.5 flex-wrap">
+                    <h3 className="text-sm sm:text-lg lg:text-xl font-serif text-brand-ink font-bold leading-tight truncate">
                       {hallName || 'Sınav Salonu'}
                     </h3>
                     
                     {/* Görünüm Sekmeleri: Oturma Planı vs Sınav Yoklaması */}
-                    <div className="flex items-center bg-white border border-brand-border/80 p-0.5 rounded-xl shadow-2xs ml-1">
+                    <div className="inline-flex items-center bg-white border border-brand-border/80 p-0.5 rounded-xl shadow-2xs">
                       <button
                         type="button"
                         onClick={() => setModalMode('layout')}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${
+                        className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
                           modalMode === 'layout' 
                             ? 'bg-[#151618] text-white shadow-xs' 
                             : 'text-brand-ink/60 hover:text-brand-ink'
                         }`}
                       >
-                        <LayoutTemplate className="w-3.5 h-3.5" />
+                        <LayoutTemplate className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         <span>Oturma Planı</span>
                       </button>
                       
                       <button
                         type="button"
                         onClick={() => setModalMode('attendance')}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${
+                        className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
                           modalMode === 'attendance' 
                             ? 'bg-amber-500 text-white shadow-xs' 
                             : 'text-brand-ink/60 hover:text-amber-800'
                         }`}
                       >
-                        <UserCheck className="w-3.5 h-3.5" />
+                        <UserCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         <span>Sınav Yoklaması</span>
                         {attendanceAbsentCount > 0 && (
-                          <span className="text-[10px] px-1.5 py-0.2 bg-rose-600 text-white rounded-full font-extrabold ml-0.5">
+                          <span className="text-[9px] sm:text-[10px] px-1.5 py-0.2 bg-rose-600 text-white rounded-full font-extrabold ml-0.5 animate-pulse">
                             {attendanceAbsentCount}
                           </span>
                         )}
                       </button>
                     </div>
                   </div>
-                  <p className="text-[10px] sm:text-xs text-brand-ink/60 mt-0.5 truncate">
+                  <p className="text-[10px] sm:text-xs text-brand-ink/60 mt-0.5 truncate hidden sm:block">
                     {modalMode === 'attendance'
                       ? 'Salonda bulunmayan öğrencileri işaretleyin ve tek tıkla idareye push bildirim olarak iletin.'
                       : (isReadOnly ? 'Sınav salonu oturma planı ve yerleşim şeması önizleme' : 'Salon ayarları, şube seçimi ve kelebek dağıtımı')}
@@ -1335,7 +1348,7 @@ export const HallsView = () => {
 
               <button 
                 onClick={closeModal}
-                className="p-2 text-brand-ink/50 hover:text-brand-ink hover:bg-black/5 rounded-xl transition-all cursor-pointer shrink-0 ml-2"
+                className="p-1.5 sm:p-2 text-brand-ink/50 hover:text-brand-ink hover:bg-black/5 rounded-xl transition-all cursor-pointer shrink-0 ml-1"
                 title="Pencereyi Kapat (ESC)"
               >
                 <X className="h-5 w-5" />
@@ -1348,19 +1361,19 @@ export const HallsView = () => {
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('settings')}
-                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     mobileModalTab === 'settings'
                       ? 'bg-[#151618] text-white shadow-xs'
                       : 'text-brand-ink/60 hover:text-brand-ink'
                   }`}
                 >
                   <Building className="w-3.5 h-3.5" />
-                  <span>1. Salon Ayarları & Öğrenciler</span>
+                  <span>1. Salon Ayarları</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('preview')}
-                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     mobileModalTab === 'preview'
                       ? 'bg-[#151618] text-white shadow-xs'
                       : 'text-brand-ink/60 hover:text-brand-ink'
@@ -1375,9 +1388,9 @@ export const HallsView = () => {
             {/* Content Body */}
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-[#fcfbf7]/40">
               
-              {/* Sol Form Paneli (Sadece Admin Düzenleme Modunda & Layout Sekmesinde Görünür) */}
+              {/* Sol Form Paneli (Selector 4) */}
               {!isReadOnly && modalMode === 'layout' && (
-                <div className={`w-full md:w-1/3 p-4 sm:p-6 border-r border-[#e6e2d3] overflow-y-auto space-y-5 bg-[#FAF9F6] ${
+                <div className={`w-full md:w-1/3 p-3.5 sm:p-5 border-r border-[#e6e2d3] overflow-y-auto space-y-4 sm:space-y-5 bg-[#FAF9F6] ${
                   mobileModalTab !== 'settings' ? 'hidden md:block' : 'block'
                 }`}>
                   <div>
@@ -1654,19 +1667,19 @@ export const HallsView = () => {
                 </div>
               )}
 
-              {/* Sağ İçerik Alanı: Oturma Planı / Yoklama Önizleme */}
-              <div className={`w-full ${!isReadOnly && modalMode === 'layout' ? 'md:w-2/3' : 'w-full'} p-3.5 sm:p-6 flex flex-col overflow-hidden ${
+              {/* Sağ İçerik Alanı: Oturma Planı / Yoklama Önizleme (Selector 1) */}
+              <div className={`w-full ${!isReadOnly && modalMode === 'layout' ? 'md:w-2/3' : 'w-full'} p-2 sm:p-4.5 flex flex-col overflow-hidden ${
                 !isReadOnly && modalMode === 'layout' && mobileModalTab !== 'preview' ? 'hidden md:flex' : 'flex'
               }`}>
                 
                 {/* ========================================================= */}
-                {/* 2. ÖZELLİK: PRATİK YOKLAMA KONTROL ÇUBUĞU & İDAREYE BİLDİRİM */}
+                {/* 2. ÖZELLİK: PRATİK YOKLAMA KONTROL ÇUBUĞU & İDAREYE BİLDİRİM (Selector 2) */}
                 {/* ========================================================= */}
                 {modalMode === 'attendance' ? (
-                  <div className="mb-3 p-3.5 sm:p-4 bg-gradient-to-r from-amber-500/10 via-white to-rose-500/10 border border-amber-300 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
-                    <div className="space-y-1.5 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-brand-ink/70">Aktif Sınav:</span>
+                  <div className="mb-2 sm:mb-3 p-2 sm:p-3.5 bg-gradient-to-r from-amber-500/10 via-white to-rose-500/10 border border-amber-300 rounded-xl sm:rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
+                    <div className="space-y-1.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <span className="text-[11px] sm:text-xs font-bold text-brand-ink/70">Aktif Sınav:</span>
                         <select
                           value={activeExamForAttendance?.id || ''}
                           onChange={(e) => {
@@ -1681,7 +1694,7 @@ export const HallsView = () => {
                               }
                             }
                           }}
-                          className="bg-white border border-brand-border/80 px-2.5 py-1 rounded-xl text-xs font-bold text-brand-ink shadow-2xs focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer max-w-xs truncate"
+                          className="bg-white border border-brand-border/80 px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold text-brand-ink shadow-2xs focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer w-full sm:w-auto max-w-full sm:max-w-xs truncate"
                         >
                           {state.exams.map(e => (
                             <option key={e.id} value={e.id}>{e.name} ({e.date || 'Tarih Yok'})</option>
@@ -1690,16 +1703,16 @@ export const HallsView = () => {
                       </div>
 
                       {/* Canlı Sayaçlar */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white border border-brand-border text-brand-ink">
-                          Toplam: <strong>{seatingPlan.length}</strong> Öğrenci
+                      <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+                        <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-white border border-brand-border text-brand-ink">
+                          Toplam: <strong>{seatingPlan.length}</strong>
                         </span>
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
                           ✓ Salonda: <strong>{attendancePresentCount}</strong>
                         </span>
-                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
+                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg border ${
                           attendanceAbsentCount > 0 
-                            ? 'bg-rose-100 text-rose-900 border-rose-300 animate-pulse' 
+                            ? 'bg-rose-100 text-rose-900 border-rose-300 animate-pulse font-extrabold' 
                             : 'bg-gray-100 text-gray-700 border-gray-200'
                         }`}>
                           ✗ Salonda Olmayan: <strong>{attendanceAbsentCount}</strong>
@@ -1707,11 +1720,11 @@ export const HallsView = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                       <button
                         type="button"
                         onClick={markAllPresent}
-                        className="px-3 py-1.5 bg-white border border-brand-border text-xs font-bold text-brand-ink hover:bg-gray-50 rounded-xl transition-all shadow-2xs cursor-pointer"
+                        className="flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 bg-white border border-brand-border text-xs font-bold text-brand-ink hover:bg-gray-50 rounded-xl transition-all shadow-2xs cursor-pointer text-center"
                         title="Tüm öğrencileri salonda mevcut işaretle"
                       >
                         Tümünü Salonda Yap
@@ -1721,49 +1734,49 @@ export const HallsView = () => {
                         type="button"
                         disabled={isSendingNotification}
                         onClick={handleSaveAndBroadcastAttendance}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50"
                       >
                         {isSendingNotification ? (
                           <>
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>İletiliyor...</span>
+                            <span>Kaydediliyor...</span>
                           </>
                         ) : (
                           <>
                             <Send className="w-3.5 h-3.5" />
-                            <span>İdareye Bildir & Kaydet</span>
+                            <span>Kaydet & Bildir</span>
                           </>
                         )}
                       </button>
                     </div>
                   </div>
                 ) : (
-                  /* Standart Görünüm Üst Çubuğu */
-                  <div className="mb-3 p-3 sm:p-4 bg-gradient-to-r from-indigo-50/90 via-white to-amber-50/70 border border-brand-border/80 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
-                    <div className="space-y-1.5 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-base sm:text-lg font-serif font-bold text-brand-ink truncate">
+                  /* Standart Görünüm Üst Çubuğu (Selector 2) */
+                  <div className="mb-2 sm:mb-3 p-2 sm:p-3.5 bg-gradient-to-r from-indigo-50/90 via-white to-amber-50/70 border border-brand-border/80 rounded-xl sm:rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <h4 className="text-sm sm:text-base lg:text-lg font-serif font-bold text-brand-ink truncate">
                           {hallName || 'Sınav Salonu'}
                         </h4>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 shrink-0">
+                        <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 shrink-0">
                           Oturma Planı
                         </span>
                         {seatingPlan.length >= capacity && capacity > 0 ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                          <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                             Tam Dolu
                           </span>
                         ) : seatingPlan.length > 0 ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                          <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
                             %{Math.round((seatingPlan.length / (capacity || 1)) * 100)} Dolu
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
+                          <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
                             Boş
                           </span>
                         )}
                       </div>
                       
-                      <div className="flex items-center gap-2 text-xs text-brand-ink/70 flex-wrap">
+                      <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-brand-ink/70 flex-wrap">
                         <span className="font-semibold text-brand-ink">
                           Kapasite: {capacity} Sıra
                         </span>
@@ -1774,7 +1787,7 @@ export const HallsView = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                       <div className="relative flex-1 sm:flex-initial">
                         <Search className="w-3.5 h-3.5 text-brand-ink/40 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
@@ -1801,39 +1814,26 @@ export const HallsView = () => {
                       )}
 
                       {seatingPlan.length > 0 && (
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                           <button 
                             onClick={() => handleExport({ id: editingHallId || '', name: hallName, capacity, columns, seatingPlan } as any)}
-                            className="flex items-center px-2.5 sm:px-3 py-1.5 bg-white border border-brand-border/80 text-brand-ink hover:text-emerald-700 text-xs font-bold rounded-xl hover:border-emerald-300 transition-colors shadow-2xs cursor-pointer"
+                            className="flex items-center px-2 sm:px-2.5 py-1.5 bg-white border border-brand-border/80 text-brand-ink hover:text-emerald-700 text-xs font-bold rounded-xl hover:border-emerald-300 transition-colors shadow-2xs cursor-pointer"
                             title="Excel Yoklama Listesi İndir"
                           >
-                            <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                            <FileSpreadsheet className="w-3.5 h-3.5 sm:mr-1 text-emerald-600" />
                             <span className="hidden sm:inline">Excel</span>
                           </button>
                           <button 
                             onClick={() => handlePrintSchematic()}
-                            className="flex items-center px-2.5 sm:px-3 py-1.5 bg-white border border-brand-border/80 text-brand-ink hover:text-indigo-700 text-xs font-bold rounded-xl hover:border-indigo-300 transition-colors shadow-2xs cursor-pointer"
+                            className="flex items-center px-2 sm:px-2.5 py-1.5 bg-white border border-brand-border/80 text-brand-ink hover:text-indigo-700 text-xs font-bold rounded-xl hover:border-indigo-300 transition-colors shadow-2xs cursor-pointer"
                             title="PDF Şema Yazdır / İndir"
                           >
-                            <Printer className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+                            <Printer className="w-3.5 h-3.5 sm:mr-1 text-indigo-600" />
                             <span className="hidden sm:inline">Yazdır</span>
                           </button>
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
-
-                {/* Yoklama modu ipucu */}
-                {modalMode === 'attendance' && (
-                  <div className="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-center justify-between gap-2 shrink-0">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                      <span>Sıralara dokunarak o an salonda bulunmayan öğrencileri <strong>"Salonda Yok"</strong> olarak işaretleyebilirsiniz.</span>
-                    </span>
-                    <span className="font-bold text-amber-800 text-[10px] shrink-0">
-                      Tek Tıkla İşaretleme
-                    </span>
                   </div>
                 )}
 
@@ -1849,36 +1849,25 @@ export const HallsView = () => {
                   </div>
                 )}
 
-                {/* Sınıf Yönü / Yazı Tahtası Göstergesi */}
-                {seatingPlan.length > 0 && (
-                  <div className="w-full flex items-center justify-center my-1.5 sm:my-2 shrink-0">
-                    <div className="px-3.5 py-1 bg-white border border-brand-border/80 rounded-xl text-center shadow-2xs flex items-center gap-1.5 sm:gap-2">
-                      <span className="text-[10px] sm:text-xs font-bold text-brand-ink/70 uppercase tracking-wider">
-                        👨‍🏫 YAZI TAHTASI / KÜRSÜ (ÖN CEPHE)
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Oturma Düzeni & Yoklama Grid Konteyneri */}
-                <div className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-2xl shadow-inner p-2 sm:p-5 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x" id="seating-plan-printable">
+                {/* Oturma Düzeni & Yoklama Grid Konteyneri (Selector 3) */}
+                <div className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-xl sm:rounded-2xl shadow-inner p-1.5 sm:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x overscroll-contain select-none" id="seating-plan-printable">
                   {showSaveToast && (
-                    <div className="absolute top-4 right-4 z-50 bg-green-50 text-green-700 px-3 py-1.5 rounded-full shadow-sm border border-green-200 text-xs font-bold flex items-center print:hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="absolute top-3 right-3 z-50 bg-green-50 text-green-700 px-3 py-1.5 rounded-full shadow-sm border border-green-200 text-xs font-bold flex items-center print:hidden animate-in fade-in slide-in-from-top-2 duration-300">
                       <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
                       Kaydediliyor...
                     </div>
                   )}
 
                   {seatingPlan.length > 0 ? (
-                    <div className="flex gap-2.5 sm:gap-4 items-start min-w-[360px] sm:min-w-full justify-start sm:justify-between print:w-full print:justify-center print:gap-8 pb-4">
+                    <div className="flex gap-2 sm:gap-4 items-start min-w-[300px] sm:min-w-full justify-start sm:justify-center md:justify-start lg:justify-between print:w-full print:justify-center print:gap-8 pb-3">
                       {columns.map((col, colIdx) => (
-                        <div key={col.id} className="flex flex-col gap-2 sm:gap-3 flex-1 min-w-[130px] sm:min-w-0">
-                          <div className="text-center font-bold text-brand-ink/70 text-[10px] sm:text-xs uppercase tracking-wider print:text-black truncate px-1 bg-white/70 py-1 rounded-lg border border-brand-border/40 shadow-2xs">
+                        <div key={col.id} className="flex flex-col gap-1.5 sm:gap-2.5 flex-1 min-w-[100px] xs:min-w-[120px] sm:min-w-[135px] md:min-w-0">
+                          <div className="text-center font-bold text-brand-ink/70 text-[9px] sm:text-xs uppercase tracking-wider print:text-black truncate px-1 bg-white/80 py-0.5 sm:py-1 rounded-lg border border-brand-border/40 shadow-2xs">
                             {col.name}
                           </div>
                           
                           {Array.from({ length: col.deskCount }).map((_, rowIdx) => (
-                            <div key={rowIdx} className="flex gap-1 sm:gap-2 p-1 sm:p-2 rounded-xl bg-white/60 border border-brand-border/70 print:border-black/20 print:bg-transparent shadow-2xs">
+                            <div key={rowIdx} className="flex gap-1 sm:gap-2 p-1 sm:p-1.5 rounded-xl bg-white/60 border border-brand-border/70 print:border-black/20 print:bg-transparent shadow-2xs">
                               {Array.from({ length: col.seatsPerDesk }).map((_, seatIdx) => {
                                 // Calculate global seat number
                                 let seatNum = 0;
@@ -1888,6 +1877,7 @@ export const HallsView = () => {
                                 seatNum += (rowIdx * col.seatsPerDesk) + seatIdx + 1;
                                 
                                 const student = seatingPlan.find(s => s.deskNumber === seatNum);
+                                const studentId = student?.studentId || (student as any)?.id || '';
                                 const isHighlighted = Boolean(
                                   highlightStudentQuery.trim() && student && (
                                     student.studentName.toLowerCase().includes(highlightStudentQuery.trim().toLowerCase()) ||
@@ -1896,76 +1886,89 @@ export const HallsView = () => {
                                   )
                                 );
 
-                                const isAbsent = student ? absentStudentIds.includes(student.id) : false;
+                                const isAbsent = Boolean(student && studentId && absentStudentIds.includes(studentId));
                                 
                                 return (
                                   <div 
                                     key={seatIdx}
                                     draggable={!isReadOnly && modalMode !== 'attendance' && !!student}
-                                    onClick={() => handleSeatClick(seatNum)}
+                                    onClick={() => {
+                                      if (student && studentId && (modalMode === 'attendance' || isReadOnly)) {
+                                        toggleStudentAbsent(studentId);
+                                      } else {
+                                        handleSeatClick(seatNum);
+                                      }
+                                    }}
                                     onDragStart={(e) => {
                                       if (!isReadOnly && student) handleDragStart(e, seatNum);
                                     }}
                                     onDragOver={(e) => !isReadOnly && handleDragOver(e, seatNum)}
                                     onDragLeave={(e) => !isReadOnly && handleDragLeave(e, seatNum)}
                                     onDrop={(e) => !isReadOnly && handleDrop(e, seatNum)}
-                                    className={`flex flex-col items-center justify-between p-1.5 sm:p-2 rounded-xl border relative min-h-[4.8rem] sm:min-h-[5.5rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all ${
-                                      modalMode === 'attendance' && student
-                                        ? 'cursor-pointer hover:scale-102 hover:shadow-xs active:scale-98'
-                                        : !isReadOnly ? 'hover:scale-105 hover:z-10 cursor-pointer' : 'cursor-default'
-                                    } ${
+                                    className={`flex flex-col items-center justify-between p-1 sm:p-2 rounded-xl relative min-h-[4.75rem] sm:min-h-[5.6rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all select-none touch-manipulation cursor-pointer ${
                                       student 
                                         ? isAbsent
-                                          ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-300/80 shadow-xs'
-                                          : modalMode === 'attendance'
-                                          ? 'bg-emerald-50/40 border-emerald-300/80 shadow-2xs hover:border-emerald-500'
-                                          : 'bg-white border-brand-border shadow-2xs print:border-black'
-                                        : 'bg-[#FAF9F6] border-dashed border-brand-border/80 print:border-gray-300'
+                                          ? "bg-rose-50/95 border-2 border-rose-600 shadow-md ring-2 ring-rose-400/50 z-10 hover:border-rose-700 hover:bg-rose-100/90 active:scale-95"
+                                          : (modalMode === "attendance" || isReadOnly || absentStudentIds.length > 0)
+                                          ? "bg-emerald-50/90 border-2 border-emerald-500 shadow-sm ring-2 ring-emerald-300/40 z-10 hover:border-emerald-600 hover:bg-emerald-100/80 active:scale-95"
+                                          : "bg-white border-2 border-emerald-500 shadow-2xs hover:scale-105 hover:z-10 print:border-black"
+                                        : "bg-[#FAF9F6] border-2 border-dashed border-brand-border/80 print:border-gray-300 cursor-default"
                                     } ${
                                       isHighlighted 
-                                        ? 'ring-3 ring-indigo-600 bg-indigo-50 font-extrabold scale-105 z-20 shadow-md border-indigo-400 animate-pulse' 
-                                        : ''
+                                        ? "ring-4 ring-indigo-600 bg-indigo-50 font-extrabold scale-105 z-20 shadow-lg border-indigo-500 animate-pulse" 
+                                        : ""
                                     }`}
                                   >
                                     <div className="w-full flex items-center justify-between">
-                                      <span className={`text-[8px] sm:text-[10px] font-bold ${
-                                        isAbsent ? 'text-rose-700' : isHighlighted ? 'text-indigo-800' : 'text-brand-ink/50'
+                                      <span className={`text-[8.5px] sm:text-[10px] font-bold ${
+                                        isAbsent 
+                                          ? "text-rose-700 font-black" 
+                                          : "text-emerald-800 font-black"
                                       }`}>
                                         {seatNum}
                                       </span>
-
-                                      {/* Yoklama Durum Rozeti */}
-                                      {modalMode === 'attendance' && student && (
-                                        <span className={`text-[8px] sm:text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border ${
-                                          isAbsent 
-                                            ? 'bg-rose-600 text-white border-rose-700' 
-                                            : 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                        }`}>
-                                          {isAbsent ? 'YOK' : 'VAR'}
-                                        </span>
-                                      )}
                                     </div>
                                     
                                     {student ? (
                                       <>
-                                        <span className={`text-[9.5px] sm:text-[11px] font-bold text-center line-clamp-2 leading-tight px-0.5 my-1 print:text-black break-words ${
-                                          isAbsent 
-                                            ? 'text-rose-950 line-through decoration-rose-500 decoration-2' 
-                                            : isHighlighted ? 'text-indigo-950 font-extrabold' : 'text-brand-ink'
-                                        }`}>
+                                        {/* Öğrenci İsmi - Dokunmatik olarak tıklandığında anında renk değiştirir */}
+                                        <span 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (studentId) {
+                                              toggleStudentAbsent(studentId);
+                                            } else {
+                                              handleSeatClick(seatNum);
+                                            }
+                                          }}
+                                          className={`text-[9.5px] sm:text-xs font-bold text-center line-clamp-2 leading-tight px-0.5 my-0.5 sm:my-1 print:text-black break-words cursor-pointer transition-all active:scale-95 ${
+                                            isAbsent 
+                                              ? "text-rose-950 font-black line-through decoration-rose-600 decoration-2 hover:text-rose-800" 
+                                              : "text-emerald-950 font-bold hover:text-emerald-800"
+                                          }`}
+                                          title="Öğrenci yoklama durumunu değiştirmek için dokunun"
+                                        >
                                           {student.studentName}
                                         </span>
                                         <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1 w-full flex-wrap">
-                                          <span className="text-[8px] sm:text-[9px] bg-white/80 text-brand-ink/70 px-1 py-0.5 rounded font-semibold border border-brand-border/60 truncate max-w-full">
+                                          <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-semibold border truncate max-w-full ${
+                                            isAbsent 
+                                              ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
+                                              : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                          }`}>
                                             No: {student.studentNo}
                                           </span>
-                                          <span className={`text-[8px] sm:text-[9px] px-1 py-0.5 rounded font-bold border truncate max-w-full ${getClassBadgeColor(student.studentClass)}`}>
+                                          <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-bold border truncate max-w-full ${
+                                            isAbsent 
+                                              ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
+                                              : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                          }`}>
                                             {student.studentClass}
                                           </span>
                                         </div>
                                       </>
                                     ) : (
-                                      <span className="text-[9px] sm:text-[10px] text-brand-ink/40 font-medium my-auto">Boş Sıra</span>
+                                      <span className="text-[8.5px] sm:text-[9.5px] text-brand-ink/40 font-medium my-auto">Boş Sıra</span>
                                     )}
                                   </div>
                                 );
@@ -2047,12 +2050,12 @@ export const HallsView = () => {
                       {isSendingNotification ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>İdareye Gönderiliyor...</span>
+                          <span>Kaydediliyor...</span>
                         </>
                       ) : (
                         <>
                           <Send className="w-4 h-4" />
-                          <span>İdareye Push Bildirim Gönder & Kaydet</span>
+                          <span>Kaydet & Bildir</span>
                         </>
                       )}
                     </button>
