@@ -579,51 +579,45 @@ export const HallsView = () => {
     printWindow.document.close();
   };
 
-  if (userRole !== 'admin') {
-    return (
-      <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-slate-200/80 shadow-xs max-w-lg mx-auto my-12 space-y-3">
-        <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto">
-          <AlertCircle className="w-6 h-6" />
-        </div>
-        <h3 className="text-base sm:text-lg font-bold text-slate-800">Yönetici Yetkisi Gereklidir</h3>
-        <p className="text-xs text-slate-500 leading-relaxed">
-          Sınav salonları ve oturma düzeni yönetim alanı yalnızca okul yöneticilerine açıktır.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-3 sm:space-y-6 pb-20 md:pb-12 flex flex-col h-full relative">
       {/* Header */}
       <header className="flex flex-row justify-between items-center gap-2">
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 font-bold shadow-2xs">
-            <Building className="w-4 h-4 sm:w-5 sm:h-5" />
+          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-indigo-500/15 text-indigo-700 flex items-center justify-center shrink-0 font-bold">
+            <Building className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight leading-tight">
+              <h2 className="text-xl sm:text-3xl md:text-4xl font-serif text-brand-ink font-bold tracking-tight leading-tight">
                 Sınav Salonları
               </h2>
-              <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200/80 font-mono">
+              <span className="sm:hidden text-xs font-bold text-brand-ink/70 bg-[#F5F4F0] px-2 py-0.5 rounded-md border border-brand-border">
                 {state.examHalls.length} Salon
               </span>
             </div>
-            <p className="hidden sm:block text-slate-500 text-xs mt-0.5">
+            <p className="hidden sm:block text-brand-ink/60 text-xs sm:text-sm mt-1">
               Sınav salonlarını, kapasitelerini ve otomatik oturma düzenlerini yönetin
             </p>
           </div>
         </div>
 
-        <button 
-          onClick={openNewModal} 
-          className="flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer min-w-0"
-        >
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Yeni Salon Oluştur</span>
-          <span className="sm:hidden">Yeni Salon</span>
-        </button>
+        {!isReadOnly ? (
+          <button 
+            onClick={openNewModal} 
+            className="flex items-center justify-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 bg-[#151618] border border-[#151618] text-white text-xs font-bold rounded-xl transition-all hover:bg-black active:scale-95 shadow-2xs sm:shadow-xs cursor-pointer min-w-0"
+          >
+            <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400" />
+            <span className="hidden sm:inline">Yeni Salon Oluştur</span>
+            <span className="sm:hidden">Yeni Salon</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-900 border border-amber-500/30 rounded-xl text-xs font-bold shrink-0">
+            <Eye className="w-3.5 h-3.5 text-amber-600" />
+            <span className="hidden sm:inline">Öğretmen Önizleme Modu (Salt Okunur)</span>
+            <span className="sm:hidden">Önizleme Modu</span>
+          </div>
+        )}
       </header>
 
       {/* Mobile Quick Toggles */}
@@ -813,37 +807,37 @@ export const HallsView = () => {
           return (
             <div 
               key={hall.id} 
-              className="bg-white rounded-2xl p-3 sm:p-5 shadow-2xs hover:shadow-md border border-slate-200/90 hover:border-indigo-300 flex flex-col justify-between transition-all group relative"
+              className="bg-white rounded-2xl p-4 sm:p-5 shadow-2xs sm:shadow-sm border border-brand-border/70 hover:border-brand-accent/50 flex flex-col justify-between transition-all group relative"
             >
               {/* Card Header Row */}
-              <div className="flex items-start justify-between gap-2.5 mb-2.5">
+              <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight leading-snug truncate">
+                    <h3 className="text-base sm:text-lg font-serif text-brand-ink font-bold leading-tight truncate">
                       {hall.name}
                     </h3>
                     {isFull ? (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/90 shrink-0 flex items-center gap-1 shadow-2xs">
-                        <CheckCircle2 className="w-2.5 h-2.5" /> Tam Dolu
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                        Tam Dolu
                       </span>
                     ) : isEmpty ? (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 shrink-0 shadow-2xs">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
                         Boş
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/90 shrink-0 font-mono shadow-2xs">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
                         %{percentage.toFixed(0)} Dolu
                       </span>
                     )}
                   </div>
-                  <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                    <span className="flex items-center gap-1 font-semibold text-slate-600">
-                      <Building className="w-3 h-3 text-slate-400" />
-                      {totalCapacity} Sıra / Kişi
+                  <div className="text-[11px] text-brand-ink/60 mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className="flex items-center gap-1 font-medium">
+                      <Building className="w-3 h-3 text-brand-ink/50" />
+                      {totalCapacity} Kişi Kapasite
                     </span>
                     <span>•</span>
-                    <span className="font-semibold text-slate-600">
-                      {hall.columns?.length || 0} Sütun Düzeni
+                    <span className="font-medium text-brand-ink/60">
+                      {hall.columns?.length || 0} Sütun
                     </span>
                   </div>
                 </div>
@@ -852,35 +846,37 @@ export const HallsView = () => {
                 <div className="flex items-center gap-1 shrink-0">
                   <button 
                     onClick={() => handleExport(hall)} 
-                    className="p-1.5 sm:p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50/70 rounded-xl transition-all cursor-pointer border border-transparent hover:border-indigo-100 active:scale-95 shadow-2xs" 
-                    title="Yoklama Listesi İndir (Excel)"
+                    className="p-1.5 sm:p-2 text-brand-ink/60 hover:text-brand-ink hover:bg-[#FAF9F6] rounded-xl transition-all cursor-pointer border border-transparent hover:border-brand-border/80 active:scale-95 shadow-2xs" 
+                    title="Yoklama Listesi İndir"
                     aria-label="Yoklama Listesi İndir"
                   >
                     <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
-                  <button 
-                    onClick={() => removeHall(hall.id)} 
-                    className="p-1.5 sm:p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-100 active:scale-95 shadow-2xs" 
-                    title="Salonu Sil"
-                    aria-label="Salonu Sil"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  </button>
+                  {!isReadOnly && (
+                    <button 
+                      onClick={() => removeHall(hall.id)} 
+                      className="p-1.5 sm:p-2 text-brand-ink/50 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 active:scale-95 shadow-2xs" 
+                      title="Salonu Sil"
+                      aria-label="Salonu Sil"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Assigned Classes / Badges */}
               {hall.selectedClasses && hall.selectedClasses.length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap my-1.5 py-1 px-2 bg-slate-50/80 rounded-xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 mr-0.5">Şubeler:</span>
-                  {hall.selectedClasses.slice(0, 5).map(cls => (
-                    <span key={cls} className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-white text-indigo-900 border border-slate-200/90 shadow-2xs">
+                <div className="flex items-center gap-1 flex-wrap my-2 py-1.5 border-t border-b border-brand-border/40">
+                  <span className="text-[10px] font-semibold text-brand-ink/60 mr-0.5">Şubeler:</span>
+                  {hall.selectedClasses.slice(0, 4).map(cls => (
+                    <span key={cls} className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FAF9F6] text-brand-ink border border-brand-border/80">
                       {cls}
                     </span>
                   ))}
-                  {hall.selectedClasses.length > 5 && (
-                    <span className="text-[10px] font-bold text-slate-500 px-1">
-                      +{hall.selectedClasses.length - 5}
+                  {hall.selectedClasses.length > 4 && (
+                    <span className="text-[10px] font-bold text-brand-ink/50">
+                      +{hall.selectedClasses.length - 4}
                     </span>
                   )}
                 </div>
@@ -889,21 +885,18 @@ export const HallsView = () => {
               {/* Occupancy Progress */}
               <div className="mt-auto pt-2 space-y-1.5 sm:space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-500 text-[11px]">Yerleşen Öğrenci</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="font-bold font-mono text-slate-900 text-xs sm:text-sm">
-                      {usedCapacity}
-                    </span>
-                    <span className="text-slate-400 text-[11px] font-mono">/ {totalCapacity}</span>
-                  </div>
+                  <span className="font-semibold text-brand-ink/60 text-[11px]">Yerleşen Öğrenci</span>
+                  <span className="font-bold text-brand-ink text-xs">
+                    {usedCapacity} <span className="text-brand-ink/40 font-normal">/ {totalCapacity}</span>
+                  </span>
                 </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200/70">
+                <div className="w-full bg-[#F5F4F0] h-2 rounded-full overflow-hidden border border-brand-border/40">
                   <div 
                     className={`h-full rounded-full transition-all duration-300 ${
                       percentage >= 100 
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500' 
+                        ? 'bg-emerald-600' 
                         : percentage > 0 
-                        ? 'bg-gradient-to-r from-amber-500 to-indigo-500' 
+                        ? 'bg-amber-500' 
                         : 'bg-transparent'
                     }`} 
                     style={{ width: `${Math.min(100, percentage)}%` }} 
@@ -913,10 +906,14 @@ export const HallsView = () => {
                 {/* Main Action Button */}
                 <button 
                   onClick={() => openEditModal(hall)} 
-                  className="w-full mt-2 py-2 sm:py-2.5 px-3 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 text-slate-800 hover:text-indigo-700"
+                  className={`w-full mt-2.5 py-2.5 px-3 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer ${
+                    isReadOnly 
+                      ? 'bg-amber-50/80 border border-amber-200/80 text-amber-900 hover:bg-amber-100 hover:border-amber-400' 
+                      : 'bg-[#FAF9F6] border border-brand-border/80 text-brand-ink hover:bg-white hover:border-brand-accent hover:text-brand-accent'
+                  }`}
                 >
-                  <Eye className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span>Oturma Düzeni & Salon Yönetimi</span>
+                  <Eye className={`w-3.5 h-3.5 shrink-0 ${isReadOnly ? 'text-amber-600' : 'text-brand-ink/60 group-hover:text-brand-accent'}`} />
+                  <span>{isReadOnly ? 'Oturma Düzeni Önizlemesini Gör' : 'Detayları ve Oturma Düzenini Gör'}</span>
                 </button>
               </div>
             </div>

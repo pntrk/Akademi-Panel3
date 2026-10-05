@@ -328,12 +328,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     // Admin & Süper Admin tüm menülerde tam yetkili ve kısıtlamasızdır
     if (userRole === 'admin') return true;
     
-    // Öğretmen yetkisindeki kullanıcılara yalnızca Sonuçlar ve Akademi Arena gösterilir. Salonlar & Yerleşim sadece admin panelinde gösterilir.
+    // Öğretmen yetkisindeki kullanıcılara Sonuçlar, Akademi Arena ve Salonlar & Yerleşim (sadece oturma düzeni önizleme) gösterilir
     if (userRole === 'teacher') {
-      return ['results', 'league'].includes(itemId);
+      return ['results', 'league', 'halls'].includes(itemId);
     }
     
-    return ['results', 'league'].includes(itemId);
+    return ['results', 'league', 'halls'].includes(itemId);
   };
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
