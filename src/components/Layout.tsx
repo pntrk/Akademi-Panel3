@@ -328,12 +328,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     // Admin & Süper Admin tüm menülerde tam yetkili ve kısıtlamasızdır
     if (userRole === 'admin') return true;
     
-    // Öğretmen yetkisindeki kullanıcılara yalnızca Sonuçlar ve Akademi Arena gösterilir. Salonlar & Yerleşim sadece admin panelinde gösterilir.
+    // Öğretmen yetkisindeki kullanıcılara Sonuçlar, Akademi Arena ve Salonlar & Yerleşim (sadece oturma düzeni önizleme) gösterilir
     if (userRole === 'teacher') {
-      return ['results', 'league'].includes(itemId);
+      return ['results', 'league', 'halls'].includes(itemId);
     }
     
-    return ['results', 'league'].includes(itemId);
+    return ['results', 'league', 'halls'].includes(itemId);
   };
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
@@ -691,13 +691,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                         "text-xs font-bold leading-tight truncate transition-colors",
                         isActive ? "text-white" : "text-white/85 group-hover:text-white"
                       )}>
-                        {item.label}
+                        {item.id === 'halls' && userRole === 'teacher' ? 'Salonlar & Oturma Planı' : item.label}
                       </p>
                       <p className={cn(
                         "text-[9.5px] truncate transition-colors font-medium",
                         isActive ? "text-white/80" : "text-white/40 group-hover:text-white/60"
                       )}>
-                        {item.subtitle}
+                        {item.id === 'halls' && userRole === 'teacher' ? 'Oturma Düzeni Önizleme' : item.subtitle}
                       </p>
                     </div>
                   </div>
@@ -1030,7 +1030,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                         ? "text-white font-bold drop-shadow-xs" 
                         : "text-white/45 font-medium group-hover:text-white/70"
                     )}>
-                      {item.shortLabel}
+                      {item.id === 'halls' && userRole === 'teacher' ? 'Oturma Planı' : item.shortLabel}
                     </span>
                   </button>
                 );
