@@ -1,11 +1,19 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { ExamHall, SeatingPlanItem } from '../types';
-import { generateId, exportToExcel } from '../lib/utils';
+import { ExamHall, SeatingPlanItem, Exam, AbsentStudentInfo, HallAttendance } from '../types';
+import { generateId, exportToExcel, formatDateLong, parseDateObj } from '../lib/utils';
+import { 
+  findTodayExamForHall, 
+  submitHallAttendance, 
+  fetchAllAttendances, 
+  getLocalAttendances,
+  isExamDateMatches 
+} from '../lib/attendance';
 import { 
   Plus, Trash2, Download, LayoutTemplate, X, Users, RefreshCw, 
   AlertCircle, Building, MapPin, Search, ChevronDown, 
-  ChevronRight, CheckCircle2, Eye, Printer, FileSpreadsheet, Sparkles, Check
+  ChevronRight, CheckCircle2, Eye, Printer, FileSpreadsheet, Sparkles, Check,
+  UserCheck, UserX, Clock, Calendar, BellRing, Send, AlertTriangle, ShieldCheck
 } from 'lucide-react';
 
 // Renkli şube rozetleri için dinamik pastel renk eşleştirici (Kelebek dağıtımını görselleştirir)
@@ -58,6 +66,16 @@ export const HallsView = () => {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [highlightStudentQuery, setHighlightStudentQuery] = useState('');
 
+  // -------------------------------------------------------------
+  // YENİLİKÇİ ÖZELLİK: Sınav Takvimi, Yoklama ve İdareye Bildirim
+  // -------------------------------------------------------------
+  const [attendances, setAttendances] = useState<Record<string, HallAttendance>>({});
+  const [modalMode, setModalMode] = useState<'layout' | 'attendance'>('layout');
+  const [activeExamForAttendance, setActiveExamForAttendance] = useState<Exam | null>(null);
+  const [absentStudentIds, setAbsentStudentIds] = useState<string[]>([]);
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
+  const [simulationDateStr, setSimulationDateStr] = useState<string>(''); // Test simülasyonu için
+
   const capacity = columns.reduce((acc, col) => acc + (col.deskCount * col.seatsPerDesk), 0);
 
   // Toast bildirim yöneticisi
@@ -67,6 +85,34 @@ export const HallsView = () => {
       setToastMessage(prev => prev === msg ? null : prev);
     }, 3500);
   };
+
+  // Yoklama verilerini başlangıçta ve periyodik yükle
+  useEffect(() => {
+    const cached = getLocalAttendances();
+    if (cached && Object.keys(cached).length > 0) {
+      setAttendances(cached);
+    }
+
+    fetchAllAttendances('main').then(remote => {
+      if (remote && Object.keys(remote).length > 0) {
+        setAttendances(prev => ({ ...prev, ...remote }));
+      }
+    });
+  }, []);
+
+  // Tarih değerlendirme: Simülasyon seçilmişse o tarihi, yoksa bugünün gerçek tarihini kullanır
+  const effectiveCalendarDate = useMemo(() => {
+    if (simulationDateStr) {
+      const parsed = parseDateObj(simulationDateStr);
+      if (parsed) return parsed;
+    }
+    return new Date();
+  }, [simulationDateStr]);
+
+  // Takvimde bugün veya seçili günde olan genel sınavları bul
+  const examsOnSelectedDate = useMemo(() => {
+    return state.exams.filter(e => isExamDateMatches(e.date, effectiveCalendarDate));
+  }, [state.exams, effectiveCalendarDate]);
 
   const connectedExamNames = useMemo(() => {
     if (!selectedExamIds || selectedExamIds.length === 0) return [];
@@ -118,38 +164,45 @@ export const HallsView = () => {
   const toggleBranch = (clsName: string) => {
     const grade = getGradeLevel(clsName);
     if (selectedClasses.includes(clsName)) {
-      const nextClasses = selectedClasses.filter(c => c !== clsName);
-      setSelectedClasses(nextClasses);
-      const hasRemainingOfThisGrade = nextClasses.some(c => getGradeLevel(c) === grade);
-      if (!hasRemainingOfThisGrade) {
+      const newClasses = selectedClasses.filter(c => c !== clsName);
+      setSelectedClasses(newClasses);
+      const remainingOfGrade = newClasses.filter(c => getGradeLevel(c) === grade);
+      if (remainingOfGrade.length === 0) {
         setSelectedGrades(selectedGrades.filter(g => g !== grade));
       }
     } else {
-      setSelectedClasses([...selectedClasses, clsName]);
+      const newClasses = [...selectedClasses, clsName];
+      setSelectedClasses(newClasses);
       if (!selectedGrades.includes(grade)) {
         setSelectedGrades([...selectedGrades, grade]);
       }
     }
   };
 
-  // Filtered exams based on selected grade levels of the hall
   const filteredExams = useMemo(() => {
     if (selectedGrades.length === 0) return [];
-    return state.exams.filter(ex => {
-      const examGrades = ex.participatingClasses || [];
-      return examGrades.some(g => selectedGrades.includes(g));
+    return state.exams.filter(exam => {
+      if (exam.participatingClasses && exam.participatingClasses.length > 0) {
+        return exam.participatingClasses.some(cls => {
+          const match = cls.trim().match(/^(\d+)/);
+          const g = match ? match[1] : 'Diğer';
+          return selectedGrades.includes(g);
+        });
+      }
+      return selectedGrades.some(g => exam.name.toLowerCase().includes(`${g}.sınıf`) || exam.name.toLowerCase().includes(`${g}. sınıf`));
     });
   }, [state.exams, selectedGrades]);
 
   const registeredStudentsForSeating = useMemo(() => {
     if (selectedClasses.length === 0) return [];
-    return state.students.filter(s => {
-      const classMatch = selectedClasses.includes(s.className);
+    return state.students.filter(student => {
+      const classMatch = selectedClasses.includes(student.className);
       if (!classMatch) return false;
       if (selectedExamIds.length > 0) {
-        return (s.examRegistrations || []).some(reg => selectedExamIds.includes(reg.examId));
+        const studentRegistrations = student.examRegistrations || [];
+        return studentRegistrations.some(reg => selectedExamIds.includes(reg.examId));
       }
-      return (s.examRegistrations || []).length > 0;
+      return true;
     });
   }, [state.students, selectedClasses, selectedExamIds]);
 
@@ -158,7 +211,6 @@ export const HallsView = () => {
   }, [registeredStudentsForSeating, deselectedStudentIds]);
 
   const openNewModal = () => {
-    // Öğretmen yeni salon oluşturamaz
     if (isReadOnly) return;
     setEditingHallId(null);
     setHallName('');
@@ -173,10 +225,11 @@ export const HallsView = () => {
     setSeatingPlan([]);
     setDeselectedStudentIds([]);
     setMobileModalTab('settings');
+    setModalMode('layout');
     setIsModalOpen(true);
   };
 
-  const openEditModal = (hall: ExamHall) => {
+  const openEditModal = (hall: ExamHall, initialTab: 'layout' | 'attendance' = 'layout', specificExam?: Exam) => {
     setEditingHallId(hall.id);
     setHallName(hall.name);
     setColumns(hall.columns && hall.columns.length > 0 ? hall.columns : [
@@ -210,15 +263,40 @@ export const HallsView = () => {
     const initialDeselected = registered.filter(s => !seatedIds.includes(s.id)).map(s => s.id);
     setDeselectedStudentIds(initialDeselected);
     setHighlightStudentQuery('');
-    // Öğretmen için doğrudan oturma şeması önizleme açılır
+
+    // Belirlenen sınav veya bugünkü sınavı tespit et
+    const matchedExam = specificExam || findTodayExamForHall(hall, state.exams, effectiveCalendarDate) || state.exams[0] || null;
+    setActiveExamForAttendance(matchedExam);
+
+    // Eğer bu sınav ve salon için önceden kaydedilmiş yoklama varsa devamsızları yükle
+    if (matchedExam) {
+      const existingKey = `${matchedExam.id}_${hall.id}`;
+      const existingRecord = attendances[existingKey] || (Object.values(attendances) as HallAttendance[]).find(a => a.hallId === hall.id && a.examId === matchedExam.id);
+      if (existingRecord && existingRecord.absentStudents) {
+        setAbsentStudentIds(existingRecord.absentStudents.map(s => s.studentId));
+      } else {
+        setAbsentStudentIds([]);
+      }
+    } else {
+      setAbsentStudentIds([]);
+    }
+
+    setModalMode(initialTab);
     setMobileModalTab(isReadOnly ? 'preview' : 'settings');
     setIsModalOpen(true);
+  };
+
+  // Doğrudan yoklama modunu açma kısayolu
+  const openAttendanceModal = (hall: ExamHall, exam?: Exam) => {
+    openEditModal(hall, 'attendance', exam);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingHallId(null);
     setHighlightStudentQuery('');
+    setModalMode('layout');
+    setActiveExamForAttendance(null);
   };
 
   // Keep active modal seating plan synced when state updates from Firebase
@@ -245,15 +323,16 @@ export const HallsView = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen]);
 
+  // Drag & drop handlers (Yalnızca Admin düzenleme modunda)
   const handleDragStart = (e: React.DragEvent, seatNum: number) => {
-    if (isReadOnly) return;
+    if (isReadOnly || modalMode === 'attendance') return;
     setDraggedSeatNum(seatNum);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', seatNum.toString());
   };
 
   const handleDragOver = (e: React.DragEvent, seatNum: number) => {
-    if (isReadOnly) return;
+    if (isReadOnly || modalMode === 'attendance') return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragOverSeatNum !== seatNum) {
@@ -262,7 +341,7 @@ export const HallsView = () => {
   };
 
   const handleDragLeave = (e: React.DragEvent, seatNum: number) => {
-    if (isReadOnly) return;
+    if (isReadOnly || modalMode === 'attendance') return;
     e.preventDefault();
     if (dragOverSeatNum === seatNum) {
       setDragOverSeatNum(null);
@@ -270,7 +349,7 @@ export const HallsView = () => {
   };
 
   const handleDrop = (e: React.DragEvent, targetSeatNum: number) => {
-    if (isReadOnly) return;
+    if (isReadOnly || modalMode === 'attendance') return;
     e.preventDefault();
     setDragOverSeatNum(null);
     const sourceSeatNum = draggedSeatNum;
@@ -281,6 +360,15 @@ export const HallsView = () => {
   };
 
   const handleSeatClick = (seatNum: number) => {
+    if (modalMode === 'attendance') {
+      // Yoklama modunda sıraya tıklanırsa öğrencinin devamsızlık durumu değişir
+      const seatedStudent = seatingPlan.find(s => s.deskNumber === seatNum);
+      if (seatedStudent) {
+        toggleStudentAbsent(seatedStudent.studentId);
+      }
+      return;
+    }
+
     if (isReadOnly) return;
     if (draggedSeatNum === null) {
       const hasStudent = seatingPlan.some(s => s.deskNumber === seatNum);
@@ -325,6 +413,83 @@ export const HallsView = () => {
         setShowSaveToast(true);
         setTimeout(() => setShowSaveToast(false), 2000);
       }
+    }
+  };
+
+  // Öğrenci devamsızlık durumunu aç/kapat
+  const toggleStudentAbsent = (studentId: string) => {
+    setAbsentStudentIds(prev => {
+      const isAlreadyAbsent = prev.includes(studentId);
+      if (isAlreadyAbsent) {
+        return prev.filter(id => id !== studentId);
+      } else {
+        return [...prev, studentId];
+      }
+    });
+  };
+
+  const markAllPresent = () => {
+    setAbsentStudentIds([]);
+    showToast('Tüm öğrenciler salonda (mevcut) olarak işaretlendi.');
+  };
+
+  // -------------------------------------------------------------
+  // YOKLAMA KAYDI VE İDAREYE ANLIK PUSH BİLDİRİM GÖNDERME
+  // -------------------------------------------------------------
+  const handleSaveAndBroadcastAttendance = async () => {
+    if (!activeExamForAttendance) {
+      showToast('Lütfen önce yoklama alınacak sınavı seçin.');
+      return;
+    }
+
+    const currentHall = state.examHalls.find(h => h.id === editingHallId);
+    if (!currentHall) {
+      showToast('Salon bilgisi bulunamadı.');
+      return;
+    }
+
+    setIsSendingNotification(true);
+    try {
+      const absentList: AbsentStudentInfo[] = seatingPlan
+        .filter(sp => absentStudentIds.includes(sp.studentId))
+        .map(sp => ({
+          studentId: sp.studentId,
+          studentNo: sp.studentNo,
+          studentName: sp.studentName,
+          studentClass: sp.studentClass,
+          deskNumber: sp.deskNumber
+        }));
+
+      const attendanceId = `${activeExamForAttendance.id}_${currentHall.id}`;
+      const teacherInfo = (state.teachers && state.teachers[0]) || 'Gözetmen Öğretmen';
+
+      const payload: HallAttendance = {
+        id: attendanceId,
+        examId: activeExamForAttendance.id,
+        examName: activeExamForAttendance.name,
+        hallId: currentHall.id,
+        hallName: currentHall.name,
+        date: activeExamForAttendance.date || new Date().toISOString().split('T')[0],
+        takenBy: teacherInfo,
+        takenAt: new Date().toISOString(),
+        totalAssigned: seatingPlan.length,
+        presentCount: seatingPlan.length - absentList.length,
+        absentCount: absentList.length,
+        absentStudents: absentList,
+        status: 'submitted'
+      };
+
+      const result = await submitHallAttendance(payload, 'main');
+      if (result.success) {
+        setAttendances(prev => ({ ...prev, [attendanceId]: payload }));
+        showToast(`✓ ${currentHall.name} yoklaması kaydedildi ve idareye anlık bildirim iletildi! (${absentList.length} devamsız)`);
+      } else {
+        showToast(`Yoklama kaydedildi ancak bildirimde gecikme yaşandı: ${result.error || ''}`);
+      }
+    } catch (err: any) {
+      showToast(`Hata: ${err?.message || 'Yoklama gönderilemedi'}`);
+    } finally {
+      setIsSendingNotification(false);
     }
   };
 
@@ -538,88 +703,83 @@ export const HallsView = () => {
             }
             .desk-row {
                display: flex;
-               gap: 4px;
-               padding: 4px;
-               border: 1.5px solid #666;
-               border-radius: 6px;
+               gap: 6px;
                background: #fafafa;
+               border: 1px solid #ccc;
+               border-radius: 6px;
+               padding: 4px;
                flex: 1;
-               min-height: 0;
+               min-height: 48px;
             }
-            .seat {
+            .seat-pod {
                flex: 1;
-               min-width: 0;
-               border: 1px solid #222;
+               border: 1px solid #bbb;
+               background: #fff;
                border-radius: 4px;
                padding: 4px;
                display: flex;
                flex-direction: column;
-               align-items: center;
                justify-content: space-between;
                position: relative;
-               background: #fff;
-               overflow: hidden;
-            }
-            .seat.empty {
-               border: 1px dashed #999;
-               background: #fdfdfd;
-               justify-content: center;
+               min-width: 0;
             }
             .seat-num {
-               position: absolute;
-               top: 2px;
-               left: 3px;
-               font-size: 8.5px;
+               font-size: 9px;
                font-weight: 800;
-               color: #111;
+               color: #777;
+               line-height: 1;
             }
-            .student-name {
-               font-size: 9.5px;
-               font-weight: 700;
-               text-align: center;
-               margin-top: 10px;
-               line-height: 1.15;
+            .seat-name {
+               font-size: 10px;
+               font-weight: 800;
                color: #000;
-               display: -webkit-box;
-               -webkit-line-clamp: 2;
-               -webkit-box-orient: vertical;
-               overflow: hidden;
-               word-break: break-word;
-            }
-            .student-meta {
-               margin-top: auto;
-               display: flex;
-               flex-wrap: wrap;
-               justify-content: center;
-               gap: 2px;
-            }
-            .student-meta span {
-               font-size: 8px;
-               padding: 1px 3px;
-               border: 1px solid #888;
-               border-radius: 2px;
-               color: #111;
-               font-weight: 600;
+               text-align: center;
                white-space: nowrap;
+               overflow: hidden;
+               text-overflow: ellipsis;
+               margin: 2px 0;
             }
-            .footer-info {
-              margin-top: 8px;
-              padding-top: 4px;
-              border-top: 1px solid #ccc;
-              font-size: 9px;
-              color: #666;
-              display: flex;
-              justify-content: space-between;
+            .seat-meta {
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               font-size: 8px;
+               font-weight: 700;
+            }
+            .seat-class {
+               background: #f0f0f0;
+               padding: 1px 3px;
+               border-radius: 2px;
+               border: 0.5px solid #ccc;
+            }
+            .empty-pod {
+               border: 1px dashed #ccc;
+               background: #fdfdfd;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               font-size: 9px;
+               color: #999;
+               font-style: italic;
+            }
+            .footer {
+               margin-top: 10px;
+               padding-top: 8px;
+               border-top: 1px solid #ddd;
+               display: flex;
+               justify-content: space-between;
+               font-size: 9px;
+               color: #666;
             }
           </style>
         </head>
         <body>
           <div class="header">
             <h1>${targetName}</h1>
-            <p>Sınav Salonu Oturma Düzeni & Yoklama Şeması</p>
+            <p>Sınav Salonu Oturma Düzeni & Gözetmenlik Şeması • Toplam ${targetPlan.length} Öğrenci</p>
           </div>
           <div class="board-banner">
-            👨‍🏫 YAZI TAHTASI / KÜRSÜ (ÖN CEPHE)
+            🏫 YAZI TAHTASI / KÜRSÜ (ÖN CEPHE)
           </div>
           <div class="grid-container">
             ${targetCols.map((col, colIdx) => `
@@ -628,29 +788,28 @@ export const HallsView = () => {
                 ${Array.from({ length: col.deskCount }).map((_, rowIdx) => `
                   <div class="desk-row">
                     ${Array.from({ length: col.seatsPerDesk }).map((_, seatIdx) => {
-                      let seatNum = 0;
+                      let sNum = 0;
                       for (let i = 0; i < colIdx; i++) {
-                        seatNum += targetCols[i].deskCount * targetCols[i].seatsPerDesk;
+                        sNum += targetCols[i].deskCount * targetCols[i].seatsPerDesk;
                       }
-                      seatNum += (rowIdx * col.seatsPerDesk) + seatIdx + 1;
-                      const student = targetPlan.find(s => s.deskNumber === seatNum);
-                      
-                      if (student) {
+                      sNum += (rowIdx * col.seatsPerDesk) + seatIdx + 1;
+                      const st = targetPlan.find(item => item.deskNumber === sNum);
+                      if (st) {
                         return `
-                          <div class="seat">
-                            <span class="seat-num">${seatNum}</span>
-                            <span class="student-name">${student.studentName}</span>
-                            <div class="student-meta">
-                              <span>No: ${student.studentNo}</span>
-                              <span>${student.studentClass}</span>
+                          <div class="seat-pod">
+                            <span class="seat-num">${sNum}</span>
+                            <div class="seat-name">${st.studentName}</div>
+                            <div class="seat-meta">
+                              <span>No: ${st.studentNo}</span>
+                              <span class="seat-class">${st.studentClass}</span>
                             </div>
                           </div>
                         `;
                       } else {
                         return `
-                          <div class="seat empty">
-                            <span class="seat-num">${seatNum}</span>
-                            <span style="color:#888; font-size: 9px; font-weight: 600;">Boş Sıra</span>
+                          <div class="seat-pod empty-pod">
+                            <span style="position: absolute; top: 3px; left: 3px;" class="seat-num">${sNum}</span>
+                            <span>Boş</span>
                           </div>
                         `;
                       }
@@ -660,16 +819,13 @@ export const HallsView = () => {
               </div>
             `).join('')}
           </div>
-          <div class="footer-info">
-            <span>Toplam Kapasite: ${targetCols.reduce((acc, c) => acc + (c.deskCount * c.seatsPerDesk), 0)} Sıra</span>
-            <span>Yerleşen Öğrenci: ${targetPlan.length}</span>
-            <span>AkademiPanel Sınav Yönetim Sistemi</span>
+          <div class="footer">
+            <span>Tarih: ${new Date().toLocaleDateString('tr-TR')}</span>
+            <span>Gözetmen İmza: ____________________</span>
           </div>
           <script>
             window.onload = function() {
-               setTimeout(function() {
-                 window.print();
-               }, 400);
+              window.print();
             };
           </script>
         </body>
@@ -679,113 +835,102 @@ export const HallsView = () => {
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
-    showToast(`✓ "${targetName}" yazdırma sayfası hazırlandı`);
   };
 
-  // Öğrenci arama sorgusu ile eşleşen sıra sayısını hesapla
+  // Salondaki öğrenci şubeleri listesi
+  const hallPresentClasses = useMemo(() => {
+    return Array.from(new Set(seatingPlan.map(s => s.studentClass).filter(Boolean))).sort();
+  }, [seatingPlan]);
+
+  // Arama sonucunda eşleşen sıra adedi
   const highlightedSeatCount = useMemo(() => {
-    if (!highlightStudentQuery.trim() || seatingPlan.length === 0) return 0;
+    if (!highlightStudentQuery.trim()) return 0;
     const q = highlightStudentQuery.trim().toLowerCase();
     return seatingPlan.filter(s => 
       s.studentName.toLowerCase().includes(q) ||
       String(s.studentNo).includes(q) ||
       (s.studentClass && s.studentClass.toLowerCase().includes(q))
     ).length;
-  }, [highlightStudentQuery, seatingPlan]);
+  }, [seatingPlan, highlightStudentQuery]);
 
-  // Aktif salondaki tüm şubeleri derle (renk kılavuzu için)
-  const hallPresentClasses = useMemo(() => {
-    const set = new Set<string>();
-    seatingPlan.forEach(s => {
-      if (s.studentClass) set.add(s.studentClass);
-    });
-    return Array.from(set).sort();
-  }, [seatingPlan]);
+  // Salonda mevcut olan ve devamsız olan öğrenci sayıları
+  const attendancePresentCount = seatingPlan.length - absentStudentIds.length;
+  const attendanceAbsentCount = absentStudentIds.length;
 
   return (
-    <div className="space-y-4 sm:space-y-6 pb-20 md:pb-12 flex flex-col h-full relative">
-      
+    <div className="space-y-4 sm:space-y-6 animate-fade-in relative pb-12">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-20 md:bottom-8 right-4 sm:right-8 z-50 bg-[#151618] text-white px-4 py-2.5 rounded-2xl shadow-xl border border-white/10 text-xs sm:text-sm font-bold flex items-center gap-2 animate-fade-in">
+        <div className="fixed bottom-6 right-6 z-50 bg-[#151618] text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border border-white/10 animate-slide-up">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Delete Confirmation Modal (Admin Only) */}
-      {deletingHallId && !isReadOnly && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-brand-border space-y-4 animate-scale-up">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <div className="text-center space-y-1">
-              <h3 className="font-serif font-bold text-lg text-brand-ink">Salonu Sil</h3>
-              <p className="text-xs text-brand-ink/60">
-                Bu sınav salonunu ve mevcut oturma düzenini silmek istediğinize emin misiniz?
-              </p>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={() => setDeletingHallId(null)}
-                className="flex-1 py-2.5 text-xs font-bold text-brand-ink/70 hover:text-brand-ink bg-[#FAF9F6] border border-brand-border rounded-xl cursor-pointer"
-              >
-                İptal
-              </button>
-              <button
-                onClick={() => confirmDeleteHall(deletingHallId)}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer"
-              >
-                Evet, Sil
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-3.5 sm:p-5 bg-white/90 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-brand-border/70 shadow-2xs">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-indigo-500/20 via-indigo-500/10 to-transparent text-indigo-700 border border-indigo-500/20 flex items-center justify-center shrink-0 shadow-2xs">
-            <Building className="w-5 h-5 sm:w-6 sm:h-6" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-serif text-brand-ink font-bold tracking-tight leading-tight">
-                {isReadOnly ? 'Sınav Salonları & Oturma Planı' : 'Sınav Salonları & Oturma Düzeni'}
-              </h2>
-              <span className="text-xs font-bold text-indigo-800 bg-indigo-50 border border-indigo-200/80 px-2.5 py-0.5 rounded-full shrink-0">
-                {state.examHalls.length} Salon
-              </span>
-            </div>
-            <p className="text-brand-ink/60 text-xs sm:text-sm mt-0.5">
-              {isReadOnly 
-                ? 'Sınav salonlarındaki oturma şemalarını inceleyin, öğrenci yerleşimlerini görüntüleyin ve yoklama listelerini indirin' 
-                : 'Sınav salonlarını, kapasitelerini ve otomatik kelebek oturma düzenlerini yönetin'}
-            </p>
-          </div>
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-1 border-b border-brand-border/60">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-serif text-brand-ink font-bold tracking-tight">
+            Salonlar & Oturma Planı
+          </h2>
+          <p className="text-xs sm:text-sm text-brand-ink/60 mt-0.5">
+            {isReadOnly 
+              ? 'Sınav salonları, günün sınav takvimi ve pratik öğrenci yoklama kontrolü' 
+              : 'Sınav salonu yapılandırması, otomatik kelebek dağıtım ve gözetmenlik yönetimi'}
+          </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-          {!isReadOnly ? (
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+          {/* Test / Simülasyon Seçici (Takvimde bugün sınav yoksa veya farklı sınav günleri test edilecekse) */}
+          <div className="flex items-center gap-1.5 bg-white border border-brand-border/80 px-2.5 py-1.5 rounded-xl shadow-2xs text-xs">
+            <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            <span className="text-[11px] font-bold text-brand-ink/70">
+              {simulationDateStr ? 'Test Tarihi:' : 'Takvim Tarihi:'}
+            </span>
+            <select
+              value={simulationDateStr}
+              onChange={(e) => setSimulationDateStr(e.target.value)}
+              className="bg-transparent text-xs font-bold text-brand-ink focus:outline-none cursor-pointer"
+            >
+              <option value="">Bugün ({new Date().toLocaleDateString('tr-TR')})</option>
+              {state.exams.map(ex => (
+                <option key={ex.id} value={ex.date}>
+                  {ex.name} ({ex.date || 'Tarih Yok'})
+                </option>
+              ))}
+            </select>
+            {simulationDateStr && (
+              <button
+                type="button"
+                onClick={() => setSimulationDateStr('')}
+                className="text-[10px] text-rose-600 hover:underline font-bold ml-1 cursor-pointer"
+                title="Bugüne Dön"
+              >
+                Sıfırla
+              </button>
+            )}
+          </div>
+
+          {!isReadOnly && (
             <button 
               onClick={openNewModal} 
-              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#151618] hover:bg-black text-white text-xs sm:text-sm font-bold rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer"
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#151618] hover:bg-black text-white rounded-xl text-xs font-bold active:scale-95 shadow-xs transition-all cursor-pointer"
             >
-              <Plus className="h-4 w-4 text-amber-400" />
+              <Plus className="w-4 h-4 text-amber-400" />
               <span>Yeni Salon Oluştur</span>
             </button>
-          ) : (
-            <div className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-indigo-50 to-indigo-100/60 text-indigo-900 border border-indigo-200/90 rounded-xl text-xs font-bold shrink-0 shadow-2xs">
-              <Eye className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span>Öğretmen İnceleme & Gözetmenlik Modu</span>
+          )}
+
+          {isReadOnly && (
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-indigo-50 to-indigo-100/60 text-indigo-900 border border-indigo-200/90 rounded-xl text-xs font-bold shrink-0 shadow-2xs">
+              <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>Öğretmen & Yoklama Modu</span>
             </div>
           )}
         </div>
       </header>
 
-      {/* Summary Stats - Overview on Desktop */}
+      {/* Summary Stats */}
       <section className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-5 animate-fade-in">
         {/* Stat 1: Toplam Salon */}
         <div className="bg-white p-3.5 sm:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
@@ -860,6 +1005,34 @@ export const HallsView = () => {
         </div>
       </section>
 
+      {/* Sınav Günü Bilgilendirme Çubuğu */}
+      {examsOnSelectedDate.length > 0 && (
+        <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-indigo-500/10 to-emerald-500/10 border border-amber-300 shadow-2xs flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-extrabold text-amber-950 uppercase tracking-wider">
+                  Bugün Sınav Günü!
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900 border border-amber-300">
+                  {examsOnSelectedDate.length} Aktif Sınav
+                </span>
+              </div>
+              <p className="text-xs text-brand-ink font-semibold truncate mt-0.5">
+                {examsOnSelectedDate.map(e => e.name).join(', ')}
+              </p>
+            </div>
+          </div>
+
+          <div className="text-xs text-brand-ink/70 font-medium">
+            Öğretmenler salon kartlarındaki <strong className="text-indigo-800">"Yoklama Al"</strong> butonuyla salonda bulunmayan öğrencileri işaretleyip idareye anlık bildirim gönderebilir.
+          </div>
+        </div>
+      )}
+
       {/* Halls Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5 overflow-auto pb-10">
         {filteredHalls.map(hall => {
@@ -869,6 +1042,11 @@ export const HallsView = () => {
           const isFull = percentage >= 100;
           const isEmpty = usedCapacity === 0;
 
+          // Bu salon için takvimde olan günün sınavını tespit et
+          const todayExam = findTodayExamForHall(hall, state.exams, effectiveCalendarDate);
+          const attendanceKey = todayExam ? `${todayExam.id}_${hall.id}` : '';
+          const hallAttendance = todayExam ? (attendances[attendanceKey] || (Object.values(attendances) as HallAttendance[]).find(a => a.hallId === hall.id && a.examId === todayExam.id)) : null;
+
           return (
             <div 
               key={hall.id} 
@@ -876,7 +1054,7 @@ export const HallsView = () => {
             >
               {/* Card Header Row */}
               <div>
-                <div className="flex items-start justify-between gap-2 mb-2.5">
+                <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <h3 className="text-base sm:text-lg font-serif text-brand-ink font-bold leading-tight truncate">
@@ -897,7 +1075,7 @@ export const HallsView = () => {
                       )}
                     </div>
                     
-                    <div className="text-[11px] text-brand-ink/60 mt-1.5 flex items-center gap-2 flex-wrap">
+                    <div className="text-[11px] text-brand-ink/60 mt-1 flex items-center gap-2 flex-wrap">
                       <span className="flex items-center gap-1 font-semibold text-brand-ink">
                         <Users className="w-3.5 h-3.5 text-indigo-600" />
                         {totalCapacity} Kişi Kapasite
@@ -940,21 +1118,86 @@ export const HallsView = () => {
                   </div>
                 </div>
 
-                {/* Assigned Classes / Badges (Temiz Şık Şube Görünümü) */}
-                {hall.selectedClasses && hall.selectedClasses.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap my-2.5 py-1.5 border-t border-b border-brand-border/40">
-                    <span className="text-[10px] font-bold text-brand-ink/60 mr-0.5">Şubeler:</span>
-                    {hall.selectedClasses.slice(0, 5).map(cls => (
-                      <span key={cls} className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getClassBadgeColor(cls)}`}>
-                        {cls}
-                      </span>
-                    ))}
-                    {hall.selectedClasses.length > 5 && (
-                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md">
-                        +{hall.selectedClasses.length - 5}
-                      </span>
-                    )}
+                {/* ========================================================= */}
+                {/* 1. ÖZELLİK: SINAV GÜNÜ SALON KARTLARININ ORTASINDA SINAV ROZETİ */}
+                {/* ========================================================= */}
+                {todayExam ? (
+                  <div className="my-2.5 p-3 rounded-2xl bg-gradient-to-br from-amber-50/90 via-indigo-50/40 to-emerald-50/70 border border-amber-300/80 shadow-2xs group-hover:border-indigo-300 transition-all">
+                    <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="flex h-2 w-2 relative shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                        </span>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
+                          Bugünkü Sınav
+                        </span>
+                      </div>
+                      
+                      {hallAttendance ? (
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                          hallAttendance.absentCount > 0 
+                            ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          {hallAttendance.absentCount > 0 ? `${hallAttendance.absentCount} Devamsız` : 'Yoklama Tam'}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
+                          <Clock className="w-3 h-3 text-amber-700" />
+                          Yoklama Bekleniyor
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-bold text-brand-ink truncate">
+                          {todayExam.name}
+                        </h4>
+                        <p className="text-[10px] text-brand-ink/60 truncate mt-0.5 flex items-center gap-1.5">
+                          <span>📅 {todayExam.date || 'Bugün'}</span>
+                          <span>•</span>
+                          <span>{todayExam.institution || 'Kurumsal Deneme'}</span>
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openAttendanceModal(hall, todayExam);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 transition-all active:scale-95 shadow-xs cursor-pointer ${
+                          hallAttendance
+                            ? 'bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
+                        }`}
+                        title="Bu Salon İçin Yoklama Al / Güncelle"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>{hallAttendance ? 'Yoklamayı Güncelle' : 'Yoklama Al'}</span>
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  /* Takvimde bugün sınav yoksa sade şube görünümü */
+                  hall.selectedClasses && hall.selectedClasses.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap my-2.5 py-1.5 border-t border-b border-brand-border/40">
+                      <span className="text-[10px] font-bold text-brand-ink/60 mr-0.5">Şubeler:</span>
+                      {hall.selectedClasses.slice(0, 5).map(cls => (
+                        <span key={cls} className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getClassBadgeColor(cls)}`}>
+                          {cls}
+                        </span>
+                      ))}
+                      {hall.selectedClasses.length > 5 && (
+                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md">
+                          +{hall.selectedClasses.length - 5}
+                        </span>
+                      )}
+                    </div>
+                  )
                 )}
               </div>
 
@@ -981,7 +1224,7 @@ export const HallsView = () => {
                 
                 {/* Main Action Button */}
                 <button 
-                  onClick={() => openEditModal(hall)} 
+                  onClick={() => openEditModal(hall, todayExam ? 'attendance' : 'layout', todayExam || undefined)} 
                   className={`w-full mt-2.5 py-2.5 px-3.5 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center justify-between active:scale-[0.98] cursor-pointer ${
                     isReadOnly 
                       ? 'bg-gradient-to-r from-indigo-50 to-indigo-100/70 border border-indigo-200/90 text-indigo-950 hover:border-indigo-400 hover:shadow-xs' 
@@ -990,7 +1233,11 @@ export const HallsView = () => {
                 >
                   <div className="flex items-center gap-2">
                     <Eye className={`w-4 h-4 shrink-0 ${isReadOnly ? 'text-indigo-600' : 'text-brand-ink/60 group-hover:text-brand-accent'}`} />
-                    <span>{isReadOnly ? 'Oturma Düzenini Görüntüle' : 'Salonu Düzenle & Oturma Planı'}</span>
+                    <span>
+                      {isReadOnly 
+                        ? (todayExam ? 'Oturma Planı & Yoklama Ekranı' : 'Oturma Düzenini Görüntüle')
+                        : 'Salonu Düzenle & Oturma Planı'}
+                    </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-brand-ink/40 group-hover:translate-x-0.5 transition-transform" />
                 </button>
@@ -1026,36 +1273,66 @@ export const HallsView = () => {
       </div>
 
       {/* ========================================= */}
-      {/* EXAM HALL MODAL */}
+      {/* EXAM HALL & ATTENDANCE MODAL */}
       {/* ========================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in">
-          <div className={`bg-white rounded-2xl sm:rounded-[32px] border border-[#e6e2d3] shadow-2xl w-full ${isReadOnly ? 'max-w-5xl lg:max-w-6xl' : 'max-w-4xl'} h-[94vh] sm:h-[88vh] flex flex-col overflow-hidden animate-slide-up max-h-[94vh]`}>
+          <div className={`bg-white rounded-2xl sm:rounded-[32px] border border-[#e6e2d3] shadow-2xl w-full ${isReadOnly || modalMode === 'attendance' ? 'max-w-5xl lg:max-w-6xl' : 'max-w-4xl'} h-[94vh] sm:h-[90vh] flex flex-col overflow-hidden animate-slide-up max-h-[94vh]`}>
             
-            {/* Header */}
+            {/* Modal Header */}
             <div className="bg-[#FAF9F6] border-b border-brand-border/70 p-3.5 sm:p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
-                <div className="bg-indigo-500/15 p-2 rounded-xl text-indigo-700 shrink-0">
-                  <MapPin className="h-5 w-5 sm:h-6 sm:w-6" />
+                <div className={`p-2 rounded-xl shrink-0 ${modalMode === 'attendance' ? 'bg-amber-500/15 text-amber-800' : 'bg-indigo-500/15 text-indigo-700'}`}>
+                  {modalMode === 'attendance' ? <UserCheck className="h-5 w-5 sm:h-6 sm:w-6" /> : <MapPin className="h-5 w-5 sm:h-6 sm:w-6" />}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-base sm:text-xl font-serif text-brand-ink font-bold leading-tight truncate">
                       {hallName || 'Sınav Salonu'}
                     </h3>
-                    {isReadOnly && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 shrink-0">
-                        Oturma Düzeni Önizleme
-                      </span>
-                    )}
+                    
+                    {/* Görünüm Sekmeleri: Oturma Planı vs Sınav Yoklaması */}
+                    <div className="flex items-center bg-white border border-brand-border/80 p-0.5 rounded-xl shadow-2xs ml-1">
+                      <button
+                        type="button"
+                        onClick={() => setModalMode('layout')}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${
+                          modalMode === 'layout' 
+                            ? 'bg-[#151618] text-white shadow-xs' 
+                            : 'text-brand-ink/60 hover:text-brand-ink'
+                        }`}
+                      >
+                        <LayoutTemplate className="w-3.5 h-3.5" />
+                        <span>Oturma Planı</span>
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setModalMode('attendance')}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${
+                          modalMode === 'attendance' 
+                            ? 'bg-amber-500 text-white shadow-xs' 
+                            : 'text-brand-ink/60 hover:text-amber-800'
+                        }`}
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>Sınav Yoklaması</span>
+                        {attendanceAbsentCount > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.2 bg-rose-600 text-white rounded-full font-extrabold ml-0.5">
+                            {attendanceAbsentCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <p className="text-[10px] sm:text-xs text-brand-ink/60 mt-0.5 truncate">
-                    {isReadOnly 
-                      ? 'Sınav salonu oturma planı ve yerleşim şeması (Gözetmenlik & Yoklama Ekranı)' 
-                      : (editingHallId ? 'Sınav salonu detayları, kapasite ve otomatik oturma düzeni' : 'Yeni salon detayları, kapasite ve otomatik oturma düzeni')}
+                    {modalMode === 'attendance'
+                      ? 'Salonda bulunmayan öğrencileri işaretleyin ve tek tıkla idareye push bildirim olarak iletin.'
+                      : (isReadOnly ? 'Sınav salonu oturma planı ve yerleşim şeması önizleme' : 'Salon ayarları, şube seçimi ve kelebek dağıtımı')}
                   </p>
                 </div>
               </div>
+
               <button 
                 onClick={closeModal}
                 className="p-2 text-brand-ink/50 hover:text-brand-ink hover:bg-black/5 rounded-xl transition-all cursor-pointer shrink-0 ml-2"
@@ -1066,7 +1343,7 @@ export const HallsView = () => {
             </div>
 
             {/* Mobile Tab Switcher (Yalnızca İdareci / Admin Düzenleme Modunda Görünür) */}
-            {!isReadOnly && (
+            {!isReadOnly && modalMode === 'layout' && (
               <div className="md:hidden flex border-b border-brand-border/70 bg-[#FAF9F6] p-1.5 gap-1 shrink-0">
                 <button
                   type="button"
@@ -1095,54 +1372,52 @@ export const HallsView = () => {
               </div>
             )}
 
-            {/* Content */}
+            {/* Content Body */}
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-[#fcfbf7]/40">
               
-              {/* Left Sidebar Form - Yalnızca İdareciler / Adminler İçin (Öğretmenler salon adı veya oturma düzeni oluşturamaz) */}
-              {!isReadOnly && (
-                <div className={`w-full md:w-1/3 border-r border-[#e6e2d3] p-4 sm:p-6 overflow-y-auto space-y-5 bg-white ${
-                  mobileModalTab === 'settings' ? 'block' : 'hidden md:block'
+              {/* Sol Form Paneli (Sadece Admin Düzenleme Modunda & Layout Sekmesinde Görünür) */}
+              {!isReadOnly && modalMode === 'layout' && (
+                <div className={`w-full md:w-1/3 p-4 sm:p-6 border-r border-[#e6e2d3] overflow-y-auto space-y-5 bg-[#FAF9F6] ${
+                  mobileModalTab !== 'settings' ? 'hidden md:block' : 'block'
                 }`}>
-                  
                   <div>
-                    <label className="block text-xs font-bold text-[#8e8d82] mb-1.5 uppercase tracking-wider">Salon Adı / Yeri</label>
+                    <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider mb-2">Salon Adı / Yeri</label>
                     <input 
                       type="text" 
                       value={hallName} 
-                      onChange={e => setHallName(e.target.value)}
-                      className="w-full bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl px-3 py-2.5 text-sm font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
-                      placeholder="Örn: 1. Kat - Salon A"
+                      onChange={e => setHallName(e.target.value)} 
+                      placeholder="Örn: 8-A Sınıfı, Konferans Salonu"
+                      className="w-full bg-white border border-[#e6e2d3] rounded-xl px-3.5 py-2 text-sm text-[#5a5a40] font-bold focus:outline-none focus:border-[#5a5a40] shadow-2xs"
                     />
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">Oturma Düzeni (Sütunlar)</label>
-                      <span className="text-xs font-bold text-[#5a5a40] bg-[#f5f5f0] px-2 py-1 rounded-full border border-[#e6e2d3]">Toplam: {capacity}</span>
-                    </div>
-                    
-                    <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider mb-2">Sütun Ayarları</label>
+                    <div className="space-y-3">
                       {columns.map((col, idx) => (
-                        <div key={col.id} className="flex flex-col bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl p-3 gap-2 relative group">
-                          <button 
-                            type="button"
-                            onClick={() => setColumns(columns.filter(c => c.id !== col.id))}
-                            className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                          <input 
-                            type="text" 
-                            value={col.name} 
-                            onChange={e => {
-                              const newCols = [...columns];
-                              newCols[idx].name = e.target.value;
-                              setColumns(newCols);
-                            }}
-                            className="w-full bg-white border border-[#e6e2d3] rounded-lg px-2 py-1.5 text-xs font-bold text-[#5a5a40] focus:ring-1 focus:ring-[#5a5a40]"
-                            placeholder="Sütun Adı (örn: Cam Kenarı)"
-                          />
-                          <div className="flex gap-2">
+                        <div key={col.id} className="p-3 bg-[#fcfbf7] border border-[#e6e2d3] rounded-xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <input 
+                              type="text" 
+                              value={col.name} 
+                              onChange={e => {
+                                const newCols = [...columns];
+                                newCols[idx].name = e.target.value;
+                                setColumns(newCols);
+                              }}
+                              className="font-bold text-xs text-[#5a5a40] bg-transparent border-b border-dashed border-[#8e8d82] focus:outline-none"
+                            />
+                            {columns.length > 1 && (
+                              <button 
+                                type="button" 
+                                onClick={() => setColumns(columns.filter((_, i) => i !== idx))}
+                                className="text-red-500 hover:text-red-700 text-xs"
+                              >
+                                Sil
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex space-x-2">
                             <div className="flex-1">
                               <label className="text-[10px] text-[#8e8d82] font-semibold mb-1 block">Sıra Sayısı</label>
                               <input 
@@ -1175,7 +1450,7 @@ export const HallsView = () => {
                         </div>
                       ))}
                       <button 
-                        type="button"
+                        type="button" 
                         onClick={() => setColumns([...columns, { id: generateId(), name: `Sütun ${columns.length + 1}`, deskCount: 5, seatsPerDesk: 2 }])}
                         className="w-full py-2 bg-white border border-dashed border-[#e6e2d3] rounded-xl text-xs font-bold text-[#8e8d82] hover:text-[#5a5a40] hover:border-[#5a5a40] transition-colors"
                       >
@@ -1253,7 +1528,7 @@ export const HallsView = () => {
                                         setSelectedExamIds([...selectedExamIds, exam.id]);
                                       }
                                     }}
-                                    className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40] shrink-0"
+                                    className="rounded border-[#e6e2d3] text-[#5a5a40] focus:ring-[#5a5a40]"
                                   />
                                   <span className="truncate flex-1">{exam.name}</span>
                                 </label>
@@ -1264,30 +1539,17 @@ export const HallsView = () => {
                       </div>
                     )}
 
-                    {/* Şubeler Seçimi */}
+                    {/* Şubeler */}
                     {selectedGrades.length > 0 && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">3. Dahil Edilecek Şubeler</label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const activeGradeClasses = uniqueClasses.filter(c => selectedGrades.includes(getGradeLevel(c)));
-                              const allSelected = activeGradeClasses.every(c => selectedClasses.includes(c));
-                              if (allSelected) {
-                                setSelectedClasses(selectedClasses.filter(c => !activeGradeClasses.includes(c)));
-                              } else {
-                                const newSet = new Set([...selectedClasses, ...activeGradeClasses]);
-                                setSelectedClasses(Array.from(newSet));
-                              }
-                            }}
-                            className="text-[10px] text-[#5a5a40] hover:underline font-bold"
-                          >
-                            Tümünü Seç / Kaldır
-                          </button>
+                          <label className="block text-xs font-bold text-[#8e8d82] uppercase tracking-wider">3. Katılacak Şubeler</label>
+                          <span className="text-[10px] text-[#8e8d82]">
+                            {selectedClasses.length > 0 ? `${selectedClasses.length} şube seçili` : 'Seçilmedi'}
+                          </span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                        <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
                           {uniqueClasses
                             .filter(cls => selectedGrades.includes(getGradeLevel(cls)))
                             .map(clsName => {
@@ -1297,14 +1559,13 @@ export const HallsView = () => {
                                   key={clsName}
                                   type="button"
                                   onClick={() => toggleBranch(clsName)}
-                                  className={`p-1.5 text-xs rounded-lg border font-bold flex items-center justify-between transition-colors ${
-                                    isSelected 
-                                      ? 'bg-white border-[#d4d19d] text-[#5a5a40] shadow-2xs' 
-                                      : 'bg-[#fcfbf7] border-[#e6e2d3] text-gray-400 hover:bg-[#f5f5f0]'
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border ${
+                                    isSelected
+                                      ? 'bg-[#5a5a40] text-white border-[#5a5a40] shadow-xs'
+                                      : 'bg-[#fcfbf7] text-[#5a5a40] border-[#e6e2d3] hover:bg-[#f5f5f0]'
                                   }`}
                                 >
-                                  <span>{clsName}</span>
-                                  {isSelected && <Check className="w-3.5 h-3.5 text-[#5a5a40]" />}
+                                  {clsName}
                                 </button>
                               );
                             })}
@@ -1312,7 +1573,7 @@ export const HallsView = () => {
                       </div>
                     )}
 
-                    {/* Öğrenci Yoklama & Hariç Tutma Listesi */}
+                    {/* Öğrenci Hariç Tutma Listesi */}
                     {registeredStudentsForSeating.length > 0 && (
                       <div className="space-y-2 pt-2 border-t border-[#e6e2d3]">
                         <div className="flex items-center justify-between">
@@ -1393,13 +1654,91 @@ export const HallsView = () => {
                 </div>
               )}
 
-              {/* Right Content - Seating Plan Preview (Öğretmenler için Tam Ekran, Ferah ve Optimize Önizleme) */}
-              <div className={`w-full ${!isReadOnly ? 'md:w-2/3' : 'w-full'} p-3.5 sm:p-6 flex flex-col overflow-hidden ${
-                !isReadOnly && mobileModalTab !== 'preview' ? 'hidden md:flex' : 'flex'
+              {/* Sağ İçerik Alanı: Oturma Planı / Yoklama Önizleme */}
+              <div className={`w-full ${!isReadOnly && modalMode === 'layout' ? 'md:w-2/3' : 'w-full'} p-3.5 sm:p-6 flex flex-col overflow-hidden ${
+                !isReadOnly && modalMode === 'layout' && mobileModalTab !== 'preview' ? 'hidden md:flex' : 'flex'
               }`}>
                 
-                {/* Öğretmen Bilgi ve İşlem Şeridi (Kapasite, Yerleşen, Şubeler, Arama & Export) */}
-                {isReadOnly ? (
+                {/* ========================================================= */}
+                {/* 2. ÖZELLİK: PRATİK YOKLAMA KONTROL ÇUBUĞU & İDAREYE BİLDİRİM */}
+                {/* ========================================================= */}
+                {modalMode === 'attendance' ? (
+                  <div className="mb-3 p-3.5 sm:p-4 bg-gradient-to-r from-amber-500/10 via-white to-rose-500/10 border border-amber-300 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-brand-ink/70">Aktif Sınav:</span>
+                        <select
+                          value={activeExamForAttendance?.id || ''}
+                          onChange={(e) => {
+                            const found = state.exams.find(ex => ex.id === e.target.value);
+                            if (found) {
+                              setActiveExamForAttendance(found);
+                              const existing = attendances[`${found.id}_${editingHallId}`];
+                              if (existing && existing.absentStudents) {
+                                setAbsentStudentIds(existing.absentStudents.map(s => s.studentId));
+                              } else {
+                                setAbsentStudentIds([]);
+                              }
+                            }
+                          }}
+                          className="bg-white border border-brand-border/80 px-2.5 py-1 rounded-xl text-xs font-bold text-brand-ink shadow-2xs focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer max-w-xs truncate"
+                        >
+                          {state.exams.map(e => (
+                            <option key={e.id} value={e.id}>{e.name} ({e.date || 'Tarih Yok'})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Canlı Sayaçlar */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white border border-brand-border text-brand-ink">
+                          Toplam: <strong>{seatingPlan.length}</strong> Öğrenci
+                        </span>
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          ✓ Salonda: <strong>{attendancePresentCount}</strong>
+                        </span>
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
+                          attendanceAbsentCount > 0 
+                            ? 'bg-rose-100 text-rose-900 border-rose-300 animate-pulse' 
+                            : 'bg-gray-100 text-gray-700 border-gray-200'
+                        }`}>
+                          ✗ Salonda Olmayan: <strong>{attendanceAbsentCount}</strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={markAllPresent}
+                        className="px-3 py-1.5 bg-white border border-brand-border text-xs font-bold text-brand-ink hover:bg-gray-50 rounded-xl transition-all shadow-2xs cursor-pointer"
+                        title="Tüm öğrencileri salonda mevcut işaretle"
+                      >
+                        Tümünü Salonda Yap
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isSendingNotification}
+                        onClick={handleSaveAndBroadcastAttendance}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                      >
+                        {isSendingNotification ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>İletiliyor...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5" />
+                            <span>İdareye Bildir & Kaydet</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Standart Görünüm Üst Çubuğu */
                   <div className="mb-3 p-3 sm:p-4 bg-gradient-to-r from-indigo-50/90 via-white to-amber-50/70 border border-brand-border/80 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
                     <div className="space-y-1.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1407,7 +1746,7 @@ export const HallsView = () => {
                           {hallName || 'Sınav Salonu'}
                         </h4>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 shrink-0">
-                          Yoklama & Oturma Planı
+                          Oturma Planı
                         </span>
                         {seatingPlan.length >= capacity && capacity > 0 ? (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
@@ -1419,34 +1758,22 @@ export const HallsView = () => {
                           </span>
                         ) : (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
-                            Yerleşim Yapılmamış
+                            Boş
                           </span>
                         )}
                       </div>
-
-                      <div className="flex items-center gap-2 sm:gap-3 text-xs text-brand-ink/70 flex-wrap">
-                        <span className="flex items-center gap-1 font-semibold text-brand-ink">
-                          <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span>Yerleşen: <strong className="text-indigo-900 font-bold">{seatingPlan.length}</strong> / {capacity} Kişi</span>
+                      
+                      <div className="flex items-center gap-2 text-xs text-brand-ink/70 flex-wrap">
+                        <span className="font-semibold text-brand-ink">
+                          Kapasite: {capacity} Sıra
                         </span>
-                        {selectedClasses.length > 0 && (
-                          <span className="flex items-center gap-1 text-[11px]">
-                            <span className="text-brand-ink/30">•</span>
-                            <span className="font-medium text-brand-ink/60">Şubeler:</span>
-                            <span className="font-bold text-brand-ink">{selectedClasses.join(', ')}</span>
-                          </span>
-                        )}
-                        {connectedExamNames.length > 0 && (
-                          <span className="flex items-center gap-1 text-[11px] truncate max-w-xs sm:max-w-sm">
-                            <span className="text-brand-ink/30">•</span>
-                            <span className="font-medium text-brand-ink/60">Sınav:</span>
-                            <span className="font-bold text-brand-ink truncate">{connectedExamNames.join(' & ')}</span>
-                          </span>
-                        )}
+                        <span>•</span>
+                        <span className="font-semibold text-indigo-900">
+                          Yerleşen: {seatingPlan.length} Öğrenci
+                        </span>
                       </div>
                     </div>
 
-                    {/* Öğrenci Hızlı Arama & İndirme Butonları */}
                     <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                       <div className="relative flex-1 sm:flex-initial">
                         <Search className="w-3.5 h-3.5 text-brand-ink/40 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1495,50 +1822,23 @@ export const HallsView = () => {
                       )}
                     </div>
                   </div>
-                ) : (
-                  /* Admin Üst Çubuğu */
-                  <div className="flex justify-between items-center mb-4 shrink-0">
-                    <div>
-                      <h4 className="text-base sm:text-lg font-serif font-bold text-[#5a5a40]">Oturma Düzeni Önizlemesi</h4>
-                      {seatingPlan.length > 0 && (
-                        <p className="text-[11px] sm:text-xs font-medium text-amber-700 mt-1 flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 shrink-0" />
-                          <span>
-                            {draggedSeatNum 
-                              ? `${draggedSeatNum}. sıra seçildi. Taşımak için hedef sıraya dokunun.`
-                              : 'Öğrenciye dokunup ardından hedef sıraya dokunarak kolayca yer değiştirebilirsiniz.'}
-                          </span>
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {seatingPlan.length > 0 && (
-                        <>
-                          <button 
-                            onClick={() => handleExport({ id: editingHallId || '', name: hallName, capacity, columns, seatingPlan } as any)}
-                            className="flex items-center px-3 py-1.5 bg-[#fcfbf7] border border-[#e6e2d3] text-[#5a5a40] text-xs font-bold rounded-full hover:bg-[#f5f5f0] transition-colors cursor-pointer"
-                            title="Excel Yoklama Listesi İndir"
-                          >
-                            <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Excel
-                          </button>
-                          <button 
-                            onClick={() => handlePrintSchematic()}
-                            className="flex items-center px-3 py-1.5 bg-[#fcfbf7] border border-[#e6e2d3] text-[#5a5a40] text-xs font-bold rounded-full hover:bg-[#f5f5f0] transition-colors cursor-pointer"
-                            title="PDF Şema Yazdır"
-                          >
-                            <Printer className="w-3.5 h-3.5 mr-1 text-indigo-600" /> Yazdır
-                          </button>
-                        </>
-                      )}
-                      <span className="bg-[#f5f5f0] border border-[#e6e2d3] text-[#5a5a40] px-3 py-1.5 rounded-full text-xs font-bold">
-                        Yerleşen: {seatingPlan.length} / {capacity}
-                      </span>
-                    </div>
+                )}
+
+                {/* Yoklama modu ipucu */}
+                {modalMode === 'attendance' && (
+                  <div className="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-center justify-between gap-2 shrink-0">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>Sıralara dokunarak o an salonda bulunmayan öğrencileri <strong>"Salonda Yok"</strong> olarak işaretleyebilirsiniz.</span>
+                    </span>
+                    <span className="font-bold text-amber-800 text-[10px] shrink-0">
+                      Tek Tıkla İşaretleme
+                    </span>
                   </div>
                 )}
 
-                {/* Salonda bulunan şubelerin renk kılavuzu (Öğretmenler için Kelebek Dağıtım Görselleştirmesi) */}
-                {seatingPlan.length > 0 && hallPresentClasses.length > 0 && (
+                {/* Salonda bulunan şubelerin renk kılavuzu */}
+                {seatingPlan.length > 0 && hallPresentClasses.length > 0 && modalMode !== 'attendance' && (
                   <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 mb-1.5 text-[10px] shrink-0">
                     <span className="text-brand-ink/50 font-bold uppercase tracking-wider shrink-0 mr-1">Şube Renkleri:</span>
                     {hallPresentClasses.map(cls => (
@@ -1560,7 +1860,7 @@ export const HallsView = () => {
                   </div>
                 )}
 
-                {/* Oturma Düzeni Grid Konteyneri */}
+                {/* Oturma Düzeni & Yoklama Grid Konteyneri */}
                 <div className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-2xl shadow-inner p-2 sm:p-5 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x" id="seating-plan-printable">
                   {showSaveToast && (
                     <div className="absolute top-4 right-4 z-50 bg-green-50 text-green-700 px-3 py-1.5 rounded-full shadow-sm border border-green-200 text-xs font-bold flex items-center print:hidden animate-in fade-in slide-in-from-top-2 duration-300">
@@ -1568,12 +1868,7 @@ export const HallsView = () => {
                       Kaydediliyor...
                     </div>
                   )}
-                  {/* Ekran için başlık (yazdırıldığında görünür) */}
-                  <div className="hidden print:block mb-8 text-center">
-                    <h1 className="text-2xl font-bold">{hallName || 'Sınav Salonu'}</h1>
-                    <p className="text-gray-500 mt-2">Oturma Düzeni</p>
-                  </div>
-                  
+
                   {seatingPlan.length > 0 ? (
                     <div className="flex gap-2.5 sm:gap-4 items-start min-w-[360px] sm:min-w-full justify-start sm:justify-between print:w-full print:justify-center print:gap-8 pb-4">
                       {columns.map((col, colIdx) => (
@@ -1600,54 +1895,77 @@ export const HallsView = () => {
                                     (student.studentClass && student.studentClass.toLowerCase().includes(highlightStudentQuery.trim().toLowerCase()))
                                   )
                                 );
+
+                                const isAbsent = student ? absentStudentIds.includes(student.id) : false;
                                 
                                 return (
                                   <div 
                                     key={seatIdx}
-                                    draggable={!isReadOnly && !!student}
-                                    onClick={() => !isReadOnly && handleSeatClick(seatNum)}
+                                    draggable={!isReadOnly && modalMode !== 'attendance' && !!student}
+                                    onClick={() => handleSeatClick(seatNum)}
                                     onDragStart={(e) => {
                                       if (!isReadOnly && student) handleDragStart(e, seatNum);
                                     }}
                                     onDragOver={(e) => !isReadOnly && handleDragOver(e, seatNum)}
                                     onDragLeave={(e) => !isReadOnly && handleDragLeave(e, seatNum)}
                                     onDrop={(e) => !isReadOnly && handleDrop(e, seatNum)}
-                                    className={`flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg border relative min-h-[4.5rem] sm:min-h-[5.2rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all ${
-                                      !isReadOnly ? 'hover:scale-105 hover:z-10 cursor-pointer' : 'cursor-default'
+                                    className={`flex flex-col items-center justify-between p-1.5 sm:p-2 rounded-xl border relative min-h-[4.8rem] sm:min-h-[5.5rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all ${
+                                      modalMode === 'attendance' && student
+                                        ? 'cursor-pointer hover:scale-102 hover:shadow-xs active:scale-98'
+                                        : !isReadOnly ? 'hover:scale-105 hover:z-10 cursor-pointer' : 'cursor-default'
                                     } ${
                                       student 
-                                        ? `bg-white border-brand-border shadow-2xs print:border-black ${!isReadOnly ? 'cursor-grab active:cursor-grabbing' : ''}` 
+                                        ? isAbsent
+                                          ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-300/80 shadow-xs'
+                                          : modalMode === 'attendance'
+                                          ? 'bg-emerald-50/40 border-emerald-300/80 shadow-2xs hover:border-emerald-500'
+                                          : 'bg-white border-brand-border shadow-2xs print:border-black'
                                         : 'bg-[#FAF9F6] border-dashed border-brand-border/80 print:border-gray-300'
                                     } ${
                                       isHighlighted 
                                         ? 'ring-3 ring-indigo-600 bg-indigo-50 font-extrabold scale-105 z-20 shadow-md border-indigo-400 animate-pulse' 
                                         : ''
-                                    } ${draggedSeatNum === seatNum ? 'opacity-90 ring-2 ring-amber-500 bg-amber-50 scale-105 z-20 shadow-md' : ''} ${dragOverSeatNum === seatNum ? 'ring-2 ring-amber-500 bg-amber-50 scale-105' : ''}`}
+                                    }`}
                                   >
-                                    <span className={`absolute top-0.5 left-1 sm:top-1 sm:left-1.5 text-[8px] sm:text-[10px] font-bold print:text-black print:text-xs ${
-                                      isHighlighted ? 'text-indigo-800' : 'text-brand-ink/50'
-                                    }`}>
-                                      {seatNum}
-                                    </span>
+                                    <div className="w-full flex items-center justify-between">
+                                      <span className={`text-[8px] sm:text-[10px] font-bold ${
+                                        isAbsent ? 'text-rose-700' : isHighlighted ? 'text-indigo-800' : 'text-brand-ink/50'
+                                      }`}>
+                                        {seatNum}
+                                      </span>
+
+                                      {/* Yoklama Durum Rozeti */}
+                                      {modalMode === 'attendance' && student && (
+                                        <span className={`text-[8px] sm:text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border ${
+                                          isAbsent 
+                                            ? 'bg-rose-600 text-white border-rose-700' 
+                                            : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                        }`}>
+                                          {isAbsent ? 'YOK' : 'VAR'}
+                                        </span>
+                                      )}
+                                    </div>
                                     
                                     {student ? (
                                       <>
-                                        <span className={`text-[9.5px] sm:text-[11px] font-bold text-center line-clamp-2 leading-tight px-0.5 mt-2.5 sm:mt-2.5 print:text-black print:text-sm break-words ${
-                                          isHighlighted ? 'text-indigo-950 font-extrabold' : 'text-brand-ink'
+                                        <span className={`text-[9.5px] sm:text-[11px] font-bold text-center line-clamp-2 leading-tight px-0.5 my-1 print:text-black break-words ${
+                                          isAbsent 
+                                            ? 'text-rose-950 line-through decoration-rose-500 decoration-2' 
+                                            : isHighlighted ? 'text-indigo-950 font-extrabold' : 'text-brand-ink'
                                         }`}>
                                           {student.studentName}
                                         </span>
-                                        <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1 w-full print:mt-1 flex-wrap">
-                                          <span className="text-[8px] sm:text-[9px] bg-[#FAF9F6] text-brand-ink/70 px-1 py-0.5 rounded font-semibold border border-brand-border/60 print:bg-transparent print:border print:border-gray-300 print:text-black truncate max-w-full">
+                                        <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1 w-full flex-wrap">
+                                          <span className="text-[8px] sm:text-[9px] bg-white/80 text-brand-ink/70 px-1 py-0.5 rounded font-semibold border border-brand-border/60 truncate max-w-full">
                                             No: {student.studentNo}
                                           </span>
-                                          <span className={`text-[8px] sm:text-[9px] px-1 py-0.5 rounded font-bold border print:bg-transparent print:border print:border-gray-300 print:text-black truncate max-w-full ${getClassBadgeColor(student.studentClass)}`}>
+                                          <span className={`text-[8px] sm:text-[9px] px-1 py-0.5 rounded font-bold border truncate max-w-full ${getClassBadgeColor(student.studentClass)}`}>
                                             {student.studentClass}
                                           </span>
                                         </div>
                                       </>
                                     ) : (
-                                      <span className="text-[9px] sm:text-[10px] text-brand-ink/40 font-medium">Boş Sıra</span>
+                                      <span className="text-[9px] sm:text-[10px] text-brand-ink/40 font-medium my-auto">Boş Sıra</span>
                                     )}
                                   </div>
                                 );
@@ -1658,57 +1976,148 @@ export const HallsView = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-brand-ink/50 p-8 text-center space-y-3">
-                      <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-full text-indigo-600">
-                        <Users className="w-8 h-8" />
-                      </div>
-                      <p className="text-sm font-medium">
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#8e8d82]">
+                      <LayoutTemplate className="w-12 h-12 mb-3 text-[#d4d19d]" />
+                      <p className="font-bold text-sm text-[#5a5a40]">Henüz Oturma Düzeni Oluşturulmamış</p>
+                      <p className="text-xs max-w-xs mt-1">
                         {isReadOnly 
-                          ? 'Bu sınav salonu için henüz yönetici tarafından bir oturma düzeni oluşturulmamış.' 
-                          : <>Henüz oturma düzeni oluşturulmadı.<br/>Sol panelden sınıf seçip <strong>"Oturma Düzeni Oluştur"</strong> butonuna tıklayın.</>}
+                          ? 'Bu salon için henüz yerleşim şeması oluşturulmamış.' 
+                          : 'Sol paneldeki ayarları tamamlayıp "Oturma Düzeni Oluştur" butonuna basarak öğrencileri otomatik dağıtabilirsiniz.'}
                       </p>
                     </div>
                   )}
                 </div>
 
-                {/* Mobilde Yatay Kaydırma Yönlendirmesi */}
-                {seatingPlan.length > 0 && (
-                  <div className="sm:hidden text-center text-[10px] text-brand-ink/50 pt-1.5 font-medium flex items-center justify-center gap-1 shrink-0">
-                    <span>↔️ Tüm sıraları incelemek için parmağınızla sağa/sola kaydırabilirsiniz</span>
-                  </div>
-                )}
+                {/* Mobil için sağa-sola kaydırma ipucu */}
+                <div className="sm:hidden mt-2 text-center text-[10px] text-brand-ink/50 flex items-center justify-center gap-1 shrink-0">
+                  <span>↔️ Sıraları incelemek için parmağınızla sağa-sola kaydırabilirsiniz</span>
+                </div>
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="bg-[#FAF9F6] border-t border-brand-border/70 p-3 sm:p-4 flex items-center justify-between shrink-0">
-              <div className="text-xs text-brand-ink/60">
-                {isReadOnly ? (
-                  <span>
-                    Sınav Salonu: <strong className="text-brand-ink">{hallName || 'Belirtilmedi'}</strong> ({capacity} Sıra Kapasite, {seatingPlan.length} Öğrenci)
-                  </span>
-                ) : (
-                  <span>
-                    Kapasite: <strong className="text-brand-ink">{capacity}</strong> Sıra | Yerleşen: <strong className="text-brand-ink">{seatingPlan.length}</strong>
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <button
-                  onClick={closeModal}
-                  className="px-4 py-2 text-xs sm:text-sm text-brand-ink/70 hover:text-brand-ink font-bold rounded-xl hover:bg-black/5 transition-colors cursor-pointer"
-                >
-                  {isReadOnly ? 'Pencereyi Kapat' : 'İptal'}
-                </button>
-                {!isReadOnly && (
-                  <button
-                    onClick={handleSaveHall}
-                    className="px-5 sm:px-6 py-2 sm:py-2.5 bg-[#151618] hover:bg-black text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
-                  >
-                    Salonu Kaydet
-                  </button>
-                )}
-              </div>
+            {/* Modal Alt Çubuk (Footer) */}
+            <div className="bg-[#FAF9F6] border-t border-brand-border/70 p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+              {modalMode === 'attendance' ? (
+                /* Yoklama Modu Alt Bilgilendirme ve Bildirim Butonu */
+                <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="text-xs text-brand-ink font-medium">
+                    {attendanceAbsentCount === 0 ? (
+                      <span className="text-emerald-700 font-bold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Salondaki tüm öğrenciler ({seatingPlan.length} kişi) eksiksiz olarak salondadır.
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-rose-700 font-bold flex items-center gap-1">
+                          <AlertTriangle className="w-4 h-4 text-rose-600" />
+                          Salonda Bulunmayan {attendanceAbsentCount} Öğrenci:
+                        </span>
+                        {seatingPlan
+                          .filter(s => absentStudentIds.includes(s.studentId))
+                          .slice(0, 4)
+                          .map(s => (
+                            <span key={s.studentId} className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
+                              {s.studentNo} - {s.studentName}
+                            </span>
+                          ))}
+                        {attendanceAbsentCount > 4 && (
+                          <span className="text-[10px] text-rose-600 font-bold">
+                            +{attendanceAbsentCount - 4} diğer
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => setModalMode('layout')}
+                      className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer"
+                    >
+                      Şemaya Dön
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSendingNotification}
+                      onClick={handleSaveAndBroadcastAttendance}
+                      className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isSendingNotification ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>İdareye Gönderiliyor...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" />
+                          <span>İdareye Push Bildirim Gönder & Kaydet</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Standart Oturma Planı Alt Çubuğu */
+                <div className="w-full flex items-center justify-between">
+                  <div className="text-xs text-brand-ink/60 font-medium">
+                    {isReadOnly 
+                      ? `${seatingPlan.length} öğrenci yerleşimi görüntüleniyor`
+                      : 'Değişiklikleri kaydetmek için aşağıdaki butonu kullanabilirsiniz.'}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button 
+                      type="button"
+                      onClick={closeModal}
+                      className="px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer"
+                    >
+                      Pencereyi Kapat
+                    </button>
+                    {!isReadOnly && (
+                      <button 
+                        type="button"
+                        onClick={handleSaveHall}
+                        className="px-5 py-2 bg-[#151618] hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                      >
+                        Salonu Kaydet
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Silme Onay Modalı */}
+      {deletingHallId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-brand-border/70 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h4 className="font-serif font-bold text-brand-ink text-base">Salonu Silmek İstiyor musunuz?</h4>
+              <p className="text-xs text-brand-ink/60">
+                Bu salon ve içerisindeki oturma planı kalıcı olarak silinecektir.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setDeletingHallId(null)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-brand-ink font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                onClick={() => confirmDeleteHall(deletingHallId)}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Evet, Sil
+              </button>
             </div>
           </div>
         </div>

@@ -256,12 +256,76 @@
         }
       },
       "required": ["monthKey", "studentsSummary"]
+    },
+    "HallAttendance": {
+      "title": "HallAttendance",
+      "description": "Exam hall attendance records with absent student details and status",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique attendance record identifier"
+        },
+        "examId": {
+          "type": "string",
+          "description": "Associated exam identifier"
+        },
+        "examName": {
+          "type": "string",
+          "description": "Name of the exam taken"
+        },
+        "hallId": {
+          "type": "string",
+          "description": "Identifier of the exam hall"
+        },
+        "hallName": {
+          "type": "string",
+          "description": "Name of the exam hall"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of the exam attendance"
+        },
+        "takenBy": {
+          "type": "string",
+          "description": "Email or name of the teacher who took attendance"
+        },
+        "takenAt": {
+          "type": "string",
+          "description": "ISO timestamp when attendance was taken"
+        },
+        "totalAssigned": {
+          "type": "number",
+          "description": "Total assigned students in the hall"
+        },
+        "presentCount": {
+          "type": "number",
+          "description": "Count of students present in the exam"
+        },
+        "absentCount": {
+          "type": "number",
+          "description": "Count of students absent"
+        },
+        "absentStudents": {
+          "type": "array",
+          "description": "List of absent students with seat and class info"
+        },
+        "status": {
+          "type": "string",
+          "description": "Attendance status (e.g. submitted)"
+        }
+      },
+      "required": ["examId", "hallId", "date", "takenAt"]
     }
   },
   "firestore": {
     "/schools/{schoolId}": {
       "schema": "SchoolState",
       "description": "Core state document for a school instance"
+    },
+    "/schools/{schoolId}/attendances/{attendanceId}": {
+      "schema": "HallAttendance",
+      "description": "Exam hall attendance records with absent student details"
     },
     "/schools/{schoolId}/exam_results/{examId}": {
       "schema": "ExamResultPartition",

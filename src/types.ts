@@ -235,6 +235,31 @@ export interface ExamHall {
   }[];
 }
 
+export interface AbsentStudentInfo {
+  studentId: string;
+  studentNo: number;
+  studentName: string;
+  studentClass: string;
+  deskNumber: number;
+}
+
+export interface HallAttendance {
+  id: string;
+  examId: string;
+  examName: string;
+  hallId: string;
+  hallName: string;
+  date: string;
+  takenBy: string;
+  takenAt: string;
+  totalAssigned: number;
+  presentCount: number;
+  absentCount: number;
+  absentStudents: AbsentStudentInfo[];
+  notes?: string;
+  status: 'draft' | 'submitted';
+}
+
 export interface FullBackupSummary {
   studentCount: number;
   examCount: number;

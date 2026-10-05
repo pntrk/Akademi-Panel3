@@ -85,6 +85,12 @@ service cloud.firestore {
         allow write: if isSchoolAdmin() || isSuperAdmin();
       }
 
+      // Exam Hall Attendance records (Teachers take attendance & send to Admin)
+      match /attendances/{attendanceId} {
+        allow read: if isSignedIn();
+        allow write: if isSchoolTeacher() || isSchoolAdmin() || isSuperAdmin();
+      }
+
       // Cloud Backups subcollection
       match /backups/{backupId} {
         allow read: if isSignedIn();
