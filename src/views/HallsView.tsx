@@ -152,14 +152,14 @@ export const HallsView = () => {
     });
   }, []);
 
-  // Tarih değerlendirme: Simülasyon seçilmişse o tarihi, yoksa bugünün gerçek tarihini kullanır
+  // Tarih değerlendirme: Öğretmenlerde her zaman gerçek takvim tarihi, Yöneticilerde ise simülasyon seçilmişse o tarihi kullanır
   const effectiveCalendarDate = useMemo(() => {
-    if (simulationDateStr) {
+    if (!isReadOnly && simulationDateStr) {
       const parsed = parseDateObj(simulationDateStr);
       if (parsed) return parsed;
     }
     return new Date();
-  }, [simulationDateStr]);
+  }, [simulationDateStr, isReadOnly]);
 
   // Takvimde bugün veya seçili günde olan genel sınavları bul
   const examsOnSelectedDate = useMemo(() => {
@@ -975,35 +975,37 @@ export const HallsView = () => {
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
-          {/* Test / Simülasyon Seçici (Takvimde bugün sınav yoksa veya farklı sınav günleri test edilecekse) */}
-          <div className="flex items-center gap-1.5 bg-white border border-brand-border/80 px-2.5 py-1.5 rounded-xl shadow-2xs text-xs">
-            <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-            <span className="text-[11px] font-bold text-brand-ink/70">
-              {simulationDateStr ? 'Test Tarihi:' : 'Takvim Tarihi:'}
-            </span>
-            <select
-              value={simulationDateStr}
-              onChange={(e) => setSimulationDateStr(e.target.value)}
-              className="bg-transparent text-xs font-bold text-brand-ink focus:outline-none cursor-pointer"
-            >
-              <option value="">Bugün ({new Date().toLocaleDateString('tr-TR')})</option>
-              {state.exams.map(ex => (
-                <option key={ex.id} value={ex.date}>
-                  {ex.name} ({ex.date || 'Tarih Yok'})
-                </option>
-              ))}
-            </select>
-            {simulationDateStr && (
-              <button
-                type="button"
-                onClick={() => setSimulationDateStr('')}
-                className="text-[10px] text-rose-600 hover:underline font-bold ml-1 cursor-pointer"
-                title="Bugüne Dön"
+          {/* Yalnızca Yönetici / Admin Panelinde Manuel Takvim Değiştirme Görüntüsü */}
+          {!isReadOnly && (
+            <div className="flex items-center gap-1.5 bg-white border border-brand-border/80 px-2.5 py-1.5 rounded-xl shadow-2xs text-xs">
+              <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span className="text-[11px] font-bold text-brand-ink/70">
+                {simulationDateStr ? 'Test Tarihi:' : 'Takvim Tarihi:'}
+              </span>
+              <select
+                value={simulationDateStr}
+                onChange={(e) => setSimulationDateStr(e.target.value)}
+                className="bg-transparent text-xs font-bold text-brand-ink focus:outline-none cursor-pointer"
               >
-                Sıfırla
-              </button>
-            )}
-          </div>
+                <option value="">Bugün ({new Date().toLocaleDateString('tr-TR')})</option>
+                {state.exams.map(ex => (
+                  <option key={ex.id} value={ex.date}>
+                    {ex.name} ({ex.date || 'Tarih Yok'})
+                  </option>
+                ))}
+              </select>
+              {simulationDateStr && (
+                <button
+                  type="button"
+                  onClick={() => setSimulationDateStr('')}
+                  className="text-[10px] text-rose-600 hover:underline font-bold ml-1 cursor-pointer"
+                  title="Bugüne Dön"
+                >
+                  Sıfırla
+                </button>
+              )}
+            </div>
+          )}
 
           {!isReadOnly && (
             <button 
@@ -1018,7 +1020,7 @@ export const HallsView = () => {
           {isReadOnly && (
             <div className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-indigo-50 to-indigo-100/60 text-indigo-900 border border-indigo-200/90 rounded-xl text-xs font-bold shrink-0 shadow-2xs">
               <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span>Öğretmen & Yoklama Modu</span>
+              <span>Öğretmen Yetkisi</span>
             </div>
           )}
         </div>
