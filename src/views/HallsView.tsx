@@ -229,7 +229,7 @@ export const HallsView = () => {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (hall: ExamHall, initialTab: 'layout' | 'attendance' = 'layout', specificExam?: Exam) => {
+  const openEditModal = (hall: ExamHall, initialTab?: 'layout' | 'attendance', specificExam?: Exam) => {
     setEditingHallId(hall.id);
     setHallName(hall.name);
     setColumns(hall.columns && hall.columns.length > 0 ? hall.columns : [
@@ -264,8 +264,10 @@ export const HallsView = () => {
     setDeselectedStudentIds(initialDeselected);
     setHighlightStudentQuery('');
 
-    // Belirlenen sınav veya bugünkü sınavı tespit et
-    const matchedExam = specificExam || findTodayExamForHall(hall, state.exams, effectiveCalendarDate) || state.exams[0] || null;
+    // Otomatik Sınav ve Gün Tespiti:
+    // Salona ait bugünkü sınavı veya seçilen sınavı tespit et
+    const detectedTodayExam = specificExam || findTodayExamForHall(hall, state.exams, effectiveCalendarDate);
+    const matchedExam = detectedTodayExam || (state.exams.length > 0 ? state.exams[0] : null);
     setActiveExamForAttendance(matchedExam);
 
     // Eğer bu sınav ve salon için önceden kaydedilmiş yoklama varsa devamsızları yükle
@@ -280,7 +282,22 @@ export const HallsView = () => {
       setAbsentStudentIds([]);
     }
 
-    setModalMode(initialTab);
+    // Modal Sekmesi Seçimi:
+    // 1. initialTab parametre olarak açıkça verildiyse onu kullan.
+    // 2. Öğretmen kullanıcılar (isReadOnly):
+    //    - Eğer bugün salonda aktif sınav varsa (detectedTodayExam) -> Varsayılan: 'attendance' (Sınav Yoklaması)
+    //    - Sınav olmayan günlerde -> Varsayılan: 'layout' (Oturma Planı Önizlemesi)
+    // 3. İdareciler (Admin): Varsayılan: 'layout' (Salon Düzenleme)
+    let modeToOpen: 'layout' | 'attendance' = 'layout';
+    if (initialTab) {
+      modeToOpen = initialTab;
+    } else if (isReadOnly) {
+      modeToOpen = detectedTodayExam ? 'attendance' : 'layout';
+    } else {
+      modeToOpen = 'layout';
+    }
+
+    setModalMode(modeToOpen);
     setMobileModalTab(isReadOnly ? 'preview' : 'settings');
     setIsModalOpen(true);
   };
@@ -1063,14 +1080,15 @@ export const HallsView = () => {
           return (
             <div 
               key={hall.id} 
-              className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-2xs sm:shadow-xs border border-brand-border/70 hover:border-indigo-400 hover:shadow-md flex flex-col justify-between transition-all group relative hover:-translate-y-0.5"
+              onClick={() => openEditModal(hall)}
+              className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-2xs sm:shadow-xs border border-brand-border/70 hover:border-indigo-400 hover:shadow-md flex flex-col justify-between transition-all group relative hover:-translate-y-0.5 cursor-pointer"
             >
               {/* Card Header Row */}
               <div>
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="text-base sm:text-lg font-serif text-brand-ink font-bold leading-tight truncate">
+                      <h3 className="text-base sm:text-lg font-serif text-brand-ink font-bold leading-tight truncate group-hover:text-indigo-900 transition-colors">
                         {hall.name}
                       </h3>
                       {isFull ? (
@@ -1101,9 +1119,12 @@ export const HallsView = () => {
                   </div>
 
                   {/* Quick actions top-right */}
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <button 
-                      onClick={() => handleExport(hall)} 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleExport(hall);
+                      }} 
                       className="p-2 text-brand-ink/60 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-emerald-200 active:scale-95 shadow-2xs" 
                       title="Yoklama Listesi İndir (Excel)"
                       aria-label="Yoklama Listesi İndir"
@@ -1111,7 +1132,10 @@ export const HallsView = () => {
                       <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
                     </button>
                     <button 
-                      onClick={() => handlePrintSchematic(hall)} 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePrintSchematic(hall);
+                      }} 
                       className="p-2 text-brand-ink/60 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-indigo-200 active:scale-95 shadow-2xs" 
                       title="Oturma Şemasını Yazdır / PDF"
                       aria-label="Şema Yazdır"
@@ -1120,7 +1144,10 @@ export const HallsView = () => {
                     </button>
                     {!isReadOnly && (
                       <button 
-                        onClick={() => setDeletingHallId(hall.id)} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingHallId(hall.id);
+                        }} 
                         className="p-2 text-brand-ink/40 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 active:scale-95 shadow-2xs" 
                         title="Salonu Sil"
                         aria-label="Salonu Sil"
@@ -1293,14 +1320,14 @@ export const HallsView = () => {
           <div className={`bg-white rounded-2xl sm:rounded-[32px] border border-[#e6e2d3] shadow-2xl w-full ${isReadOnly || modalMode === 'attendance' ? 'max-w-5xl lg:max-w-6xl' : 'max-w-4xl'} h-[98vh] sm:h-[90vh] flex flex-col overflow-hidden animate-slide-up max-h-[98vh] sm:max-h-[90vh]`}>
             
             {/* Modal Header (Selector 5) */}
-            <div className="bg-[#FAF9F6] border-b border-brand-border/70 p-2.5 sm:p-4.5 flex items-center justify-between shrink-0 gap-2">
+            <div className="bg-[#FAF9F6] border-b border-brand-border/80 px-3 py-2.5 sm:px-5 sm:py-3.5 flex items-center justify-between shrink-0 gap-2">
               <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
                 <div className={`p-1.5 sm:p-2 rounded-xl shrink-0 ${modalMode === 'attendance' ? 'bg-amber-500/15 text-amber-800' : 'bg-indigo-500/15 text-indigo-700'}`}>
-                  {modalMode === 'attendance' ? <UserCheck className="h-4.5 w-4.5 sm:h-6 sm:w-6" /> : <MapPin className="h-4.5 w-4.5 sm:h-6 sm:w-6" />}
+                  {modalMode === 'attendance' ? <UserCheck className="h-4.5 w-4.5 sm:h-5 sm:w-5" /> : <MapPin className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2.5 flex-wrap">
-                    <h3 className="text-sm sm:text-lg lg:text-xl font-serif text-brand-ink font-bold leading-tight truncate">
+                  <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-3 flex-wrap">
+                    <h3 className="text-sm sm:text-base lg:text-lg font-serif text-brand-ink font-bold leading-tight truncate">
                       {hallName || 'Sınav Salonu'}
                     </h3>
                     
@@ -1309,7 +1336,7 @@ export const HallsView = () => {
                       <button
                         type="button"
                         onClick={() => setModalMode('layout')}
-                        className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                        className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
                           modalMode === 'layout' 
                             ? 'bg-[#151618] text-white shadow-xs' 
                             : 'text-brand-ink/60 hover:text-brand-ink'
@@ -1322,7 +1349,7 @@ export const HallsView = () => {
                       <button
                         type="button"
                         onClick={() => setModalMode('attendance')}
-                        className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                        className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
                           modalMode === 'attendance' 
                             ? 'bg-amber-500 text-white shadow-xs' 
                             : 'text-brand-ink/60 hover:text-amber-800'
@@ -1338,17 +1365,12 @@ export const HallsView = () => {
                       </button>
                     </div>
                   </div>
-                  <p className="text-[10px] sm:text-xs text-brand-ink/60 mt-0.5 truncate hidden sm:block">
-                    {modalMode === 'attendance'
-                      ? 'Salonda bulunmayan öğrencileri işaretleyin ve tek tıkla idareye push bildirim olarak iletin.'
-                      : (isReadOnly ? 'Sınav salonu oturma planı ve yerleşim şeması önizleme' : 'Salon ayarları, şube seçimi ve kelebek dağıtımı')}
-                  </p>
                 </div>
               </div>
 
               <button 
                 onClick={closeModal}
-                className="p-1.5 sm:p-2 text-brand-ink/50 hover:text-brand-ink hover:bg-black/5 rounded-xl transition-all cursor-pointer shrink-0 ml-1"
+                className="p-1.5 sm:p-2 text-brand-ink/50 hover:text-brand-ink hover:bg-black/5 rounded-xl transition-all cursor-pointer shrink-0 touch-manipulation"
                 title="Pencereyi Kapat (ESC)"
               >
                 <X className="h-5 w-5" />
@@ -1676,7 +1698,7 @@ export const HallsView = () => {
                 {/* 2. ÖZELLİK: PRATİK YOKLAMA KONTROL ÇUBUĞU & İDAREYE BİLDİRİM (Selector 2) */}
                 {/* ========================================================= */}
                 {modalMode === 'attendance' ? (
-                  <div className="mb-2 sm:mb-3 p-2 sm:p-3.5 bg-gradient-to-r from-amber-500/10 via-white to-rose-500/10 border border-amber-300 rounded-xl sm:rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
+                  <div className="mb-2.5 p-2 sm:p-3 bg-gradient-to-r from-amber-500/10 via-white to-rose-500/10 border border-amber-300/80 rounded-xl sm:rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-3 shrink-0">
                     <div className="space-y-1.5 min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                         <span className="text-[11px] sm:text-xs font-bold text-brand-ink/70">Aktif Sınav:</span>
@@ -1703,14 +1725,14 @@ export const HallsView = () => {
                       </div>
 
                       {/* Canlı Sayaçlar */}
-                      <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-                        <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-white border border-brand-border text-brand-ink">
+                      <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+                        <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-lg bg-white border border-brand-border/70 text-brand-ink">
                           Toplam: <strong>{seatingPlan.length}</strong>
                         </span>
-                        <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
                           ✓ Salonda: <strong>{attendancePresentCount}</strong>
                         </span>
-                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg border ${
+                        <span className={`text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-lg border ${
                           attendanceAbsentCount > 0 
                             ? 'bg-rose-100 text-rose-900 border-rose-300 animate-pulse font-extrabold' 
                             : 'bg-gray-100 text-gray-700 border-gray-200'
@@ -1724,7 +1746,7 @@ export const HallsView = () => {
                       <button
                         type="button"
                         onClick={markAllPresent}
-                        className="flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 bg-white border border-brand-border text-xs font-bold text-brand-ink hover:bg-gray-50 rounded-xl transition-all shadow-2xs cursor-pointer text-center"
+                        className="flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 bg-white border border-brand-border/80 text-xs font-bold text-brand-ink hover:bg-gray-50 rounded-xl transition-all shadow-2xs cursor-pointer text-center touch-manipulation active:scale-95"
                         title="Tüm öğrencileri salonda mevcut işaretle"
                       >
                         Tümünü Salonda Yap
@@ -1734,7 +1756,7 @@ export const HallsView = () => {
                         type="button"
                         disabled={isSendingNotification}
                         onClick={handleSaveAndBroadcastAttendance}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 touch-manipulation"
                       >
                         {isSendingNotification ? (
                           <>
@@ -1751,56 +1773,39 @@ export const HallsView = () => {
                     </div>
                   </div>
                 ) : (
-                  /* Standart Görünüm Üst Çubuğu (Selector 2) */
-                  <div className="mb-2 sm:mb-3 p-2 sm:p-3.5 bg-gradient-to-r from-indigo-50/90 via-white to-amber-50/70 border border-brand-border/80 rounded-xl sm:rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <h4 className="text-sm sm:text-base lg:text-lg font-serif font-bold text-brand-ink truncate">
-                          {hallName || 'Sınav Salonu'}
-                        </h4>
-                        <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 shrink-0">
-                          Oturma Planı
+                  <div className="mb-2.5 px-2.5 sm:px-3.5 py-1.5 bg-white border border-brand-border/70 rounded-xl shadow-2xs flex flex-wrap items-center justify-between gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+                      <span className="text-xs sm:text-sm font-bold text-brand-ink truncate">
+                        {hallName || 'Sınav Salonu'}
+                      </span>
+                      <span className="text-[10px] font-semibold text-brand-ink/70 bg-[#FAF9F6] border border-brand-border/60 px-2 py-0.5 rounded-md">
+                        {seatingPlan.length}/{capacity} Öğrenci
+                      </span>
+                      {seatingPlan.length >= capacity && capacity > 0 ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                          %100 Dolu
                         </span>
-                        {seatingPlan.length >= capacity && capacity > 0 ? (
-                          <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                            Tam Dolu
-                          </span>
-                        ) : seatingPlan.length > 0 ? (
-                          <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
-                            %{Math.round((seatingPlan.length / (capacity || 1)) * 100)} Dolu
-                          </span>
-                        ) : (
-                          <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
-                            Boş
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-brand-ink/70 flex-wrap">
-                        <span className="font-semibold text-brand-ink">
-                          Kapasite: {capacity} Sıra
+                      ) : seatingPlan.length > 0 ? (
+                        <span className="text-[10px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                          %{Math.round((seatingPlan.length / (capacity || 1)) * 100)} Dolu
                         </span>
-                        <span>•</span>
-                        <span className="font-semibold text-indigo-900">
-                          Yerleşen: {seatingPlan.length} Öğrenci
-                        </span>
-                      </div>
+                      ) : null}
                     </div>
 
-                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap sm:flex-nowrap">
-                      <div className="relative flex-1 sm:flex-initial">
-                        <Search className="w-3.5 h-3.5 text-brand-ink/40 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
+                      <div className="relative">
+                        <Search className="w-3 h-3 text-brand-ink/40 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
                           type="text"
                           value={highlightStudentQuery}
                           onChange={e => setHighlightStudentQuery(e.target.value)}
-                          placeholder="Öğrenci veya No ara..."
-                          className="w-full sm:w-44 pl-8 pr-7 py-1.5 bg-white border border-brand-border/80 rounded-xl text-xs text-brand-ink placeholder:text-brand-ink/40 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
+                          placeholder="Öğrenci ara..."
+                          className="w-28 xs:w-36 sm:w-40 pl-6.5 pr-6 py-1 bg-white border border-brand-border/70 rounded-lg text-xs text-brand-ink placeholder:text-brand-ink/40 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
                         />
                         {highlightStudentQuery && (
                           <button
                             onClick={() => setHighlightStudentQuery('')}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-ink/40 hover:text-brand-ink cursor-pointer"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-brand-ink/40 hover:text-brand-ink cursor-pointer"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -1808,27 +1813,27 @@ export const HallsView = () => {
                       </div>
 
                       {highlightStudentQuery && highlightedSeatCount > 0 && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-indigo-100 text-indigo-900 border border-indigo-200">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200">
                           {highlightedSeatCount} eşleşme
                         </span>
                       )}
 
                       {seatingPlan.length > 0 && (
-                        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1 shrink-0">
                           <button 
                             onClick={() => handleExport({ id: editingHallId || '', name: hallName, capacity, columns, seatingPlan } as any)}
-                            className="flex items-center px-2 sm:px-2.5 py-1.5 bg-white border border-brand-border/80 text-brand-ink hover:text-emerald-700 text-xs font-bold rounded-xl hover:border-emerald-300 transition-colors shadow-2xs cursor-pointer"
+                            className="flex items-center px-2 py-1 bg-white border border-brand-border/70 text-brand-ink hover:text-emerald-700 text-xs font-bold rounded-lg hover:border-emerald-300 transition-colors shadow-2xs cursor-pointer touch-manipulation"
                             title="Excel Yoklama Listesi İndir"
                           >
-                            <FileSpreadsheet className="w-3.5 h-3.5 sm:mr-1 text-emerald-600" />
+                            <FileSpreadsheet className="w-3 h-3 text-emerald-600 sm:mr-1" />
                             <span className="hidden sm:inline">Excel</span>
                           </button>
                           <button 
                             onClick={() => handlePrintSchematic()}
-                            className="flex items-center px-2 sm:px-2.5 py-1.5 bg-white border border-brand-border/80 text-brand-ink hover:text-indigo-700 text-xs font-bold rounded-xl hover:border-indigo-300 transition-colors shadow-2xs cursor-pointer"
+                            className="flex items-center px-2 py-1 bg-white border border-brand-border/70 text-brand-ink hover:text-indigo-700 text-xs font-bold rounded-lg hover:border-indigo-300 transition-colors shadow-2xs cursor-pointer touch-manipulation"
                             title="PDF Şema Yazdır / İndir"
                           >
-                            <Printer className="w-3.5 h-3.5 sm:mr-1 text-indigo-600" />
+                            <Printer className="w-3 h-3 text-indigo-600 sm:mr-1" />
                             <span className="hidden sm:inline">Yazdır</span>
                           </button>
                         </div>
@@ -1837,20 +1842,8 @@ export const HallsView = () => {
                   </div>
                 )}
 
-                {/* Salonda bulunan şubelerin renk kılavuzu */}
-                {seatingPlan.length > 0 && hallPresentClasses.length > 0 && modalMode !== 'attendance' && (
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 mb-1.5 text-[10px] shrink-0">
-                    <span className="text-brand-ink/50 font-bold uppercase tracking-wider shrink-0 mr-1">Şube Renkleri:</span>
-                    {hallPresentClasses.map(cls => (
-                      <span key={cls} className={`px-2 py-0.5 rounded-md border font-bold shrink-0 ${getClassBadgeColor(cls)}`}>
-                        {cls}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
                 {/* Oturma Düzeni & Yoklama Grid Konteyneri (Selector 3) */}
-                <div className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-xl sm:rounded-2xl shadow-inner p-1.5 sm:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x overscroll-contain select-none" id="seating-plan-printable">
+                <div className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-xl sm:rounded-2xl shadow-inner p-2 sm:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x overscroll-contain select-none" id="seating-plan-printable">
                   {showSaveToast && (
                     <div className="absolute top-3 right-3 z-50 bg-green-50 text-green-700 px-3 py-1.5 rounded-full shadow-sm border border-green-200 text-xs font-bold flex items-center print:hidden animate-in fade-in slide-in-from-top-2 duration-300">
                       <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
@@ -1859,15 +1852,15 @@ export const HallsView = () => {
                   )}
 
                   {seatingPlan.length > 0 ? (
-                    <div className="flex gap-2 sm:gap-4 items-start min-w-[300px] sm:min-w-full justify-start sm:justify-center md:justify-start lg:justify-between print:w-full print:justify-center print:gap-8 pb-3">
+                    <div className="flex gap-2.5 sm:gap-4 items-start min-w-[300px] sm:min-w-full justify-start sm:justify-center md:justify-start lg:justify-between print:w-full print:justify-center print:gap-8 pb-3">
                       {columns.map((col, colIdx) => (
-                        <div key={col.id} className="flex flex-col gap-1.5 sm:gap-2.5 flex-1 min-w-[100px] xs:min-w-[120px] sm:min-w-[135px] md:min-w-0">
-                          <div className="text-center font-bold text-brand-ink/70 text-[9px] sm:text-xs uppercase tracking-wider print:text-black truncate px-1 bg-white/80 py-0.5 sm:py-1 rounded-lg border border-brand-border/40 shadow-2xs">
+                        <div key={col.id} className="flex flex-col gap-1.5 sm:gap-2.5 flex-1 min-w-[105px] xs:min-w-[125px] sm:min-w-[135px] md:min-w-0">
+                          <div className="text-center font-bold text-brand-ink/70 text-[9px] sm:text-xs uppercase tracking-wider print:text-black truncate px-1 bg-white/90 py-0.5 sm:py-1 rounded-lg border border-brand-border/50 shadow-2xs">
                             {col.name}
                           </div>
                           
                           {Array.from({ length: col.deskCount }).map((_, rowIdx) => (
-                            <div key={rowIdx} className="flex gap-1 sm:gap-2 p-1 sm:p-1.5 rounded-xl bg-white/60 border border-brand-border/70 print:border-black/20 print:bg-transparent shadow-2xs">
+                            <div key={rowIdx} className="flex gap-1 sm:gap-2 p-1 sm:p-1.5 rounded-xl bg-white/70 border border-brand-border/60 print:border-black/20 print:bg-transparent shadow-2xs">
                               {Array.from({ length: col.seatsPerDesk }).map((_, seatIdx) => {
                                 // Calculate global seat number
                                 let seatNum = 0;
@@ -1886,14 +1879,14 @@ export const HallsView = () => {
                                   )
                                 );
 
-                                const isAbsent = Boolean(student && studentId && absentStudentIds.includes(studentId));
+                                const isAbsent = Boolean(modalMode === 'attendance' && student && studentId && absentStudentIds.includes(studentId));
                                 
                                 return (
                                   <div 
                                     key={seatIdx}
                                     draggable={!isReadOnly && modalMode !== 'attendance' && !!student}
                                     onClick={() => {
-                                      if (student && studentId && (modalMode === 'attendance' || isReadOnly)) {
+                                      if (student && studentId && modalMode === 'attendance') {
                                         toggleStudentAbsent(studentId);
                                       } else {
                                         handleSeatClick(seatNum);
@@ -1907,12 +1900,12 @@ export const HallsView = () => {
                                     onDrop={(e) => !isReadOnly && handleDrop(e, seatNum)}
                                     className={`flex flex-col items-center justify-between p-1 sm:p-2 rounded-xl relative min-h-[4.75rem] sm:min-h-[5.6rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all select-none touch-manipulation cursor-pointer ${
                                       student 
-                                        ? isAbsent
-                                          ? "bg-rose-50/95 border-2 border-rose-600 shadow-md ring-2 ring-rose-400/50 z-10 hover:border-rose-700 hover:bg-rose-100/90 active:scale-95"
-                                          : (modalMode === "attendance" || isReadOnly || absentStudentIds.length > 0)
-                                          ? "bg-emerald-50/90 border-2 border-emerald-500 shadow-sm ring-2 ring-emerald-300/40 z-10 hover:border-emerald-600 hover:bg-emerald-100/80 active:scale-95"
-                                          : "bg-white border-2 border-emerald-500 shadow-2xs hover:scale-105 hover:z-10 print:border-black"
-                                        : "bg-[#FAF9F6] border-2 border-dashed border-brand-border/80 print:border-gray-300 cursor-default"
+                                        ? modalMode === 'attendance'
+                                          ? isAbsent
+                                            ? "bg-rose-50/95 border-2 border-rose-600 shadow-md ring-2 ring-rose-400/50 z-10 hover:border-rose-700 hover:bg-rose-100/90 active:scale-95"
+                                            : "bg-emerald-50/90 border-2 border-emerald-500 shadow-sm ring-2 ring-emerald-300/40 z-10 hover:border-emerald-600 hover:bg-emerald-100/80 active:scale-95"
+                                          : "bg-white border border-brand-border/80 shadow-2xs hover:border-brand-accent/60 hover:shadow-xs hover:scale-[1.01] text-brand-ink print:border-black"
+                                        : "bg-[#FAF9F6] border-2 border-dashed border-brand-border/70 print:border-gray-300 cursor-default"
                                     } ${
                                       isHighlighted 
                                         ? "ring-4 ring-indigo-600 bg-indigo-50 font-extrabold scale-105 z-20 shadow-lg border-indigo-500 animate-pulse" 
@@ -1921,9 +1914,11 @@ export const HallsView = () => {
                                   >
                                     <div className="w-full flex items-center justify-between">
                                       <span className={`text-[8.5px] sm:text-[10px] font-bold ${
-                                        isAbsent 
-                                          ? "text-rose-700 font-black" 
-                                          : "text-emerald-800 font-black"
+                                        modalMode === 'attendance'
+                                          ? isAbsent 
+                                            ? "text-rose-700 font-black" 
+                                            : "text-emerald-800 font-black"
+                                          : "text-brand-ink/50"
                                       }`}>
                                         {seatNum}
                                       </span>
@@ -1931,37 +1926,41 @@ export const HallsView = () => {
                                     
                                     {student ? (
                                       <>
-                                        {/* Öğrenci İsmi - Dokunmatik olarak tıklandığında anında renk değiştirir */}
+                                        {/* Öğrenci İsmi */}
                                         <span 
                                           onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (studentId) {
+                                            if (modalMode === 'attendance' && studentId) {
+                                              e.stopPropagation();
                                               toggleStudentAbsent(studentId);
-                                            } else {
-                                              handleSeatClick(seatNum);
                                             }
                                           }}
                                           className={`text-[9.5px] sm:text-xs font-bold text-center line-clamp-2 leading-tight px-0.5 my-0.5 sm:my-1 print:text-black break-words cursor-pointer transition-all active:scale-95 ${
-                                            isAbsent 
-                                              ? "text-rose-950 font-black line-through decoration-rose-600 decoration-2 hover:text-rose-800" 
-                                              : "text-emerald-950 font-bold hover:text-emerald-800"
+                                            modalMode === 'attendance'
+                                              ? isAbsent 
+                                                ? "text-rose-950 font-black line-through decoration-rose-600 decoration-2 hover:text-rose-800" 
+                                                : "text-emerald-950 font-bold hover:text-emerald-800"
+                                              : "text-brand-ink hover:text-brand-accent"
                                           }`}
-                                          title="Öğrenci yoklama durumunu değiştirmek için dokunun"
+                                          title={modalMode === 'attendance' ? "Öğrenci yoklama durumunu değiştirmek için dokunun" : student.studentName}
                                         >
                                           {student.studentName}
                                         </span>
                                         <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1 w-full flex-wrap">
                                           <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-semibold border truncate max-w-full ${
-                                            isAbsent 
-                                              ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
-                                              : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                            modalMode === 'attendance'
+                                              ? isAbsent 
+                                                ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
+                                                : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                              : "bg-[#FAF9F6] text-brand-ink/70 border-brand-border/70"
                                           }`}>
                                             No: {student.studentNo}
                                           </span>
                                           <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-bold border truncate max-w-full ${
-                                            isAbsent 
-                                              ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
-                                              : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                            modalMode === 'attendance'
+                                              ? isAbsent 
+                                                ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
+                                                : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                              : getClassBadgeColor(student.studentClass)
                                           }`}>
                                             {student.studentClass}
                                           </span>
