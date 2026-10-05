@@ -388,7 +388,7 @@ export interface AppNotification {
   createdAt: string;
   createdByEmail?: string;
   createdByName?: string;
-  targetRole?: 'all' | 'teachers' | 'students';
+  targetRole?: 'all' | 'admin' | 'teachers' | 'students';
   targetGrade?: string; // 'Tümü', '8', '7', '6', '5'
   linkTab?: 'results' | 'exams' | 'league' | 'students' | 'halls' | 'budget';
   readBy?: string[];

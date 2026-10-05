@@ -129,6 +129,11 @@ export const registerNotificationServiceWorker = async () => {
 // Local persistence fallback for notifications
 const LOCAL_NOTIFS_KEY = 'akademi_local_notifications';
 
+// BroadcastChannel for instant, zero-quota cross-tab notification synchronization
+const notificationsChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window
+  ? new BroadcastChannel('akademi_notifications_channel')
+  : null;
+
 export const getLocalNotifications = (): AppNotification[] => {
   try {
     const raw = localStorage.getItem(LOCAL_NOTIFS_KEY);
@@ -143,6 +148,14 @@ export const saveLocalNotification = (notif: AppNotification) => {
     const list = getLocalNotifications();
     const updated = [notif, ...list.filter(n => n.id !== notif.id)].slice(0, 50);
     localStorage.setItem(LOCAL_NOTIFS_KEY, JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('akademi_notifications_updated', { detail: updated }));
+    }
+    if (notificationsChannel) {
+      try {
+        notificationsChannel.postMessage({ type: 'NOTIFICATION_SAVED', payload: updated });
+      } catch {}
+    }
   } catch {}
 };
 
@@ -151,14 +164,40 @@ export const removeLocalNotification = (id: string) => {
     const list = getLocalNotifications();
     const updated = list.filter(n => n.id !== id);
     localStorage.setItem(LOCAL_NOTIFS_KEY, JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('akademi_notifications_updated', { detail: updated }));
+    }
+    if (notificationsChannel) {
+      try {
+        notificationsChannel.postMessage({ type: 'NOTIFICATION_REMOVED', payload: updated });
+      } catch {}
+    }
   } catch {}
 };
+
+// Listen to cross-tab BroadcastChannel events for notifications
+if (notificationsChannel) {
+  notificationsChannel.onmessage = (event) => {
+    if ((event.data?.type === 'NOTIFICATION_SAVED' || event.data?.type === 'NOTIFICATION_REMOVED') && event.data?.payload) {
+      const updated = event.data.payload as AppNotification[];
+      try {
+        localStorage.setItem(LOCAL_NOTIFS_KEY, JSON.stringify(updated));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('akademi_notifications_updated', { detail: updated }));
+        }
+      } catch {}
+    }
+  };
+}
 
 // Firestore helper: publish a notification to the cloud (with local fallback)
 export const publishCloudNotification = async (
   notification: Omit<AppNotification, 'id' | 'createdAt'> & { id?: string; createdAt?: string }
 ): Promise<{ success: boolean; id?: string; error?: string; offline?: boolean }> => {
   const notifId = notification.id || generateId();
+  const effectiveEmail = (notification.createdByEmail || auth.currentUser?.email || '').trim().toLowerCase();
+  const effectiveName = notification.createdByName?.trim() || auth.currentUser?.displayName || (effectiveEmail ? effectiveEmail.split('@')[0] : 'Okul Yönetimi');
+
   const fullNotification: AppNotification = {
     title: notification.title || 'Bildirim',
     message: notification.message || '',
@@ -169,8 +208,8 @@ export const publishCloudNotification = async (
     ...notification,
     id: notifId,
     createdAt: notification.createdAt || new Date().toISOString(),
-    createdByEmail: notification.createdByEmail || auth.currentUser?.email || 'Yönetim',
-    createdByName: notification.createdByName || auth.currentUser?.displayName || 'Okul Yönetimi',
+    createdByEmail: effectiveEmail || 'Yönetim',
+    createdByName: effectiveName,
     readBy: notification.readBy || []
   };
 

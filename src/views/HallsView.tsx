@@ -8,7 +8,8 @@ import {
   submitHallAttendance, 
   fetchAllAttendances, 
   getLocalAttendances,
-  isExamDateMatches 
+  isExamDateMatches,
+  getActiveTeacherIdentity
 } from '../lib/attendance';
 import { 
   Plus, Trash2, Download, LayoutTemplate, X, Users, RefreshCw, 
@@ -37,59 +38,54 @@ const getClassBadgeColor = (className?: string) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
-// Sisteme giriş yapmış olan öğretmenin veya yöneticinin doğrulanmış e-posta ve ad bilgilerini tespit eder
-const getActiveTeacherIdentity = (teachersList: string[] = []): { email: string; displayName: string } => {
-  // 1. Firebase Auth doğrudan kontrolü
-  const currentUser = auth.currentUser;
-  if (currentUser?.email) {
+// Öğrenci adı ve soyadını dengeli olarak 2 satıra ayırır (İsim satırbaşı soyisim formatı)
+const splitStudentNameAndSurname = (fullName?: string): { firstName: string; lastName: string } => {
+  if (!fullName) return { firstName: '', lastName: '' };
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length <= 1) {
+    return { firstName: parts[0] || '', lastName: '' };
+  }
+  const lastName = parts.pop() || '';
+  const firstName = parts.join(' ');
+  return { firstName, lastName };
+};
+
+// Sıra kartları için isim ve soyismin uzunluğuna göre responsive punto sınıflarını belirler (Çerçeveden taşma yapmaz)
+const getDeskNameFontClasses = (firstName: string, lastName: string): { fClass: string; lClass: string } => {
+  const fLen = firstName.trim().length;
+  const lLen = lastName.trim().length;
+  const maxLineLen = Math.max(fLen, lLen);
+
+  if (maxLineLen <= 6) {
     return {
-      email: currentUser.email.trim().toLowerCase(),
-      displayName: currentUser.displayName || currentUser.email.split('@')[0]
+      fClass: 'text-[9.5px] xs:text-[10px] sm:text-[11px]',
+      lClass: 'text-[9.5px] xs:text-[10px] sm:text-[11px]'
+    };
+  } else if (maxLineLen <= 9) {
+    return {
+      fClass: 'text-[8.5px] xs:text-[9.2px] sm:text-[10px]',
+      lClass: 'text-[8.5px] xs:text-[9.2px] sm:text-[10px]'
+    };
+  } else if (maxLineLen <= 12) {
+    return {
+      fClass: 'text-[7.5px] xs:text-[8.2px] sm:text-[9px] tracking-tight',
+      lClass: 'text-[7.5px] xs:text-[8.2px] sm:text-[9px] tracking-tight'
+    };
+  } else if (maxLineLen <= 15) {
+    return {
+      fClass: 'text-[6.8px] xs:text-[7.4px] sm:text-[8px] tracking-tighter',
+      lClass: 'text-[6.8px] xs:text-[7.4px] sm:text-[8px] tracking-tighter'
+    };
+  } else {
+    return {
+      fClass: 'text-[6.2px] xs:text-[6.8px] sm:text-[7.2px] tracking-tighter font-extrabold',
+      lClass: 'text-[6.2px] xs:text-[6.8px] sm:text-[7.2px] tracking-tighter font-extrabold'
     };
   }
-
-  // 2. Tarayıcı oturum hafızası kontrolü
-  try {
-    const rawSession = localStorage.getItem('akademi_user_session');
-    if (rawSession) {
-      const parsed = JSON.parse(rawSession);
-      if (parsed?.email) {
-        return {
-          email: parsed.email.trim().toLowerCase(),
-          displayName: parsed.displayName || parsed.name || parsed.email.split('@')[0]
-        };
-      }
-    }
-  } catch {}
-
-  // 3. Tekil kullanıcı e-posta anahtarı
-  try {
-    const savedEmail = localStorage.getItem('akademi_user_email');
-    if (savedEmail) {
-      return {
-        email: savedEmail.trim().toLowerCase(),
-        displayName: savedEmail.split('@')[0]
-      };
-    }
-  } catch {}
-
-  // 4. Öğretmenler listesindeki ilk kayıt veya genel etiket
-  const fallback = teachersList.length > 0 ? teachersList[0] : '';
-  if (fallback.includes('@')) {
-    return {
-      email: fallback.trim().toLowerCase(),
-      displayName: fallback.split('@')[0]
-    };
-  }
-
-  return {
-    email: fallback || '',
-    displayName: fallback || 'Gözetmen Öğretmen'
-  };
 };
 
 export const HallsView = () => {
-  const { state, setExamHalls, userRole } = useAppContext();
+  const { state, setExamHalls, userRole, currentUser } = useAppContext();
   // Adminler yönetici modunda tam yetkilidir, öğretmenler ise salt-okunur moddadır
   const isReadOnly = userRole !== 'admin';
   
@@ -138,18 +134,48 @@ export const HallsView = () => {
     }, 3500);
   };
 
-  // Yoklama verilerini başlangıçta ve periyodik yükle
+  // Yoklama verilerini başlangıçta yükle ve sekmeler/ekranlar arası otomatik senkronize et
   useEffect(() => {
-    const cached = getLocalAttendances();
-    if (cached && Object.keys(cached).length > 0) {
-      setAttendances(cached);
-    }
+    const syncAttendances = () => {
+      const cached = getLocalAttendances();
+      if (cached && Object.keys(cached).length > 0) {
+        setAttendances(cached);
+      }
+    };
+
+    syncAttendances();
 
     fetchAllAttendances('main').then(remote => {
       if (remote && Object.keys(remote).length > 0) {
         setAttendances(prev => ({ ...prev, ...remote }));
       }
     });
+
+    const handleCustomEvent = (e: any) => {
+      const updated = e.detail as HallAttendance;
+      if (updated?.id) {
+        setAttendances(prev => ({
+          ...prev,
+          [updated.id]: updated
+        }));
+      } else {
+        syncAttendances();
+      }
+    };
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'akademi_hall_attendances_cache') {
+        syncAttendances();
+      }
+    };
+
+    window.addEventListener('akademi_attendance_updated', handleCustomEvent);
+    window.addEventListener('storage', handleStorageEvent);
+
+    return () => {
+      window.removeEventListener('akademi_attendance_updated', handleCustomEvent);
+      window.removeEventListener('storage', handleStorageEvent);
+    };
   }, []);
 
   // Tarih değerlendirme: Öğretmenlerde her zaman gerçek takvim tarihi, Yöneticilerde ise simülasyon seçilmişse o tarihi kullanır
@@ -543,14 +569,12 @@ export const HallsView = () => {
         }));
 
       const attendanceId = `${activeExamForAttendance.id}_${currentHall.id}`;
-      const teacherIdentity = getActiveTeacherIdentity(state.teachers);
+      const teacherIdentity = getActiveTeacherIdentity(currentUser);
       const teacherEmail = teacherIdentity.email || '';
       const teacherName = teacherIdentity.displayName || 'Gözetmen Öğretmen';
 
-      // İdarecilerin bildirimde ve kayıtta göreceği gözetmen ismi ve maili
-      const takenByDisplay = teacherEmail && !teacherName.includes(teacherEmail)
-        ? `${teacherName} (${teacherEmail})`
-        : (teacherName || teacherEmail || 'Gözetmen Öğretmen');
+      // İdarecilerin bildirimde ve kayıtta göreceği gözetmen ismi
+      const takenByDisplay = teacherName || 'Gözetmen Öğretmen';
 
       const payload: HallAttendance = {
         id: attendanceId,
@@ -742,36 +766,35 @@ export const HallsView = () => {
           <meta charset="utf-8">
           <title>${targetName} - Oturma Düzeni Şeması</title>
           <style>
-            @page { size: A4 portrait; margin: 8mm; }
+            @page { size: A4 portrait; margin: 6mm; }
             body { 
-              font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+              font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; 
               color: #111; 
               margin: 0; 
               padding: 0; 
-              width: 194mm;
-              height: 280mm;
+              width: 198mm;
               display: flex;
               flex-direction: column;
             }
             * { box-sizing: border-box; }
-            .header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #111; padding-bottom: 8px; }
-            .header h1 { margin: 0 0 4px 0; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
-            .header p { margin: 0; color: #555; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+            .header { text-align: center; margin-bottom: 8px; border-bottom: 2px solid #111; padding-bottom: 5px; }
+            .header h1 { margin: 0 0 2px 0; font-size: 18px; font-weight: 900; letter-spacing: -0.5px; }
+            .header p { margin: 0; color: #444; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
             .board-banner {
               text-align: center;
-              font-size: 10px;
-              font-weight: 800;
+              font-size: 9.5px;
+              font-weight: 900;
               text-transform: uppercase;
               letter-spacing: 1px;
-              background: #f0f0f0;
-              border: 1.5px solid #333;
+              background: #f1f3f5;
+              border: 1.5px solid #222;
               border-radius: 4px;
-              padding: 4px;
-              margin-bottom: 12px;
+              padding: 3px;
+              margin-bottom: 8px;
             }
             .grid-container {
                display: flex;
-               gap: 12px;
+               gap: 6px;
                justify-content: center;
                align-items: stretch;
                flex: 1;
@@ -780,90 +803,127 @@ export const HallsView = () => {
             .column {
                display: flex;
                flex-direction: column;
-               gap: 8px;
+               gap: 5px;
                flex: 1;
                min-width: 0;
             }
             .col-title {
                text-align: center;
-               font-weight: 800;
+               font-weight: 900;
                text-transform: uppercase;
                color: #111;
-               margin-bottom: 2px;
-               font-size: 11px;
+               margin-bottom: 1px;
+               font-size: 10px;
                padding: 2px 4px;
-               background: #eee;
+               background: #e9ecef;
+               border: 1px solid #ced4da;
                border-radius: 3px;
             }
             .desk-row {
                display: flex;
-               gap: 6px;
-               background: #fafafa;
-               border: 1px solid #ccc;
-               border-radius: 6px;
-               padding: 4px;
+               gap: 4px;
+               background: #f8f9fa;
+               border: 1.2px solid #adb5bd;
+               border-radius: 5px;
+               padding: 2.5px;
                flex: 1;
                min-height: 48px;
             }
             .seat-pod {
                flex: 1;
-               border: 1px solid #bbb;
-               background: #fff;
+               border: 1.5px solid #212529;
+               background: #ffffff;
                border-radius: 4px;
-               padding: 4px;
+               padding: 2.5px 3px;
                display: flex;
                flex-direction: column;
                justify-content: space-between;
+               align-items: center;
                position: relative;
                min-width: 0;
+               min-height: 44px;
+               box-sizing: border-box;
+               overflow: visible;
+            }
+            .seat-header {
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               width: 100%;
+               gap: 2px;
             }
             .seat-num {
-               font-size: 9px;
-               font-weight: 800;
-               color: #777;
+               font-size: 8px;
+               font-weight: 900;
+               color: #212529;
+               background: #e9ecef;
+               padding: 1px 3px;
+               border-radius: 2px;
+               border: 0.5px solid #ced4da;
+               line-height: 1;
+            }
+            .seat-class {
+               font-size: 8px;
+               font-weight: 900;
+               color: #212529;
+               background: #e9ecef;
+               padding: 1px 3px;
+               border-radius: 2px;
+               border: 0.5px solid #ced4da;
                line-height: 1;
             }
             .seat-name {
-               font-size: 10px;
-               font-weight: 800;
+               font-weight: 900;
                color: #000;
                text-align: center;
                white-space: nowrap;
-               overflow: hidden;
-               text-overflow: ellipsis;
-               margin: 2px 0;
-            }
-            .seat-meta {
-               display: flex;
-               justify-content: space-between;
-               align-items: center;
-               font-size: 8px;
-               font-weight: 700;
-            }
-            .seat-class {
-               background: #f0f0f0;
-               padding: 1px 3px;
-               border-radius: 2px;
-               border: 0.5px solid #ccc;
-            }
-            .empty-pod {
-               border: 1px dashed #ccc;
-               background: #fdfdfd;
+               overflow: visible;
+               width: 100%;
+               margin: 1px 0;
                display: flex;
                align-items: center;
                justify-content: center;
-               font-size: 9px;
-               color: #999;
-               font-style: italic;
+               line-height: 1.1;
+            }
+            .seat-footer {
+               display: flex;
+               justify-content: center;
+               align-items: center;
+               width: 100%;
+            }
+            .seat-no {
+               font-size: 7.5px;
+               font-weight: 800;
+               color: #495057;
+               line-height: 1;
+            }
+            .empty-pod {
+               border: 1.5px dashed #adb5bd;
+               background: #ffffff;
+               display: flex;
+               flex-direction: column;
+               justify-content: space-between;
+               align-items: center;
+               min-height: 44px;
+               padding: 2.5px 3px;
+            }
+            .empty-text {
+               font-size: 8.5px;
+               font-weight: 800;
+               color: #adb5bd;
+               margin: auto 0;
+               text-transform: uppercase;
+               letter-spacing: 0.5px;
             }
             .footer {
-               margin-top: 10px;
-               padding-top: 8px;
-               border-top: 1px solid #ddd;
+               margin-top: 8px;
+               padding-top: 6px;
+               border-top: 1px solid #ced4da;
                display: flex;
                justify-content: space-between;
-               font-size: 9px;
-               color: #666;
+               font-size: 8.5px;
+               color: #495057;
+               font-weight: 600;
             }
           </style>
         </head>
@@ -889,21 +949,61 @@ export const HallsView = () => {
                       sNum += (rowIdx * col.seatsPerDesk) + seatIdx + 1;
                       const st = targetPlan.find(item => item.deskNumber === sNum);
                       if (st) {
+                        const nameClean = (st.studentName || '').trim();
+                        const nameLen = nameClean.length;
+                        
+                        // Toplam sütun ve sıra sayısına göre dinamik punto ve harf aralığı hesabı
+                        const totalSeatsAcross = targetCols.reduce((acc, c) => acc + (c.seatsPerDesk || 2), 0) || 6;
+                        const widthRatio = totalSeatsAcross <= 4 ? 1.25 : totalSeatsAcross <= 6 ? 1.0 : 0.85;
+                        
+                        let baseFontSize = 11.2;
+                        let letterSpacing = '-0.1px';
+                        
+                        if (nameLen <= 9) {
+                          baseFontSize = 11.2;
+                          letterSpacing = '0px';
+                        } else if (nameLen <= 12) {
+                          baseFontSize = 10.2;
+                          letterSpacing = '-0.15px';
+                        } else if (nameLen <= 15) {
+                          baseFontSize = 9.0;
+                          letterSpacing = '-0.2px';
+                        } else if (nameLen <= 18) {
+                          baseFontSize = 7.8;
+                          letterSpacing = '-0.25px';
+                        } else if (nameLen <= 22) {
+                          baseFontSize = 6.9;
+                          letterSpacing = '-0.3px';
+                        } else if (nameLen <= 26) {
+                          baseFontSize = 6.0;
+                          letterSpacing = '-0.35px';
+                        } else {
+                          baseFontSize = 5.4;
+                          letterSpacing = '-0.4px';
+                        }
+                        
+                        const calculatedSize = (baseFontSize * widthRatio).toFixed(1);
+
                         return `
                           <div class="seat-pod">
-                            <span class="seat-num">${sNum}</span>
-                            <div class="seat-name">${st.studentName}</div>
-                            <div class="seat-meta">
-                              <span>No: ${st.studentNo}</span>
+                            <div class="seat-header">
+                              <span class="seat-num">Sıra ${sNum}</span>
                               <span class="seat-class">${st.studentClass}</span>
+                            </div>
+                            <div class="seat-name" style="font-size: ${calculatedSize}px; letter-spacing: ${letterSpacing};" title="${st.studentName}">${st.studentName}</div>
+                            <div class="seat-footer">
+                              <span class="seat-no">No: ${st.studentNo}</span>
                             </div>
                           </div>
                         `;
                       } else {
                         return `
                           <div class="seat-pod empty-pod">
-                            <span style="position: absolute; top: 3px; left: 3px;" class="seat-num">${sNum}</span>
-                            <span>Boş</span>
+                            <div class="seat-header">
+                              <span class="seat-num">Sıra ${sNum}</span>
+                            </div>
+                            <span class="empty-text">Boş</span>
+                            <div style="height: 6px;"></div>
                           </div>
                         `;
                       }
@@ -1811,7 +1911,7 @@ export const HallsView = () => {
                         </div>
                       </div>
 
-                      {/* Canlı Sayaçlar */}
+                      {/* Canlı Sayaçlar ve Doğrulanmış Gözetmen Bilgisi */}
                       <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
                         <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-lg bg-white border border-brand-border/70 text-brand-ink">
                           Toplam: <strong>{seatingPlan.length}</strong>
@@ -1826,6 +1926,16 @@ export const HallsView = () => {
                         }`}>
                           ✗ Salonda Olmayan: <strong>{attendanceAbsentCount}</strong>
                         </span>
+                        {(() => {
+                          const teacher = getActiveTeacherIdentity(currentUser);
+                          if (!teacher.email && !teacher.displayName) return null;
+                          return (
+                            <span className="text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-indigo-50/90 text-indigo-900 border border-indigo-200/80 flex items-center gap-1 truncate max-w-full">
+                              <ShieldCheck className="w-3 h-3 text-indigo-600 shrink-0" />
+                              <span className="truncate">Gözetmen: <strong>{teacher.displayName}</strong>{teacher.email ? ` (${teacher.email})` : ''}</span>
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -1985,7 +2095,7 @@ export const HallsView = () => {
                                     onDragOver={(e) => !isReadOnly && handleDragOver(e, seatNum)}
                                     onDragLeave={(e) => !isReadOnly && handleDragLeave(e, seatNum)}
                                     onDrop={(e) => !isReadOnly && handleDrop(e, seatNum)}
-                                    className={`flex flex-col items-center justify-between p-1 sm:p-2 rounded-xl relative min-h-[4.75rem] sm:min-h-[5.6rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all select-none touch-manipulation cursor-pointer ${
+                                    className={`flex flex-col items-center justify-between p-1 sm:p-2 rounded-xl relative min-h-[5rem] sm:min-h-[5.85rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all select-none touch-manipulation cursor-pointer ${
                                       student 
                                         ? modalMode === 'attendance'
                                           ? isAbsent
@@ -2004,56 +2114,73 @@ export const HallsView = () => {
                                         modalMode === 'attendance'
                                           ? isAbsent 
                                             ? "text-rose-700 font-black" 
-                                            : "text-emerald-800 font-black"
+                                              : "text-emerald-800 font-black"
                                           : "text-brand-ink/50"
                                       }`}>
                                         {seatNum}
                                       </span>
                                     </div>
                                     
-                                    {student ? (
-                                      <>
-                                        {/* Öğrenci İsmi */}
-                                        <span 
-                                          onClick={(e) => {
-                                            if (modalMode === 'attendance' && studentId) {
-                                              e.stopPropagation();
-                                              toggleStudentAbsent(studentId);
-                                            }
-                                          }}
-                                          className={`text-[9.5px] sm:text-xs font-bold text-center line-clamp-2 leading-tight px-0.5 my-0.5 sm:my-1 print:text-black break-words cursor-pointer transition-all active:scale-95 ${
-                                            modalMode === 'attendance'
-                                              ? isAbsent 
-                                                ? "text-rose-950 font-black line-through decoration-rose-600 decoration-2 hover:text-rose-800" 
-                                                : "text-emerald-950 font-bold hover:text-emerald-800"
-                                              : "text-brand-ink hover:text-brand-accent"
-                                          }`}
-                                          title={modalMode === 'attendance' ? "Öğrenci yoklama durumunu değiştirmek için dokunun" : student.studentName}
-                                        >
-                                          {student.studentName}
-                                        </span>
-                                        <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1 w-full flex-wrap">
-                                          <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-semibold border truncate max-w-full ${
-                                            modalMode === 'attendance'
-                                              ? isAbsent 
-                                                ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
-                                                : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
-                                              : "bg-[#FAF9F6] text-brand-ink/70 border-brand-border/70"
-                                          }`}>
-                                            No: {student.studentNo}
-                                          </span>
-                                          <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-bold border truncate max-w-full ${
-                                            modalMode === 'attendance'
-                                              ? isAbsent 
-                                                ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
-                                                : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
-                                              : getClassBadgeColor(student.studentClass)
-                                          }`}>
-                                            {student.studentClass}
-                                          </span>
-                                        </div>
-                                      </>
-                                    ) : (
+                                    {student ? (() => {
+                                      const { firstName, lastName } = splitStudentNameAndSurname(student.studentName);
+                                      const { fClass, lClass } = getDeskNameFontClasses(firstName, lastName);
+                                      return (
+                                        <>
+                                          {/* Öğrenci İsmi (İsim ve Soyisim Dengeli Satır Düzeni - Kart İçine Otomatik Sığan Görünüm) */}
+                                          <div className="w-full max-w-full my-auto flex flex-col items-center justify-center text-center px-0.5 min-h-[2.4rem] py-0.5 overflow-hidden">
+                                            <div 
+                                              onClick={(e) => {
+                                                if (modalMode === 'attendance' && studentId) {
+                                                  e.stopPropagation();
+                                                  toggleStudentAbsent(studentId);
+                                                }
+                                              }}
+                                              className={`w-full max-w-full flex flex-col items-center justify-center text-center transition-all active:scale-95 cursor-pointer select-none overflow-hidden ${
+                                                modalMode === 'attendance'
+                                                  ? isAbsent 
+                                                    ? "text-rose-950 font-black line-through decoration-rose-600 decoration-2 hover:text-rose-800" 
+                                                    : "text-emerald-950 font-bold hover:text-emerald-800"
+                                                  : "text-brand-ink hover:text-brand-accent"
+                                              }`}
+                                              title={modalMode === 'attendance' ? "Öğrenci yoklama durumunu değiştirmek için dokunun" : student.studentName}
+                                            >
+                                              <span 
+                                                className={`w-full max-w-full truncate block leading-tight font-medium text-center ${fClass}`}
+                                              >
+                                                {firstName}
+                                              </span>
+                                              {lastName ? (
+                                                <span 
+                                                  className={`w-full max-w-full truncate block leading-tight font-extrabold uppercase text-center ${lClass}`}
+                                                >
+                                                  {lastName}
+                                                </span>
+                                              ) : null}
+                                            </div>
+                                          </div>
+                                          <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1 w-full flex-wrap">
+                                            <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-semibold border truncate max-w-full ${
+                                              modalMode === 'attendance'
+                                                ? isAbsent 
+                                                  ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
+                                                  : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                                : "bg-[#FAF9F6] text-brand-ink/70 border-brand-border/70"
+                                            }`}>
+                                              No: {student.studentNo}
+                                            </span>
+                                            <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-bold border truncate max-w-full ${
+                                              modalMode === 'attendance'
+                                                ? isAbsent 
+                                                  ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
+                                                  : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                                : getClassBadgeColor(student.studentClass)
+                                            }`}>
+                                              {student.studentClass}
+                                            </span>
+                                          </div>
+                                        </>
+                                      );
+                                    })() : (
                                       <span className="text-[8.5px] sm:text-[9.5px] text-brand-ink/40 font-medium my-auto">Boş Sıra</span>
                                     )}
                                   </div>

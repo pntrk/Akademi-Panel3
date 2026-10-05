@@ -91,14 +91,26 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     urgent: false
   });
 
-  // Check current permission state on open
+  // Check current permission state on open and listen to live sync events
   useEffect(() => {
     if (isOpen) {
       setPermissionState(getPushPermissionState());
       // Mark as seen in local storage
       localStorage.setItem('last_seen_notification_ts', Date.now().toString());
+
+      const handleLiveSync = () => {
+        onRefresh?.();
+      };
+
+      window.addEventListener('akademi_notifications_updated', handleLiveSync);
+      window.addEventListener('storage', handleLiveSync);
+
+      return () => {
+        window.removeEventListener('akademi_notifications_updated', handleLiveSync);
+        window.removeEventListener('storage', handleLiveSync);
+      };
     }
-  }, [isOpen]);
+  }, [isOpen, onRefresh]);
 
   if (!isOpen) return null;
 

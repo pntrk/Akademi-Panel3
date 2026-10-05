@@ -44,7 +44,8 @@ import {
   subscribeToNotifications, 
   displayBrowserNotification, 
   registerNotificationServiceWorker, 
-  publishCloudNotification 
+  publishCloudNotification,
+  getLocalNotifications
 } from '../lib/notifications';
 import { 
   syncLiveMasterToGoogleDrive, 
@@ -136,6 +137,7 @@ interface AppContextType {
   sendPushNotification: (notif: Omit<AppNotification, 'id' | 'createdAt'>) => Promise<{ success: boolean; id?: string; error?: string }>;
   checkTeacherUpdatesNow: () => Promise<{ updated: boolean; changedModules?: string[]; message?: string }>;
   fetchMonthArenaPartition: (monthKey: string) => Promise<any | null>;
+  currentUser?: User | null;
 }
 
 const defaultState: AppState = {
@@ -460,6 +462,25 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     'Google Drive üzerindeki en güncel canlı okul kütüğü taranıyor ve sisteme yükleniyor...'
   );
   const [userRole, setUserRole] = useState<'admin' | 'teacher' | 'guest'>(initialRole);
+  const userRoleRef = useRef<'admin' | 'teacher' | 'guest'>(initialRole);
+
+  useEffect(() => {
+    userRoleRef.current = userRole;
+    // Re-filter notifications whenever role changes
+    const allLocal = getLocalNotifications();
+    if (allLocal.length > 0) {
+      const filtered = allLocal.filter(n => {
+        if (userRole === 'admin') return true;
+        if (n.targetRole === 'admin') return false;
+        if (userRole === 'teacher' && n.targetRole === 'students') return false;
+        return true;
+      });
+      setNotifications(filtered);
+      const lastSeen = parseInt(localStorage.getItem('last_seen_notification_ts') || '0', 10);
+      const unread = filtered.filter(n => new Date(n.createdAt).getTime() > lastSeen).length;
+      setUnreadNotificationsCount(unread);
+    }
+  }, [userRole]);
   const [syncStatus, setSyncStatus] = useState<AppContextType['syncStatus']>(
     isInitialQuotaExceeded ? 'quota_exceeded' : 'synced'
   );
@@ -541,14 +562,37 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   useEffect(() => {
     registerNotificationServiceWorker().catch(() => {});
 
+    const updateNotifState = (items: AppNotification[]) => {
+      const currentRole = userRoleRef.current;
+      const filtered = items.filter(n => {
+        // 1. Admins see all notifications
+        if (currentRole === 'admin') return true;
+        // 2. Teachers and guests never receive admin-targeted attendance notifications
+        if (n.targetRole === 'admin') return false;
+        // 3. Teachers do not receive student-only notifications
+        if (currentRole === 'teacher' && n.targetRole === 'students') return false;
+        return true;
+      });
+
+      setNotifications(filtered);
+      const lastSeen = parseInt(localStorage.getItem('last_seen_notification_ts') || '0', 10);
+      const unread = filtered.filter(n => new Date(n.createdAt).getTime() > lastSeen).length;
+      setUnreadNotificationsCount(unread);
+    };
+
     const unsubscribeNotifs = subscribeToNotifications(
       (items) => {
-        setNotifications(items);
-        const lastSeen = parseInt(localStorage.getItem('last_seen_notification_ts') || '0', 10);
-        const unread = items.filter(n => new Date(n.createdAt).getTime() > lastSeen).length;
-        setUnreadNotificationsCount(unread);
+        updateNotifState(items);
       },
       (newNotif) => {
+        const currentRole = userRoleRef.current;
+        // If notification is strictly for admin, don't trigger push notification on teacher / guest devices
+        if (currentRole !== 'admin' && newNotif.targetRole === 'admin') {
+          return;
+        }
+        if (currentRole === 'teacher' && newNotif.targetRole === 'students') {
+          return;
+        }
         displayBrowserNotification(
           newNotif.title,
           newNotif.message,
@@ -558,8 +602,20 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
     );
 
+    const handleLocalNotifUpdate = (e: any) => {
+      const updatedList = (e.detail as AppNotification[]) || getLocalNotifications();
+      if (Array.isArray(updatedList)) {
+        updateNotifState(updatedList);
+      }
+    };
+
+    window.addEventListener('akademi_notifications_updated', handleLocalNotifUpdate);
+    window.addEventListener('storage', handleLocalNotifUpdate);
+
     return () => {
       unsubscribeNotifs();
+      window.removeEventListener('akademi_notifications_updated', handleLocalNotifUpdate);
+      window.removeEventListener('storage', handleLocalNotifUpdate);
     };
   }, []);
 
@@ -2593,7 +2649,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       markNotificationsAsSeen,
       sendPushNotification,
       checkTeacherUpdatesNow,
-      fetchMonthArenaPartition
+      fetchMonthArenaPartition,
+      currentUser: user
     }}>
       {children}
     </AppContext.Provider>
