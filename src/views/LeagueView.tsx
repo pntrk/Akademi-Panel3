@@ -1082,8 +1082,8 @@ export const LeagueView = () => {
 
           </div>
 
-          {/* 4. Onay Bekleyen Transferler (Varsa) */}
-          {pendingTransfers.length > 0 && (
+          {/* 4. Onay Bekleyen Transferler (Yalnızca Admin Yetkisiyle) */}
+          {userRole === 'admin' && pendingTransfers.length > 0 && (
             <div className="bg-gradient-to-r from-amber-50/90 via-orange-50/90 to-amber-50/90 border border-orange-200/80 rounded-2xl p-3.5 sm:p-4 shadow-2xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2.5">
                 <div className="flex items-center gap-2">
