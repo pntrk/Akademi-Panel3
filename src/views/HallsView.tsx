@@ -1403,39 +1403,61 @@ export const HallsView = () => {
                       {hallName || 'Sınav Salonu'}
                     </h3>
                     
-                    {/* Görünüm Sekmeleri: Oturma Planı vs Sınav Yoklaması */}
-                    <div className="inline-flex items-center bg-white border border-brand-border/80 p-0.5 rounded-xl shadow-2xs">
-                      <button
-                        type="button"
-                        onClick={() => setModalMode('layout')}
-                        className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
-                          modalMode === 'layout' 
-                            ? 'bg-[#151618] text-white shadow-xs' 
-                            : 'text-brand-ink/60 hover:text-brand-ink'
-                        }`}
-                      >
-                        <LayoutTemplate className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                        <span>Oturma Planı</span>
-                      </button>
-                      
-                      <button
-                        type="button"
-                        onClick={() => setModalMode('attendance')}
-                        className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
-                          modalMode === 'attendance' 
-                            ? 'bg-amber-500 text-white shadow-xs' 
-                            : 'text-brand-ink/60 hover:text-amber-800'
-                        }`}
-                      >
-                        <UserCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                        <span>Sınav Yoklaması</span>
-                        {attendanceAbsentCount > 0 && (
-                          <span className="text-[9px] sm:text-[10px] px-1.5 py-0.2 bg-rose-600 text-white rounded-full font-extrabold ml-0.5 animate-pulse">
-                            {attendanceAbsentCount}
-                          </span>
+                    {/* Görünüm Sekmeleri: İdarecilerde her iki sekme, Öğretmenlerde ise gününe göre tek ve net mod gösterilir */}
+                    {!isReadOnly ? (
+                      <div className="inline-flex items-center bg-white border border-brand-border/80 p-0.5 rounded-xl shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => setModalMode('layout')}
+                          className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
+                            modalMode === 'layout' 
+                              ? 'bg-[#151618] text-white shadow-xs' 
+                              : 'text-brand-ink/60 hover:text-brand-ink'
+                          }`}
+                        >
+                          <LayoutTemplate className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <span>Oturma Planı</span>
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={() => setModalMode('attendance')}
+                          className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
+                            modalMode === 'attendance' 
+                              ? 'bg-amber-500 text-white shadow-xs' 
+                              : 'text-brand-ink/60 hover:text-amber-800'
+                          }`}
+                        >
+                          <UserCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <span>Sınav Yoklaması</span>
+                          {attendanceAbsentCount > 0 && (
+                            <span className="text-[9px] sm:text-[10px] px-1.5 py-0.2 bg-rose-600 text-white rounded-full font-extrabold ml-0.5 animate-pulse">
+                              {attendanceAbsentCount}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      /* Öğretmen kullanıcılarda sınav gününde Yoklama, diğer günlerde Oturma Planı Başlığı */
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl shadow-2xs border text-xs font-bold bg-white">
+                        {modalMode === 'attendance' ? (
+                          <div className="flex items-center gap-1 text-amber-900">
+                            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Sınav Yoklaması</span>
+                            {attendanceAbsentCount > 0 && (
+                              <span className="text-[9px] px-1.5 py-0.2 bg-rose-600 text-white rounded-full font-extrabold ml-1 animate-pulse">
+                                {attendanceAbsentCount} Devamsız
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-indigo-900">
+                            <LayoutTemplate className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Oturma Planı Önizleme</span>
+                          </div>
                         )}
-                      </button>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1773,27 +1795,18 @@ export const HallsView = () => {
                   <div className="mb-2.5 p-2 sm:p-3 bg-gradient-to-r from-amber-500/10 via-white to-rose-500/10 border border-amber-300/80 rounded-xl sm:rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-3 shrink-0">
                     <div className="space-y-1.5 min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <span className="text-[11px] sm:text-xs font-bold text-brand-ink/70">Aktif Sınav:</span>
-                        <select
-                          value={activeExamForAttendance?.id || ''}
-                          onChange={(e) => {
-                            const found = state.exams.find(ex => ex.id === e.target.value);
-                            if (found) {
-                              setActiveExamForAttendance(found);
-                              const existing = attendances[`${found.id}_${editingHallId}`];
-                              if (existing && existing.absentStudents) {
-                                setAbsentStudentIds(existing.absentStudents.map(s => s.studentId));
-                              } else {
-                                setAbsentStudentIds([]);
-                              }
-                            }
-                          }}
-                          className="bg-white border border-brand-border/80 px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold text-brand-ink shadow-2xs focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer w-full sm:w-auto max-w-full sm:max-w-xs truncate"
-                        >
-                          {state.exams.map(e => (
-                            <option key={e.id} value={e.id}>{e.name} ({e.date || 'Tarih Yok'})</option>
-                          ))}
-                        </select>
+                        <span className="text-[11px] sm:text-xs font-bold text-brand-ink/70">Sınav:</span>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-brand-border/80 rounded-xl shadow-2xs max-w-full truncate">
+                          <Calendar className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span className="text-xs font-bold text-brand-ink truncate">
+                            {activeExamForAttendance?.name || 'Günün Sınavı'}
+                          </span>
+                          {activeExamForAttendance?.date && (
+                            <span className="text-[10px] text-brand-ink/50 font-medium shrink-0 border-l border-brand-border/60 pl-1.5 hidden xs:inline">
+                              {activeExamForAttendance.date}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Canlı Sayaçlar */}
@@ -2104,13 +2117,23 @@ export const HallsView = () => {
                   </div>
 
                   <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <button
-                      type="button"
-                      onClick={() => setModalMode('layout')}
-                      className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer"
-                    >
-                      Şemaya Dön
-                    </button>
+                    {!isReadOnly ? (
+                      <button
+                        type="button"
+                        onClick={() => setModalMode('layout')}
+                        className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer"
+                      >
+                        Şemaya Dön
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={closeModal}
+                        className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer"
+                      >
+                        Pencereyi Kapat
+                      </button>
+                    )}
 
                     <button
                       type="button"
