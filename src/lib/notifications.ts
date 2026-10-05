@@ -156,16 +156,22 @@ export const removeLocalNotification = (id: string) => {
 
 // Firestore helper: publish a notification to the cloud (with local fallback)
 export const publishCloudNotification = async (
-  notification: Omit<AppNotification, 'id' | 'createdAt'>
+  notification: Omit<AppNotification, 'id' | 'createdAt'> & { id?: string; createdAt?: string }
 ): Promise<{ success: boolean; id?: string; error?: string; offline?: boolean }> => {
-  const notifId = generateId();
+  const notifId = notification.id || generateId();
   const fullNotification: AppNotification = {
+    title: notification.title || 'Bildirim',
+    message: notification.message || '',
+    type: notification.type || 'announcement',
+    linkTab: notification.linkTab,
+    urgent: notification.urgent,
+    targetGrade: notification.targetGrade,
     ...notification,
     id: notifId,
-    createdAt: new Date().toISOString(),
-    createdByEmail: auth.currentUser?.email || 'Yönetim',
-    createdByName: auth.currentUser?.displayName || 'Okul Yönetimi',
-    readBy: []
+    createdAt: notification.createdAt || new Date().toISOString(),
+    createdByEmail: notification.createdByEmail || auth.currentUser?.email || 'Yönetim',
+    createdByName: notification.createdByName || auth.currentUser?.displayName || 'Okul Yönetimi',
+    readBy: notification.readBy || []
   };
 
   // Always save locally first so the notification is never lost
@@ -173,7 +179,7 @@ export const publishCloudNotification = async (
 
   try {
     if (!checkIsQuotaExceededToday()) {
-      await setDoc(doc(db, 'notifications', notifId), fullNotification);
+      await setDoc(doc(db, 'notifications', notifId), fullNotification, { merge: true });
     }
     return { success: true, id: notifId };
   } catch (error: any) {

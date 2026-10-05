@@ -251,6 +251,7 @@ export interface HallAttendance {
   hallName: string;
   date: string;
   takenBy: string;
+  takenByEmail?: string;
   takenAt: string;
   totalAssigned: number;
   presentCount: number;

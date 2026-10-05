@@ -410,10 +410,13 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                         {item.message}
                       </p>
 
-                      <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[11px]">
-                        <span className="text-white/40">
-                          {item.createdByName ? `Gönderen: ${item.createdByName}` : 'Sistem Mesajı'}
-                        </span>
+                      <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[11px] flex-wrap gap-2">
+                        <div className="text-white/50 flex items-center gap-1.5 flex-wrap">
+                          <span>{item.createdByName ? `Gönderen: ${item.createdByName}` : 'Sistem Mesajı'}</span>
+                          {item.createdByEmail && !item.createdByName?.includes(item.createdByEmail) && (
+                            <span className="text-white/35 font-mono text-[10px]">({item.createdByEmail})</span>
+                          )}
+                        </div>
 
                         {item.linkTab && (
                           <button

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { ExamHall, SeatingPlanItem, Exam, AbsentStudentInfo, HallAttendance } from '../types';
 import { generateId, exportToExcel, formatDateLong, parseDateObj } from '../lib/utils';
+import { auth } from '../lib/firebase';
 import { 
   findTodayExamForHall, 
   submitHallAttendance, 
@@ -34,6 +35,57 @@ const getClassBadgeColor = (className?: string) => {
     hash = className.charCodeAt(i) + ((hash << 5) - hash);
   }
   return colors[Math.abs(hash) % colors.length];
+};
+
+// Sisteme giriş yapmış olan öğretmenin veya yöneticinin doğrulanmış e-posta ve ad bilgilerini tespit eder
+const getActiveTeacherIdentity = (teachersList: string[] = []): { email: string; displayName: string } => {
+  // 1. Firebase Auth doğrudan kontrolü
+  const currentUser = auth.currentUser;
+  if (currentUser?.email) {
+    return {
+      email: currentUser.email.trim().toLowerCase(),
+      displayName: currentUser.displayName || currentUser.email.split('@')[0]
+    };
+  }
+
+  // 2. Tarayıcı oturum hafızası kontrolü
+  try {
+    const rawSession = localStorage.getItem('akademi_user_session');
+    if (rawSession) {
+      const parsed = JSON.parse(rawSession);
+      if (parsed?.email) {
+        return {
+          email: parsed.email.trim().toLowerCase(),
+          displayName: parsed.displayName || parsed.name || parsed.email.split('@')[0]
+        };
+      }
+    }
+  } catch {}
+
+  // 3. Tekil kullanıcı e-posta anahtarı
+  try {
+    const savedEmail = localStorage.getItem('akademi_user_email');
+    if (savedEmail) {
+      return {
+        email: savedEmail.trim().toLowerCase(),
+        displayName: savedEmail.split('@')[0]
+      };
+    }
+  } catch {}
+
+  // 4. Öğretmenler listesindeki ilk kayıt veya genel etiket
+  const fallback = teachersList.length > 0 ? teachersList[0] : '';
+  if (fallback.includes('@')) {
+    return {
+      email: fallback.trim().toLowerCase(),
+      displayName: fallback.split('@')[0]
+    };
+  }
+
+  return {
+    email: fallback || '',
+    displayName: fallback || 'Gözetmen Öğretmen'
+  };
 };
 
 export const HallsView = () => {
@@ -491,7 +543,14 @@ export const HallsView = () => {
         }));
 
       const attendanceId = `${activeExamForAttendance.id}_${currentHall.id}`;
-      const teacherInfo = (state.teachers && state.teachers[0]) || 'Gözetmen Öğretmen';
+      const teacherIdentity = getActiveTeacherIdentity(state.teachers);
+      const teacherEmail = teacherIdentity.email || '';
+      const teacherName = teacherIdentity.displayName || 'Gözetmen Öğretmen';
+
+      // İdarecilerin bildirimde ve kayıtta göreceği gözetmen ismi ve maili
+      const takenByDisplay = teacherEmail && !teacherName.includes(teacherEmail)
+        ? `${teacherName} (${teacherEmail})`
+        : (teacherName || teacherEmail || 'Gözetmen Öğretmen');
 
       const payload: HallAttendance = {
         id: attendanceId,
@@ -500,7 +559,8 @@ export const HallsView = () => {
         hallId: currentHall.id,
         hallName: currentHall.name,
         date: activeExamForAttendance.date || new Date().toISOString().split('T')[0],
-        takenBy: teacherInfo,
+        takenBy: takenByDisplay,
+        takenByEmail: teacherEmail,
         takenAt: new Date().toISOString(),
         totalAssigned: seatingPlan.length,
         presentCount: seatingPlan.length - absentList.length,
@@ -512,7 +572,11 @@ export const HallsView = () => {
       const result = await submitHallAttendance(payload, 'main');
       if (result.success) {
         setAttendances(prev => ({ ...prev, [attendanceId]: payload }));
-        showToast(`✓ ${currentHall.name} yoklaması kaydedildi ve idareye anlık bildirim iletildi! (${absentList.length} devamsız)`);
+        if (result.unchanged) {
+          showToast(`✓ ${currentHall.name} yoklaması zaten en güncel haliyle kayıtlı. (Ekstra kota harcanmadı)`);
+        } else {
+          showToast(`✓ ${currentHall.name} yoklaması kaydedildi ve idareye anlık bildirim iletildi! (${absentList.length} devamsız)`);
+        }
       } else {
         showToast(`Yoklama kaydedildi ancak bildirimde gecikme yaşandı: ${result.error || ''}`);
       }
@@ -1196,10 +1260,18 @@ export const HallsView = () => {
                         <h4 className="text-xs font-bold text-brand-ink truncate">
                           {todayExam.name}
                         </h4>
-                        <p className="text-[10px] text-brand-ink/60 truncate mt-0.5 flex items-center gap-1.5">
+                        <p className="text-[10px] text-brand-ink/60 truncate mt-0.5 flex items-center gap-1.5 flex-wrap">
                           <span>📅 {todayExam.date || 'Bugün'}</span>
                           <span>•</span>
                           <span>{todayExam.institution || 'Kurumsal Deneme'}</span>
+                          {hallAttendance && (hallAttendance.takenByEmail || hallAttendance.takenBy) && (
+                            <>
+                              <span>•</span>
+                              <span className="text-emerald-800 font-semibold truncate" title={`Yoklamayı Gönderen: ${hallAttendance.takenBy}`}>
+                                👤 {hallAttendance.takenByEmail || hallAttendance.takenBy}
+                              </span>
+                            </>
+                          )}
                         </p>
                       </div>
 
