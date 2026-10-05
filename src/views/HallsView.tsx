@@ -1126,70 +1126,70 @@ export const HallsView = () => {
         </div>
       </header>
 
-      {/* Summary Stats */}
-      <section className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-5 animate-fade-in">
+      {/* Summary Stats (Mobile Optimized Grid) */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-5 animate-fade-in">
         {/* Stat 1: Toplam Salon */}
-        <div className="bg-white p-3.5 sm:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
+        <div className="bg-white p-2.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[9px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
               Toplam Salon
             </span>
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100 group-hover:scale-105 transition-transform">
-              <Building className="w-4 h-4" />
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100 group-hover:scale-105 transition-transform">
+              <Building className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-serif text-xl sm:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalHalls}</span>
-            <span className="text-xs text-brand-ink/50 font-medium">salon</span>
+          <div className="flex items-baseline gap-1 sm:gap-1.5">
+            <span className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalHalls}</span>
+            <span className="text-[10px] sm:text-xs text-brand-ink/50 font-medium">salon</span>
           </div>
         </div>
 
         {/* Stat 2: Toplam Kapasite */}
-        <div className="bg-white p-3.5 sm:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
+        <div className="bg-white p-2.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[9px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
               Toplam Kapasite
             </span>
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 border border-sky-100 group-hover:scale-105 transition-transform">
-              <LayoutTemplate className="w-4 h-4" />
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 border border-sky-100 group-hover:scale-105 transition-transform">
+              <LayoutTemplate className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-serif text-xl sm:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalCapacity}</span>
-            <span className="text-xs text-brand-ink/50 font-medium">sıra / koltuk</span>
+          <div className="flex items-baseline gap-1 sm:gap-1.5">
+            <span className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalCapacity}</span>
+            <span className="text-[10px] sm:text-xs text-brand-ink/50 font-medium">sıra</span>
           </div>
         </div>
 
         {/* Stat 3: Yerleşen Öğrenci */}
-        <div className="bg-white p-3.5 sm:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-emerald-300 group">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
+        <div className="bg-white p-2.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-emerald-300 group">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[9px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
               Yerleşen Öğrenci
             </span>
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100 group-hover:scale-105 transition-transform">
-              <Users className="w-4 h-4" />
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100 group-hover:scale-105 transition-transform">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-serif text-xl sm:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalSeated}</span>
-            <span className="text-xs text-brand-ink/50 font-medium">öğrenci</span>
+          <div className="flex items-baseline gap-1 sm:gap-1.5">
+            <span className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalSeated}</span>
+            <span className="text-[10px] sm:text-xs text-brand-ink/50 font-medium">öğrenci</span>
           </div>
         </div>
 
         {/* Stat 4: Doluluk Oranı */}
-        <div className="bg-white p-3.5 sm:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-amber-300 group">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
+        <div className="bg-white p-2.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-amber-300 group">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[9px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
               Doluluk Oranı
             </span>
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100 group-hover:scale-105 transition-transform">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100 group-hover:scale-105 transition-transform">
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-serif text-xl sm:text-3xl font-bold text-brand-ink leading-none">%{summaryStats.occupancyRate}</span>
-              <span className="text-xs text-brand-ink/50 font-medium">doluluk</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-baseline gap-1 sm:gap-1.5">
+              <span className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">%{summaryStats.occupancyRate}</span>
+              <span className="text-[10px] sm:text-xs text-brand-ink/50 font-medium">doluluk</span>
             </div>
             <div className="w-full bg-[#FAF9F6] h-1.5 rounded-full overflow-hidden border border-brand-border/40">
               <div 
@@ -1203,34 +1203,34 @@ export const HallsView = () => {
 
       {/* Sınav Günü Bilgilendirme Çubuğu */}
       {examsOnSelectedDate.length > 0 && (
-        <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-indigo-500/10 to-emerald-500/10 border border-amber-300 shadow-2xs flex items-center justify-between gap-3 flex-wrap">
+        <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-500/15 via-indigo-500/10 to-emerald-500/10 border border-amber-300 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
-              <Calendar className="w-4 h-4" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold text-amber-950 uppercase tracking-wider">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <span className="text-[11px] sm:text-xs font-extrabold text-amber-950 uppercase tracking-wider">
                   Bugün Sınav Günü!
                 </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900 border border-amber-300">
+                <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.2 rounded-full bg-amber-200/80 text-amber-900 border border-amber-300">
                   {examsOnSelectedDate.length} Aktif Sınav
                 </span>
               </div>
-              <p className="text-xs text-brand-ink font-semibold truncate mt-0.5">
+              <p className="text-[11px] sm:text-xs text-brand-ink font-semibold truncate mt-0.5">
                 {examsOnSelectedDate.map(e => e.name).join(', ')}
               </p>
             </div>
           </div>
 
-          <div className="text-xs text-brand-ink/70 font-medium">
-            Öğretmenler salon kartlarındaki <strong className="text-indigo-800">"Yoklama Al"</strong> butonuyla salonda bulunmayan öğrencileri işaretleyip idareye anlık bildirim gönderebilir.
+          <div className="text-[11px] sm:text-xs text-brand-ink/70 font-medium">
+            Öğretmenler salon kartlarındaki <strong className="text-indigo-800">"Yoklama Al"</strong> butonuyla devamsız öğrencileri işaretleyip idareye anlık bildirim gönderebilir.
           </div>
         </div>
       )}
 
       {/* Halls Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5 overflow-auto pb-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5 overflow-auto pb-10">
         {filteredHalls.map(hall => {
           const usedCapacity = hall.seatingPlan?.length || 0;
           const totalCapacity = hall.capacity || 0;
@@ -1247,7 +1247,7 @@ export const HallsView = () => {
             <div 
               key={hall.id} 
               onClick={() => openEditModal(hall)}
-              className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-2xs sm:shadow-xs border border-brand-border/70 hover:border-indigo-400 hover:shadow-md flex flex-col justify-between transition-all group relative hover:-translate-y-0.5 cursor-pointer"
+              className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-2xs sm:shadow-xs border border-brand-border/70 hover:border-indigo-400 hover:shadow-md flex flex-col justify-between transition-all group relative hover:-translate-y-0.5 cursor-pointer touch-manipulation"
             >
               {/* Card Header Row */}
               <div>
@@ -1291,7 +1291,7 @@ export const HallsView = () => {
                         e.stopPropagation();
                         handleExport(hall);
                       }} 
-                      className="p-2 text-brand-ink/60 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-emerald-200 active:scale-95 shadow-2xs" 
+                      className="p-1.5 sm:p-2 text-brand-ink/60 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-emerald-200 active:scale-95 shadow-2xs touch-manipulation" 
                       title="Yoklama Listesi İndir (Excel)"
                       aria-label="Yoklama Listesi İndir"
                     >
@@ -1302,7 +1302,7 @@ export const HallsView = () => {
                         e.stopPropagation();
                         handlePrintSchematic(hall);
                       }} 
-                      className="p-2 text-brand-ink/60 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-indigo-200 active:scale-95 shadow-2xs" 
+                      className="p-1.5 sm:p-2 text-brand-ink/60 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-indigo-200 active:scale-95 shadow-2xs touch-manipulation" 
                       title="Oturma Şemasını Yazdır / PDF"
                       aria-label="Şema Yazdır"
                     >
@@ -1314,7 +1314,7 @@ export const HallsView = () => {
                           e.stopPropagation();
                           setDeletingHallId(hall.id);
                         }} 
-                        className="p-2 text-brand-ink/40 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 active:scale-95 shadow-2xs" 
+                        className="p-1.5 sm:p-2 text-brand-ink/40 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 active:scale-95 shadow-2xs touch-manipulation" 
                         title="Salonu Sil"
                         aria-label="Salonu Sil"
                       >
@@ -1328,7 +1328,7 @@ export const HallsView = () => {
                 {/* 1. ÖZELLİK: SINAV GÜNÜ SALON KARTLARININ ORTASINDA SINAV ROZETİ */}
                 {/* ========================================================= */}
                 {todayExam ? (
-                  <div className="my-2.5 p-3 rounded-2xl bg-gradient-to-br from-amber-50/90 via-indigo-50/40 to-emerald-50/70 border border-amber-300/80 shadow-2xs group-hover:border-indigo-300 transition-all">
+                  <div className="my-2.5 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-50/90 via-indigo-50/40 to-emerald-50/70 border border-amber-300/80 shadow-2xs group-hover:border-indigo-300 transition-all">
                     <div className="flex items-center justify-between gap-1.5 mb-1.5">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="flex h-2 w-2 relative shrink-0">
@@ -1357,7 +1357,7 @@ export const HallsView = () => {
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <h4 className="text-xs font-bold text-brand-ink truncate">
                           {todayExam.name}
@@ -1383,7 +1383,7 @@ export const HallsView = () => {
                           e.stopPropagation();
                           openAttendanceModal(hall, todayExam);
                         }}
-                        className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 transition-all active:scale-95 shadow-xs cursor-pointer ${
+                        className={`w-full xs:w-auto px-3 py-1.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 transition-all active:scale-95 shadow-xs cursor-pointer touch-manipulation ${
                           hallAttendance
                             ? 'bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300'
                             : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
@@ -1425,13 +1425,13 @@ export const HallsView = () => {
                 </div>
                 <div className="w-full bg-[#FAF9F6] h-2 rounded-full overflow-hidden border border-brand-border/40">
                   <div 
-                    className={`h-full rounded-full transition-all duration-300 ${
+                    className="h-full rounded-full transition-all duration-300 ${
                       percentage >= 100 
                         ? 'bg-emerald-600' 
                         : percentage > 0 
                         ? 'bg-amber-500' 
                         : 'bg-transparent'
-                    }`} 
+                    }" 
                     style={{ width: `${Math.min(100, percentage)}%` }} 
                   />
                 </div>
@@ -1439,7 +1439,7 @@ export const HallsView = () => {
                 {/* Main Action Button */}
                 <button 
                   onClick={() => openEditModal(hall, todayExam ? 'attendance' : 'layout', todayExam || undefined)} 
-                  className={`w-full mt-2.5 py-2.5 px-3.5 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center justify-between active:scale-[0.98] cursor-pointer ${
+                  className={`w-full mt-2.5 py-2.5 px-3.5 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center justify-between active:scale-[0.98] cursor-pointer touch-manipulation ${
                     isReadOnly 
                       ? 'bg-gradient-to-r from-indigo-50 to-indigo-100/70 border border-indigo-200/90 text-indigo-950 hover:border-indigo-400 hover:shadow-xs' 
                       : 'bg-[#FAF9F6] border border-brand-border/80 text-brand-ink hover:bg-white hover:border-brand-accent hover:text-brand-accent'
@@ -1493,15 +1493,15 @@ export const HallsView = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-1 sm:p-4 animate-fade-in">
           <div className={`bg-white rounded-2xl sm:rounded-[32px] border border-[#e6e2d3] shadow-2xl w-full ${isReadOnly || modalMode === 'attendance' ? 'max-w-5xl lg:max-w-6xl' : 'max-w-4xl'} h-[98vh] sm:h-[90vh] flex flex-col overflow-hidden animate-slide-up max-h-[98vh] sm:max-h-[90vh]`}>
             
-            {/* Modal Header (Selector 5) */}
-            <div className="bg-[#FAF9F6] border-b border-brand-border/80 px-3 py-2.5 sm:px-5 sm:py-3.5 flex items-center justify-between shrink-0 gap-2">
+            {/* Modal Header (Selector 1) */}
+            <div className="bg-[#FAF9F6] border-b border-brand-border/80 px-2.5 py-2 sm:px-5 sm:py-3.5 flex items-center justify-between shrink-0 gap-2">
               <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
                 <div className={`p-1.5 sm:p-2 rounded-xl shrink-0 ${modalMode === 'attendance' ? 'bg-amber-500/15 text-amber-800' : 'bg-indigo-500/15 text-indigo-700'}`}>
-                  {modalMode === 'attendance' ? <UserCheck className="h-4.5 w-4.5 sm:h-5 sm:w-5" /> : <MapPin className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
+                  {modalMode === 'attendance' ? <UserCheck className="h-4 w-4 sm:h-5 sm:w-5" /> : <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-3 flex-wrap">
-                    <h3 className="text-sm sm:text-base lg:text-lg font-serif text-brand-ink font-bold leading-tight truncate">
+                    <h3 className="text-xs xs:text-sm sm:text-base lg:text-lg font-serif text-brand-ink font-bold leading-tight truncate">
                       {hallName || 'Sınav Salonu'}
                     </h3>
                     
@@ -1511,7 +1511,7 @@ export const HallsView = () => {
                         <button
                           type="button"
                           onClick={() => setModalMode('layout')}
-                          className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
+                          className={`px-2 sm:px-3 py-1 text-[10px] xs:text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
                             modalMode === 'layout' 
                               ? 'bg-[#151618] text-white shadow-xs' 
                               : 'text-brand-ink/60 hover:text-brand-ink'
@@ -1524,7 +1524,7 @@ export const HallsView = () => {
                         <button
                           type="button"
                           onClick={() => setModalMode('attendance')}
-                          className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
+                          className={`px-2 sm:px-3 py-1 text-[10px] xs:text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer touch-manipulation ${
                             modalMode === 'attendance' 
                               ? 'bg-amber-500 text-white shadow-xs' 
                               : 'text-brand-ink/60 hover:text-amber-800'
@@ -1541,7 +1541,7 @@ export const HallsView = () => {
                       </div>
                     ) : (
                       /* Öğretmen kullanıcılarda sınav gününde Yoklama, diğer günlerde Oturma Planı Başlığı */
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl shadow-2xs border text-xs font-bold bg-white">
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-xl shadow-2xs border text-[11px] sm:text-xs font-bold bg-white">
                         {modalMode === 'attendance' ? (
                           <div className="flex items-center gap-1 text-amber-900">
                             <UserCheck className="w-3.5 h-3.5 text-amber-600" />
@@ -1566,39 +1566,46 @@ export const HallsView = () => {
 
               <button 
                 onClick={closeModal}
-                className="p-1.5 sm:p-2 text-brand-ink/50 hover:text-brand-ink hover:bg-black/5 rounded-xl transition-all cursor-pointer shrink-0 touch-manipulation"
+                className="p-1 sm:p-2 text-brand-ink/50 hover:text-brand-ink hover:bg-black/5 rounded-xl transition-all cursor-pointer shrink-0 touch-manipulation active:scale-95"
                 title="Pencereyi Kapat (ESC)"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
               </button>
             </div>
 
-            {/* Mobile Tab Switcher (Yalnızca İdareci / Admin Düzenleme Modunda Görünür) */}
+            {/* Mobile Tab Switcher (Yalnızca İdareci / Admin Düzenleme Modunda Görünür - Selector 2 & 3) */}
             {!isReadOnly && modalMode === 'layout' && (
-              <div className="md:hidden flex border-b border-brand-border/70 bg-[#FAF9F6] p-1.5 gap-1 shrink-0">
+              <div className="md:hidden flex border-b border-brand-border/80 bg-[#FAF9F6] p-1.5 gap-1.5 shrink-0 shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('settings')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`flex-1 py-2 px-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-[0.98] ${
                     mobileModalTab === 'settings'
                       ? 'bg-[#151618] text-white shadow-xs'
-                      : 'text-brand-ink/60 hover:text-brand-ink'
+                      : 'text-brand-ink/70 hover:text-brand-ink bg-white/60 border border-brand-border/40'
                   }`}
                 >
-                  <Building className="w-3.5 h-3.5" />
-                  <span>1. Salon Ayarları</span>
+                  <Building className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">1. Salon Ayarları</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setMobileModalTab('preview')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`flex-1 py-2 px-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-[0.98] ${
                     mobileModalTab === 'preview'
                       ? 'bg-[#151618] text-white shadow-xs'
-                      : 'text-brand-ink/60 hover:text-brand-ink'
+                      : 'text-brand-ink/70 hover:text-brand-ink bg-white/60 border border-brand-border/40'
                   }`}
                 >
-                  <LayoutTemplate className="w-3.5 h-3.5" />
-                  <span>2. Oturma Şeması ({seatingPlan.length}/{capacity})</span>
+                  <LayoutTemplate className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">2. Oturma Şeması</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ml-0.5 shrink-0 ${
+                    mobileModalTab === 'preview' 
+                      ? 'bg-amber-400 text-amber-950' 
+                      : 'bg-amber-100 text-amber-900 border border-amber-300'
+                  }`}>
+                    {seatingPlan.length}/{capacity}
+                  </span>
                 </button>
               </div>
             )}
@@ -1885,8 +1892,8 @@ export const HallsView = () => {
                 </div>
               )}
 
-              {/* Sağ İçerik Alanı: Oturma Planı / Yoklama Önizleme (Selector 1) */}
-              <div className={`w-full ${!isReadOnly && modalMode === 'layout' ? 'md:w-2/3' : 'w-full'} p-2 sm:p-4.5 flex flex-col overflow-hidden ${
+              {/* Sağ İçerik Alanı: Oturma Planı / Yoklama Önizleme (Selector 1 & 2) */}
+              <div className={`w-full ${!isReadOnly && modalMode === 'layout' ? 'md:w-2/3' : 'w-full'} p-2 sm:p-4 md:p-5 flex flex-col overflow-hidden min-h-0 ${
                 !isReadOnly && modalMode === 'layout' && mobileModalTab !== 'preview' ? 'hidden md:flex' : 'flex'
               }`}>
                 
@@ -1894,17 +1901,17 @@ export const HallsView = () => {
                 {/* 2. ÖZELLİK: PRATİK YOKLAMA KONTROL ÇUBUĞU & İDAREYE BİLDİRİM (Selector 2) */}
                 {/* ========================================================= */}
                 {modalMode === 'attendance' ? (
-                  <div className="mb-2.5 p-2 sm:p-3 bg-gradient-to-r from-amber-500/10 via-white to-rose-500/10 border border-amber-300/80 rounded-xl sm:rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-3 shrink-0">
+                  <div className="mb-2 sm:mb-3 p-2.5 sm:p-3 bg-gradient-to-r from-amber-500/10 via-white to-rose-500/10 border border-amber-300/80 rounded-xl sm:rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
                     <div className="space-y-1.5 min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <span className="text-[11px] sm:text-xs font-bold text-brand-ink/70">Sınav:</span>
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-brand-border/80 rounded-xl shadow-2xs max-w-full truncate">
-                          <Calendar className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                          <span className="text-xs font-bold text-brand-ink truncate">
+                        <span className="text-[10px] sm:text-xs font-bold text-brand-ink/70">Sınav:</span>
+                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white border border-brand-border/80 rounded-lg sm:rounded-xl shadow-2xs max-w-full truncate">
+                          <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-700 shrink-0" />
+                          <span className="text-[11px] sm:text-xs font-bold text-brand-ink truncate">
                             {activeExamForAttendance?.name || 'Günün Sınavı'}
                           </span>
                           {activeExamForAttendance?.date && (
-                            <span className="text-[10px] text-brand-ink/50 font-medium shrink-0 border-l border-brand-border/60 pl-1.5 hidden xs:inline">
+                            <span className="text-[9px] sm:text-[10px] text-brand-ink/50 font-medium shrink-0 border-l border-brand-border/60 pl-1.5 hidden xs:inline">
                               {activeExamForAttendance.date}
                             </span>
                           )}
@@ -1913,24 +1920,24 @@ export const HallsView = () => {
 
                       {/* Canlı Sayaçlar ve Doğrulanmış Gözetmen Bilgisi */}
                       <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
-                        <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-lg bg-white border border-brand-border/70 text-brand-ink">
+                        <span className="text-[9.5px] sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-lg bg-white border border-brand-border/70 text-brand-ink">
                           Toplam: <strong>{seatingPlan.length}</strong>
                         </span>
-                        <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        <span className="text-[9.5px] sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
                           ✓ Salonda: <strong>{attendancePresentCount}</strong>
                         </span>
-                        <span className={`text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-lg border ${
+                        <span className={`text-[9.5px] sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-lg border ${
                           attendanceAbsentCount > 0 
                             ? 'bg-rose-100 text-rose-900 border-rose-300 animate-pulse font-extrabold' 
                             : 'bg-gray-100 text-gray-700 border-gray-200'
                         }`}>
-                          ✗ Salonda Olmayan: <strong>{attendanceAbsentCount}</strong>
+                          ✗ Devamsız: <strong>{attendanceAbsentCount}</strong>
                         </span>
                         {(() => {
                           const teacher = getActiveTeacherIdentity(currentUser);
                           if (!teacher.email && !teacher.displayName) return null;
                           return (
-                            <span className="text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-indigo-50/90 text-indigo-900 border border-indigo-200/80 flex items-center gap-1 truncate max-w-full">
+                            <span className="text-[9.5px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-indigo-50/90 text-indigo-900 border border-indigo-200/80 flex items-center gap-1 truncate max-w-full">
                               <ShieldCheck className="w-3 h-3 text-indigo-600 shrink-0" />
                               <span className="truncate">Gözetmen: <strong>{teacher.displayName}</strong>{teacher.email ? ` (${teacher.email})` : ''}</span>
                             </span>
@@ -1939,11 +1946,11 @@ export const HallsView = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full md:w-auto">
                       <button
                         type="button"
                         onClick={markAllPresent}
-                        className="flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 bg-white border border-brand-border/80 text-xs font-bold text-brand-ink hover:bg-gray-50 rounded-xl transition-all shadow-2xs cursor-pointer text-center touch-manipulation active:scale-95"
+                        className="flex-1 md:flex-initial px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white border border-brand-border/80 text-[11px] sm:text-xs font-bold text-brand-ink hover:bg-gray-50 rounded-xl transition-all shadow-2xs cursor-pointer text-center touch-manipulation active:scale-95"
                         title="Tüm öğrencileri salonda mevcut işaretle"
                       >
                         Tümünü Salonda Yap
@@ -1953,7 +1960,7 @@ export const HallsView = () => {
                         type="button"
                         disabled={isSendingNotification}
                         onClick={handleSaveAndBroadcastAttendance}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 touch-manipulation"
+                        className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-[11px] sm:text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer disabled:opacity-50 touch-manipulation"
                       >
                         {isSendingNotification ? (
                           <>
@@ -1970,7 +1977,8 @@ export const HallsView = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="mb-2.5 px-2.5 sm:px-3.5 py-1.5 bg-white border border-brand-border/70 rounded-xl shadow-2xs flex flex-wrap items-center justify-between gap-2 shrink-0">
+                  /* Oturma Planı Başlık & Arama Çubuğu (Selector 5) */
+                  <div className="mb-2 sm:mb-2.5 p-2 sm:px-3.5 sm:py-2 bg-white border border-brand-border/70 rounded-xl shadow-2xs flex flex-col xs:flex-row items-stretch xs:items-center justify-between gap-2 shrink-0">
                     <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
                       <span className="text-xs sm:text-sm font-bold text-brand-ink truncate">
                         {hallName || 'Sınav Salonu'}
@@ -1989,15 +1997,15 @@ export const HallsView = () => {
                       ) : null}
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
-                      <div className="relative">
+                    <div className="flex items-center gap-1.5 shrink-0 justify-between xs:justify-end">
+                      <div className="relative flex-1 xs:flex-initial">
                         <Search className="w-3 h-3 text-brand-ink/40 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
                           type="text"
                           value={highlightStudentQuery}
                           onChange={e => setHighlightStudentQuery(e.target.value)}
                           placeholder="Öğrenci ara..."
-                          className="w-28 xs:w-36 sm:w-40 pl-6.5 pr-6 py-1 bg-white border border-brand-border/70 rounded-lg text-xs text-brand-ink placeholder:text-brand-ink/40 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
+                          className="w-full xs:w-32 sm:w-40 pl-6.5 pr-6 py-1 bg-white border border-brand-border/70 rounded-lg text-xs text-brand-ink placeholder:text-brand-ink/40 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
                         />
                         {highlightStudentQuery && (
                           <button
@@ -2010,7 +2018,7 @@ export const HallsView = () => {
                       </div>
 
                       {highlightStudentQuery && highlightedSeatCount > 0 && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200 shrink-0">
                           {highlightedSeatCount} eşleşme
                         </span>
                       )}
@@ -2019,18 +2027,18 @@ export const HallsView = () => {
                         <div className="flex items-center gap-1 shrink-0">
                           <button 
                             onClick={() => handleExport({ id: editingHallId || '', name: hallName, capacity, columns, seatingPlan } as any)}
-                            className="flex items-center px-2 py-1 bg-white border border-brand-border/70 text-brand-ink hover:text-emerald-700 text-xs font-bold rounded-lg hover:border-emerald-300 transition-colors shadow-2xs cursor-pointer touch-manipulation"
+                            className="flex items-center px-2 py-1 bg-white border border-brand-border/70 text-brand-ink hover:text-emerald-700 text-xs font-bold rounded-lg hover:border-emerald-300 transition-colors shadow-2xs cursor-pointer touch-manipulation active:scale-95"
                             title="Excel Yoklama Listesi İndir"
                           >
-                            <FileSpreadsheet className="w-3 h-3 text-emerald-600 sm:mr-1" />
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 sm:mr-1 shrink-0" />
                             <span className="hidden sm:inline">Excel</span>
                           </button>
                           <button 
                             onClick={() => handlePrintSchematic()}
-                            className="flex items-center px-2 py-1 bg-white border border-brand-border/70 text-brand-ink hover:text-indigo-700 text-xs font-bold rounded-lg hover:border-indigo-300 transition-colors shadow-2xs cursor-pointer touch-manipulation"
+                            className="flex items-center px-2 py-1 bg-white border border-brand-border/70 text-brand-ink hover:text-indigo-700 text-xs font-bold rounded-lg hover:border-indigo-300 transition-colors shadow-2xs cursor-pointer touch-manipulation active:scale-95"
                             title="PDF Şema Yazdır / İndir"
                           >
-                            <Printer className="w-3 h-3 text-indigo-600 sm:mr-1" />
+                            <Printer className="w-3.5 h-3.5 text-indigo-600 sm:mr-1 shrink-0" />
                             <span className="hidden sm:inline">Yazdır</span>
                           </button>
                         </div>
@@ -2039,8 +2047,11 @@ export const HallsView = () => {
                   </div>
                 )}
 
-                {/* Oturma Düzeni & Yoklama Grid Konteyneri (Selector 3) */}
-                <div className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-xl sm:rounded-2xl shadow-inner p-2 sm:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x overscroll-contain select-none" id="seating-plan-printable">
+                {/* Oturma Düzeni & Yoklama Grid Konteyneri (Selector 3 & 5) */}
+                <div 
+                  className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-xl sm:rounded-2xl shadow-inner p-2 sm:p-3.5 md:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x overscroll-contain select-none min-h-[220px]" 
+                  id="seating-plan-printable"
+                >
                   {showSaveToast && (
                     <div className="absolute top-3 right-3 z-50 bg-green-50 text-green-700 px-3 py-1.5 rounded-full shadow-sm border border-green-200 text-xs font-bold flex items-center print:hidden animate-in fade-in slide-in-from-top-2 duration-300">
                       <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
@@ -2049,15 +2060,18 @@ export const HallsView = () => {
                   )}
 
                   {seatingPlan.length > 0 ? (
-                    <div className="flex gap-2.5 sm:gap-4 items-start min-w-[300px] sm:min-w-full justify-start sm:justify-center md:justify-start lg:justify-between print:w-full print:justify-center print:gap-8 pb-3">
+                    <div className="flex gap-2 sm:gap-3.5 md:gap-4 items-start min-w-max md:min-w-full justify-start md:justify-center lg:justify-between print:w-full print:justify-center print:gap-8 pb-2">
                       {columns.map((col, colIdx) => (
-                        <div key={col.id} className="flex flex-col gap-1.5 sm:gap-2.5 flex-1 min-w-[105px] xs:min-w-[125px] sm:min-w-[135px] md:min-w-0">
-                          <div className="text-center font-bold text-brand-ink/70 text-[9px] sm:text-xs uppercase tracking-wider print:text-black truncate px-1 bg-white/90 py-0.5 sm:py-1 rounded-lg border border-brand-border/50 shadow-2xs">
+                        <div 
+                          key={col.id} 
+                          className="flex flex-col gap-1.5 sm:gap-2.5 flex-1 min-w-[130px] xs:min-w-[145px] sm:min-w-[160px] md:min-w-0 select-none"
+                        >
+                          <div className="text-center font-bold text-brand-ink/70 text-[9.5px] sm:text-xs uppercase tracking-wider print:text-black truncate px-2 bg-white/95 py-1 rounded-lg border border-brand-border/60 shadow-2xs sticky top-0 z-10 backdrop-blur-xs">
                             {col.name}
                           </div>
                           
                           {Array.from({ length: col.deskCount }).map((_, rowIdx) => (
-                            <div key={rowIdx} className="flex gap-1 sm:gap-2 p-1 sm:p-1.5 rounded-xl bg-white/70 border border-brand-border/60 print:border-black/20 print:bg-transparent shadow-2xs">
+                            <div key={rowIdx} className="flex gap-1 sm:gap-1.5 p-1 sm:p-1.5 rounded-xl bg-white/80 border border-brand-border/60 print:border-black/20 print:bg-transparent shadow-2xs">
                               {Array.from({ length: col.seatsPerDesk }).map((_, seatIdx) => {
                                 // Calculate global seat number
                                 let seatNum = 0;
@@ -2095,7 +2109,7 @@ export const HallsView = () => {
                                     onDragOver={(e) => !isReadOnly && handleDragOver(e, seatNum)}
                                     onDragLeave={(e) => !isReadOnly && handleDragLeave(e, seatNum)}
                                     onDrop={(e) => !isReadOnly && handleDrop(e, seatNum)}
-                                    className={`flex flex-col items-center justify-between p-1 sm:p-2 rounded-xl relative min-h-[5rem] sm:min-h-[5.85rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all select-none touch-manipulation cursor-pointer ${
+                                    className={`flex flex-col items-center justify-between p-1 sm:p-1.5 md:p-2 rounded-xl relative min-h-[5.2rem] xs:min-h-[5.5rem] sm:min-h-[5.85rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all select-none touch-manipulation cursor-pointer ${
                                       student 
                                         ? modalMode === 'attendance'
                                           ? isAbsent
@@ -2114,7 +2128,7 @@ export const HallsView = () => {
                                         modalMode === 'attendance'
                                           ? isAbsent 
                                             ? "text-rose-700 font-black" 
-                                              : "text-emerald-800 font-black"
+                                            : "text-emerald-800 font-black"
                                           : "text-brand-ink/50"
                                       }`}>
                                         {seatNum}
@@ -2203,44 +2217,41 @@ export const HallsView = () => {
                     </div>
                   )}
                 </div>
-
-                {/* Mobil için sağa-sola kaydırma ipucu */}
-                <div className="sm:hidden mt-2 text-center text-[10px] text-brand-ink/50 flex items-center justify-center gap-1 shrink-0">
-                  <span>↔️ Sıraları incelemek için parmağınızla sağa-sola kaydırabilirsiniz</span>
-                </div>
               </div>
             </div>
 
-            {/* Modal Alt Çubuk (Footer) */}
-            <div className="bg-[#FAF9F6] border-t border-brand-border/70 p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            {/* Modal Alt Çubuk / Footer (Selector 6) */}
+            <div className="bg-[#FAF9F6] border-t border-brand-border/70 p-2.5 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3 shrink-0">
               {modalMode === 'attendance' ? (
                 /* Yoklama Modu Alt Bilgilendirme ve Bildirim Butonu */
-                <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="text-xs text-brand-ink font-medium">
+                <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
+                  <div className="hidden sm:block text-xs text-brand-ink font-medium">
                     {attendanceAbsentCount === 0 ? (
                       <span className="text-emerald-700 font-bold flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4" />
-                        Salondaki tüm öğrenciler ({seatingPlan.length} kişi) eksiksiz olarak salondadır.
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>Salondaki tüm öğrenciler ({seatingPlan.length} kişi) eksiksiz olarak salondadır.</span>
                       </span>
                     ) : (
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-rose-700 font-bold flex items-center gap-1">
-                          <AlertTriangle className="w-4 h-4 text-rose-600" />
-                          Salonda Bulunmayan {attendanceAbsentCount} Öğrenci:
+                        <span className="text-rose-700 font-bold flex items-center gap-1 shrink-0">
+                          <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-600 shrink-0" />
+                          <span>Salonda Bulunmayan {attendanceAbsentCount} Öğrenci:</span>
                         </span>
-                        {seatingPlan
-                          .filter(s => absentStudentIds.includes(s.studentId))
-                          .slice(0, 4)
-                          .map(s => (
-                            <span key={s.studentId} className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
-                              {s.studentNo} - {s.studentName}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {seatingPlan
+                            .filter(s => absentStudentIds.includes(s.studentId))
+                            .slice(0, 3)
+                            .map(s => (
+                              <span key={s.studentId} className="text-[10px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
+                                {s.studentNo} - {s.studentName}
+                              </span>
+                            ))}
+                          {attendanceAbsentCount > 3 && (
+                            <span className="text-[10px] text-rose-600 font-bold px-1">
+                              +{attendanceAbsentCount - 3} diğer
                             </span>
-                          ))}
-                        {attendanceAbsentCount > 4 && (
-                          <span className="text-[10px] text-rose-600 font-bold">
-                            +{attendanceAbsentCount - 4} diğer
-                          </span>
-                        )}
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2250,7 +2261,7 @@ export const HallsView = () => {
                       <button
                         type="button"
                         onClick={() => setModalMode('layout')}
-                        className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer"
+                        className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer active:scale-95 shadow-2xs touch-manipulation"
                       >
                         Şemaya Dön
                       </button>
@@ -2258,7 +2269,7 @@ export const HallsView = () => {
                       <button
                         type="button"
                         onClick={closeModal}
-                        className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer"
+                        className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer active:scale-95 shadow-2xs touch-manipulation"
                       >
                         Pencereyi Kapat
                       </button>
@@ -2268,16 +2279,16 @@ export const HallsView = () => {
                       type="button"
                       disabled={isSendingNotification}
                       onClick={handleSaveAndBroadcastAttendance}
-                      className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 touch-manipulation"
                     >
                       {isSendingNotification ? (
                         <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                           <span>Kaydediliyor...</span>
                         </>
                       ) : (
                         <>
-                          <Send className="w-4 h-4" />
+                          <Send className="w-3.5 h-3.5" />
                           <span>Kaydet & Bildir</span>
                         </>
                       )}
@@ -2286,18 +2297,18 @@ export const HallsView = () => {
                 </div>
               ) : (
                 /* Standart Oturma Planı Alt Çubuğu */
-                <div className="w-full flex items-center justify-between">
-                  <div className="text-xs text-brand-ink/60 font-medium">
+                <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                  <div className="hidden sm:block text-xs text-brand-ink/60 font-medium">
                     {isReadOnly 
                       ? `${seatingPlan.length} öğrenci yerleşimi görüntüleniyor`
-                      : 'Değişiklikleri kaydetmek için aşağıdaki butonu kullanabilirsiniz.'}
+                      : 'Değişiklikleri kaydetmek için butonu kullanabilirsiniz.'}
                   </div>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <button 
                       type="button"
                       onClick={closeModal}
-                      className="px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer"
+                      className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-brand-border text-brand-ink text-xs font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer active:scale-95 shadow-2xs touch-manipulation"
                     >
                       Pencereyi Kapat
                     </button>
@@ -2305,7 +2316,7 @@ export const HallsView = () => {
                       <button 
                         type="button"
                         onClick={handleSaveHall}
-                        className="px-5 py-2 bg-[#151618] hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                        className="flex-1 sm:flex-initial px-5 py-2 bg-[#151618] hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 touch-manipulation"
                       >
                         Salonu Kaydet
                       </button>
