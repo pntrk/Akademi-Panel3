@@ -4,7 +4,7 @@ import { ExamHall, SeatingPlanItem } from '../types';
 import { generateId, exportToExcel } from '../lib/utils';
 import { 
   Plus, Trash2, Download, LayoutTemplate, X, Users, RefreshCw, 
-  AlertCircle, Building, MapPin, Search, Filter, ChevronDown, 
+  AlertCircle, Building, MapPin, Search, ChevronDown, 
   ChevronRight, CheckCircle2, Eye, Printer, FileSpreadsheet, Sparkles, Check
 } from 'lucide-react';
 
@@ -30,18 +30,22 @@ const getClassBadgeColor = (className?: string) => {
 
 export const HallsView = () => {
   const { state, setExamHalls, userRole } = useAppContext();
-  // Admin için varsayılan olarak "Öğretmen Görünümü" açılır; istenirse Yönetici Moduna geçilebilir
-  const [viewMode, setViewMode] = useState<'teacher' | 'admin'>('teacher');
+  // Admin kullanıcılarda varsayılan olarak "Yönetici Modu", Öğretmenlerde ise "Öğretmen Görünümü" açılır
+  const [viewMode, setViewMode] = useState<'teacher' | 'admin'>(() => {
+    return userRole === 'admin' ? 'admin' : 'teacher';
+  });
+
+  useEffect(() => {
+    setViewMode(userRole === 'admin' ? 'admin' : 'teacher');
+  }, [userRole]);
+
   const isReadOnly = userRole !== 'admin' || viewMode === 'teacher';
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHallId, setEditingHallId] = useState<string | null>(null);
   const [mobileModalTab, setMobileModalTab] = useState<'settings' | 'preview'>('preview');
   
-  // Mobile Quick Toggles & Filters
-  const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [occupancyFilter, setOccupancyFilter] = useState<'all' | 'full' | 'partial' | 'empty'>('all');
+  // State declarations
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [deletingHallId, setDeletingHallId] = useState<string | null>(null);
 
@@ -443,31 +447,8 @@ export const HallsView = () => {
     };
   }, [state.examHalls]);
 
-  // Filtered Halls
-  const filteredHalls = useMemo(() => {
-    return state.examHalls.filter(hall => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const nameMatch = hall.name.toLowerCase().includes(q);
-        const classMatch = (hall.selectedClasses || []).some(c => c.toLowerCase().includes(q));
-        const examMatch = (hall.examIds || []).some(eid => {
-          const ex = state.exams.find(e => e.id === eid);
-          return ex && ex.name.toLowerCase().includes(q);
-        });
-        if (!nameMatch && !classMatch && !examMatch) return false;
-      }
-
-      if (occupancyFilter !== 'all') {
-        const used = hall.seatingPlan?.length || 0;
-        const total = hall.capacity || 0;
-        if (occupancyFilter === 'full' && (used < total || total === 0)) return false;
-        if (occupancyFilter === 'empty' && used > 0) return false;
-        if (occupancyFilter === 'partial' && (used === 0 || used >= total)) return false;
-      }
-
-      return true;
-    });
-  }, [state.examHalls, searchQuery, occupancyFilter, state.exams]);
+  // Halls to display
+  const filteredHalls = state.examHalls;
 
   const handleExport = (hall: ExamHall) => {
     if (!hall.seatingPlan || hall.seatingPlan.length === 0) {
@@ -797,33 +778,33 @@ export const HallsView = () => {
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
           {userRole === 'admin' ? (
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Görünüm Değiştirici: Öğretmen Görünümü (Varsayılan) vs Yönetici Modu */}
+              {/* Görünüm Değiştirici: Yönetici Modu (Admin için varsayılan) vs Öğretmen Görünümü */}
               <div className="flex items-center bg-[#FAF9F6] p-1 rounded-2xl border border-brand-border/80 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('teacher')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    viewMode === 'teacher'
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'text-brand-ink/70 hover:text-brand-ink'
-                  }`}
-                  title="Öğretmenlerin gördüğü salt-okunur önizleme modu"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Öğretmen Görünümü</span>
-                </button>
                 <button
                   type="button"
                   onClick={() => setViewMode('admin')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     viewMode === 'admin'
                       ? 'bg-[#151618] text-white shadow-xs'
-                      : 'text-brand-ink/70 hover:text-brand-ink'
+                      : 'text-brand-ink/70 hover:text-brand-ink hover:bg-black/5'
                   }`}
-                  title="Salon ve oturma düzeni oluşturma/düzenleme modu"
+                  title="Yönetici modu: Salon ve oturma düzeni oluşturma/düzenleme"
                 >
-                  <LayoutTemplate className="w-3.5 h-3.5" />
+                  <LayoutTemplate className="w-3.5 h-3.5 text-amber-400" />
                   <span>Yönetici Modu</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('teacher')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    viewMode === 'teacher'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-brand-ink/70 hover:text-brand-ink hover:bg-black/5'
+                  }`}
+                  title="Öğretmenlerin gördüğü salt-okunur önizleme modu"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Öğretmen Görünümü</span>
                 </button>
               </div>
 
@@ -846,109 +827,8 @@ export const HallsView = () => {
         </div>
       </header>
 
-      {/* Filter / Search Bar (Modern Responsive Command Bar) */}
-      <div className="p-3 sm:p-4 bg-white/95 backdrop-blur-md rounded-2xl border border-brand-border/70 shadow-2xs space-y-2.5">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-          {/* Search Box */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-ink/40 h-4 w-4 pointer-events-none" />
-            <input
-              type="text"
-              placeholder={isReadOnly ? "Salon adı, şube (örn: 8/A) veya sınav adı ara..." : "Salon adı, şube veya yer ara..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#FAF9F6] border border-brand-border/80 rounded-xl pl-9 pr-8 py-2 text-xs sm:text-sm text-brand-ink placeholder:text-brand-ink/40 font-medium focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white focus:outline-none transition-all shadow-2xs"
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-ink/40 hover:text-brand-ink p-1 rounded-md cursor-pointer"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Quick Segmented Occupancy Filter Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 shrink-0">
-            <button
-              onClick={() => setOccupancyFilter('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                occupancyFilter === 'all'
-                  ? 'bg-[#151618] text-white shadow-xs'
-                  : 'bg-[#FAF9F6] text-brand-ink/70 hover:text-brand-ink hover:bg-white border border-brand-border/60'
-              }`}
-            >
-              Tümü ({state.examHalls.length})
-            </button>
-            <button
-              onClick={() => setOccupancyFilter('full')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                occupancyFilter === 'full'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-[#FAF9F6] text-emerald-800 hover:bg-emerald-50 border border-brand-border/60'
-              }`}
-            >
-              Tam Dolu
-            </button>
-            <button
-              onClick={() => setOccupancyFilter('partial')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                occupancyFilter === 'partial'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'bg-[#FAF9F6] text-amber-800 hover:bg-amber-50 border border-brand-border/60'
-              }`}
-            >
-              Kısmi Dolu
-            </button>
-            <button
-              onClick={() => setOccupancyFilter('empty')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                occupancyFilter === 'empty'
-                  ? 'bg-gray-700 text-white shadow-xs'
-                  : 'bg-[#FAF9F6] text-gray-700 hover:bg-gray-100 border border-brand-border/60'
-              }`}
-            >
-              Boş
-            </button>
-
-            {/* Quick Toggle for Stats */}
-            <button
-              type="button"
-              onClick={() => setIsMobileStatsOpen(prev => !prev)}
-              className={`ml-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 border cursor-pointer ${
-                isMobileStatsOpen 
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-900 shadow-2xs' 
-                  : 'bg-white border-brand-border/80 text-brand-ink/70 hover:text-brand-ink'
-              }`}
-              title="İstatistikleri Göster/Gizle"
-            >
-              <Building className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="hidden sm:inline">İstatistikler</span>
-              <span className="sm:hidden">Özet</span>
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isMobileStatsOpen ? 'rotate-180 text-indigo-700' : 'text-brand-ink/40'}`} />
-            </button>
-          </div>
-        </div>
-
-        {/* Active Filter Hint */}
-        {(searchQuery || occupancyFilter !== 'all') && (
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-brand-border/40">
-            <span className="text-brand-ink/60 text-[11px]">
-              Filtrelenen: <strong className="text-brand-ink">{filteredHalls.length}</strong> / {state.examHalls.length} salon
-            </span>
-            <button 
-              onClick={() => { setSearchQuery(''); setOccupancyFilter('all'); }}
-              className="text-xs text-rose-600 hover:text-rose-700 font-bold underline cursor-pointer"
-            >
-              Filtreleri Temizle
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Summary Stats - Collapsible on Mobile & Desktop Toggle */}
-      <section className={`${isMobileStatsOpen ? 'grid' : 'hidden sm:grid'} grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-5 animate-fade-in`}>
+      {/* Summary Stats - Overview on Desktop */}
+      <section className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-5 animate-fade-in">
         {/* Stat 1: Toplam Salon */}
         <div className="bg-white p-3.5 sm:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
           <div className="flex items-center justify-between mb-2">
@@ -1167,30 +1047,20 @@ export const HallsView = () => {
               <Building className="w-7 h-7" />
             </div>
             <h4 className="text-base font-serif font-bold text-brand-ink mb-1">
-              {state.examHalls.length === 0 ? 'Henüz Sınav Salonu Oluşturulmamış' : 'Aramanızla Eşleşen Salon Bulunamadı'}
+              Henüz Sınav Salonu Oluşturulmamış
             </h4>
             <p className="text-xs text-brand-ink/60 max-w-sm mx-auto mb-4 leading-relaxed">
-              {state.examHalls.length === 0 
-                ? (isReadOnly ? 'Yönetici tarafından henüz aktif bir sınav salonu tanımlanmamış.' : 'Yukarıdaki "Yeni Salon Oluştur" butonuna tıklayarak salon ve otomatik kelebek oturma düzeni oluşturabilirsiniz.') 
-                : 'Farklı bir salon adı veya şube arayın ya da filtreleri temizleyin.'}
+              {isReadOnly 
+                ? 'Yönetici tarafından henüz aktif bir sınav salonu tanımlanmamış.' 
+                : 'Yukarıdaki "Yeni Salon Oluştur" butonuna tıklayarak salon ve otomatik kelebek oturma düzeni oluşturabilirsiniz.'}
             </p>
-            {state.examHalls.length === 0 ? (
-              !isReadOnly && (
-                <button 
-                  onClick={openNewModal}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#151618] hover:bg-black text-white rounded-xl text-xs font-bold active:scale-95 shadow-xs transition-all cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 text-amber-400" />
-                  <span>İlk Salonu Oluştur</span>
-                </button>
-              )
-            ) : (
+            {!isReadOnly && (
               <button 
-                onClick={() => { setSearchQuery(''); setOccupancyFilter('all'); }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#FAF9F6] border border-brand-border/80 text-brand-ink rounded-xl text-xs font-bold hover:bg-white transition-all cursor-pointer shadow-2xs"
+                onClick={openNewModal}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#151618] hover:bg-black text-white rounded-xl text-xs font-bold active:scale-95 shadow-xs transition-all cursor-pointer"
               >
-                <X className="w-3.5 h-3.5" />
-                <span>Filtreleri Sıfırla</span>
+                <Plus className="w-4 h-4 text-amber-400" />
+                <span>İlk Salonu Oluştur</span>
               </button>
             )}
           </div>
