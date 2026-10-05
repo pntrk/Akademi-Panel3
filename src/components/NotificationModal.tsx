@@ -11,7 +11,8 @@ import {
   requestPushPermission, 
   displayBrowserNotification, 
   publishCloudNotification, 
-  removeCloudNotification 
+  removeCloudNotification,
+  clearAllNotifications
 } from '../lib/notifications';
 import { cn } from '../lib/utils';
 import { useAppContext } from '../context/AppContext';
@@ -78,6 +79,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const [testSent, setTestSent] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [publishFeedback, setPublishFeedback] = useState<string | null>(null);
 
   // Form State for Sending
@@ -218,6 +220,17 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     if (onRefresh) onRefresh();
   };
 
+  const handleClearAllNotifications = async () => {
+    if (notifications.length === 0) return;
+    setIsClearing(true);
+    try {
+      await clearAllNotifications(notifications, userRole === 'admin');
+      if (onRefresh) onRefresh();
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'exam_result':
@@ -314,33 +327,49 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-2 px-4 sm:px-5 pt-3 border-b border-white/10 bg-white/[0.01]">
-          <button
-            onClick={() => setActiveTab('inbox')}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 border-b-2 text-xs font-bold transition-all cursor-pointer -mb-px",
-              activeTab === 'inbox' 
-                ? "border-brand-accent text-brand-accent" 
-                : "border-transparent text-white/50 hover:text-white/80"
-            )}
-          >
-            <Bell className="w-3.5 h-3.5" />
-            Bildirim Akışı ({notifications.length})
-          </button>
-          
-          {userRole === 'admin' && (
+        {/* Tab Switcher & Quick Actions */}
+        <div className="flex items-center justify-between gap-2 px-4 sm:px-5 pt-3 border-b border-white/10 bg-white/[0.01]">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setActiveTab('compose')}
+              onClick={() => setActiveTab('inbox')}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 border-b-2 text-xs font-bold transition-all cursor-pointer -mb-px",
-                activeTab === 'compose' 
+                "flex items-center gap-2 px-3 sm:px-4 py-2 border-b-2 text-xs font-bold transition-all cursor-pointer -mb-px",
+                activeTab === 'inbox' 
                   ? "border-brand-accent text-brand-accent" 
                   : "border-transparent text-white/50 hover:text-white/80"
               )}
             >
-              <Send className="w-3.5 h-3.5" />
-              Yeni Bildirim Gönder
+              <Bell className="w-3.5 h-3.5" />
+              Bildirim Akışı ({notifications.length})
+            </button>
+            
+            {userRole === 'admin' && (
+              <button
+                onClick={() => setActiveTab('compose')}
+                className={cn(
+                  "flex items-center gap-2 px-3 sm:px-4 py-2 border-b-2 text-xs font-bold transition-all cursor-pointer -mb-px",
+                  activeTab === 'compose' 
+                    ? "border-brand-accent text-brand-accent" 
+                    : "border-transparent text-white/50 hover:text-white/80"
+                )}
+              >
+                <Send className="w-3.5 h-3.5" />
+                Yeni Bildirim Gönder
+              </button>
+            )}
+          </div>
+
+          {/* Pratik Bildirimleri Temizle Butonu (Öğretmen ve Admin için) */}
+          {activeTab === 'inbox' && notifications.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearAllNotifications}
+              disabled={isClearing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 mb-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:scale-95 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+              title="Tüm bildirimleri temizle"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>{isClearing ? 'Temizleniyor...' : 'Bildirimleri Temizle'}</span>
             </button>
           )}
         </div>
@@ -406,11 +435,11 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                             {new Date(item.createdAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                           </span>
 
-                          {userRole === 'admin' && (
+                          {(userRole === 'admin' || userRole === 'teacher') && (
                             <button
                               onClick={() => handleDeleteNotification(item.id)}
-                              className="p-1 text-white/30 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer rounded-lg hover:bg-rose-500/10 ml-1"
-                              title="Bildirimi Sil"
+                              className="p-1.5 text-white/40 hover:text-rose-400 hover:bg-rose-500/15 rounded-lg transition-all opacity-80 sm:opacity-0 group-hover:opacity-100 cursor-pointer ml-1"
+                              title="Bu Bildirimi Kaldır"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

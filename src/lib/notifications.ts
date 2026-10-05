@@ -175,10 +175,31 @@ export const removeLocalNotification = (id: string) => {
   } catch {}
 };
 
+export const clearAllLocalNotifications = () => {
+  try {
+    localStorage.setItem(LOCAL_NOTIFS_KEY, JSON.stringify([]));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('akademi_notifications_updated', { detail: [] }));
+    }
+    if (notificationsChannel) {
+      try {
+        notificationsChannel.postMessage({ type: 'NOTIFICATION_CLEARED_ALL', payload: [] });
+      } catch {}
+    }
+  } catch {}
+};
+
 // Listen to cross-tab BroadcastChannel events for notifications
 if (notificationsChannel) {
   notificationsChannel.onmessage = (event) => {
-    if ((event.data?.type === 'NOTIFICATION_SAVED' || event.data?.type === 'NOTIFICATION_REMOVED') && event.data?.payload) {
+    if (event.data?.type === 'NOTIFICATION_CLEARED_ALL') {
+      try {
+        localStorage.setItem(LOCAL_NOTIFS_KEY, JSON.stringify([]));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('akademi_notifications_updated', { detail: [] }));
+        }
+      } catch {}
+    } else if ((event.data?.type === 'NOTIFICATION_SAVED' || event.data?.type === 'NOTIFICATION_REMOVED') && event.data?.payload) {
       const updated = event.data.payload as AppNotification[];
       try {
         localStorage.setItem(LOCAL_NOTIFS_KEY, JSON.stringify(updated));
@@ -240,6 +261,20 @@ export const removeCloudNotification = async (id: string): Promise<boolean> => {
     console.warn('Bildirim buluttan silinemedi (yerel listeden kaldırıldı):', e);
     return true;
   }
+};
+
+// Clear all notifications locally and from Firestore
+export const clearAllNotifications = async (notificationsToClear: AppNotification[] = [], isAdmin = false): Promise<boolean> => {
+  clearAllLocalNotifications();
+  if (isAdmin && !checkIsQuotaExceededToday()) {
+    try {
+      const deletePromises = notificationsToClear.slice(0, 25).map(n => deleteDoc(doc(db, 'notifications', n.id)).catch(() => {}));
+      await Promise.allSettled(deletePromises);
+    } catch (e) {
+      console.warn('Toplu bildirim silme uyarısı:', e);
+    }
+  }
+  return true;
 };
 
 // Firestore helper: mark notification as read
