@@ -30,16 +30,8 @@ const getClassBadgeColor = (className?: string) => {
 
 export const HallsView = () => {
   const { state, setExamHalls, userRole } = useAppContext();
-  // Admin kullanıcılarda varsayılan olarak "Yönetici Modu", Öğretmenlerde ise "Öğretmen Görünümü" açılır
-  const [viewMode, setViewMode] = useState<'teacher' | 'admin'>(() => {
-    return userRole === 'admin' ? 'admin' : 'teacher';
-  });
-
-  useEffect(() => {
-    setViewMode(userRole === 'admin' ? 'admin' : 'teacher');
-  }, [userRole]);
-
-  const isReadOnly = userRole !== 'admin' || viewMode === 'teacher';
+  // Adminler yönetici modunda tam yetkilidir, öğretmenler ise salt-okunur moddadır
+  const isReadOnly = userRole !== 'admin';
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHallId, setEditingHallId] = useState<string | null>(null);
@@ -776,48 +768,14 @@ export const HallsView = () => {
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-          {userRole === 'admin' ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Görünüm Değiştirici: Yönetici Modu (Admin için varsayılan) vs Öğretmen Görünümü */}
-              <div className="flex items-center bg-[#FAF9F6] p-1 rounded-2xl border border-brand-border/80 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('admin')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    viewMode === 'admin'
-                      ? 'bg-[#151618] text-white shadow-xs'
-                      : 'text-brand-ink/70 hover:text-brand-ink hover:bg-black/5'
-                  }`}
-                  title="Yönetici modu: Salon ve oturma düzeni oluşturma/düzenleme"
-                >
-                  <LayoutTemplate className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Yönetici Modu</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('teacher')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    viewMode === 'teacher'
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'text-brand-ink/70 hover:text-brand-ink hover:bg-black/5'
-                  }`}
-                  title="Öğretmenlerin gördüğü salt-okunur önizleme modu"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Öğretmen Görünümü</span>
-                </button>
-              </div>
-
-              {viewMode === 'admin' && (
-                <button 
-                  onClick={openNewModal} 
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#151618] hover:bg-black text-white text-xs sm:text-sm font-bold rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer"
-                >
-                  <Plus className="h-4 w-4 text-amber-400" />
-                  <span>Yeni Salon Oluştur</span>
-                </button>
-              )}
-            </div>
+          {!isReadOnly ? (
+            <button 
+              onClick={openNewModal} 
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#151618] hover:bg-black text-white text-xs sm:text-sm font-bold rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer"
+            >
+              <Plus className="h-4 w-4 text-amber-400" />
+              <span>Yeni Salon Oluştur</span>
+            </button>
           ) : (
             <div className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-indigo-50 to-indigo-100/60 text-indigo-900 border border-indigo-200/90 rounded-xl text-xs font-bold shrink-0 shadow-2xs">
               <Eye className="w-4 h-4 text-indigo-600 shrink-0" />
