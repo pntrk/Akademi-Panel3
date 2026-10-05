@@ -126,13 +126,13 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
     return `${todayDateStr} ${cleanRaw}`;
   }, [lastDriveSyncedAt, state?.lastPublishedAt]);
 
-  // Auto-refresh role if in guest mode (fast 3-second check for instant entry once admin approves)
+  // Auto-refresh role if in guest mode (gentle 30-second fallback; instant update is already handled by onSnapshot)
   useEffect(() => {
     if (userRole === 'guest') {
       if (checkIsQuotaExceededToday()) return;
       const interval = setInterval(() => {
         checkAndRefreshRole().catch(() => {});
-      }, 3000);
+      }, 30000);
       return () => clearInterval(interval);
     }
   }, [userRole, checkAndRefreshRole]);
@@ -152,15 +152,6 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
       return;
     }
   }, [userRole, activeTab]);
-
-  // Automatic live polling for guest approval status every 3 seconds
-  useEffect(() => {
-    if (userRole !== 'guest') return;
-    const interval = setInterval(() => {
-      checkAndRefreshRole().catch(() => {});
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [userRole, checkAndRefreshRole]);
 
   // 1. GUEST USER: Immediately show "Erişim İsteğiniz Alındı - Yönetici Onayı Bekleniyor" screen!
   if (userRole === 'guest') {

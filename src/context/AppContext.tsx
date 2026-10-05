@@ -436,7 +436,14 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   const [state, setState] = useState<AppState>(loadInitialState);
   const stateRef = useRef<AppState>(state);
   const lastSavedPayloadRef = useRef<string>('');
-  const lastSavedModuleHashesRef = useRef<Record<string, string>>({});
+  const lastSavedModuleHashesRef = useRef<Record<string, string>>((() => {
+    try {
+      const saved = localStorage.getItem('akademi_firestore_module_hashes');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  })());
   const debounceTimerRef = useRef<any>(null);
   const isQuotaExceededRef = useRef(isInitialQuotaExceeded);
   const hasSentGuestRequestRef = useRef(false);
@@ -1116,8 +1123,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       const remoteHashes: Record<string, string> = meta.moduleHashes || {};
       const localHashes = lastTeacherModuleHashesRef.current || {};
 
-      // Modules relevant to teacher / viewer roles
-      const teacherTargetModules = ['halls', 'results', 'league', 'exams', 'students'];
+      // Modules relevant to teacher / viewer roles (Only the 3 display menus plus minimal exams)
+      const teacherTargetModules = ['halls', 'results', 'league', 'exams'];
       const changedModules = teacherTargetModules.filter(m => {
         const rH = remoteHashes[m];
         const lH = localHashes[m];
@@ -1366,12 +1373,15 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
       setSyncStatus('saving');
 
-      // 1. Primary: Write subcollections to Modular Firestore (schools/main/modules/*)
+      // 1. Primary: Write subcollections to Modular Firestore (schools/main/modules/*) with diff detection
       if (!checkIsQuotaExceededToday() && !isQuotaExceededRef.current) {
         try {
-          const modRes = await writeModularSchoolState(db, cleanState, lastSavedModuleHashesRef.current, 'main', true);
+          const modRes = await writeModularSchoolState(db, cleanState, lastSavedModuleHashesRef.current, 'main', forceRetry);
           if (modRes.success) {
             lastSavedModuleHashesRef.current = modRes.newHashes;
+            try {
+              localStorage.setItem('akademi_firestore_module_hashes', JSON.stringify(modRes.newHashes));
+            } catch {}
           }
         } catch (fsErr: any) {
           const errStr = String(fsErr?.message || fsErr || '');

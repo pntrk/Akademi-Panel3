@@ -984,7 +984,6 @@ export const writeModularSchoolState = async (
   }));
 
   const modulesData: Record<string, any> = {
-    students: { students: safeState.students || [] },
     exams: { exams: safeState.exams || [] },
     results: { 
       results: isSmallResults ? safeState.results || [] : [],
@@ -993,7 +992,6 @@ export const writeModularSchoolState = async (
       isPartitioned: true,
       updatedAt: new Date().toISOString()
     },
-    budget: { budget: safeState.budget || { incomes: [], expenses: [], debts: [] } },
     halls: { examHalls: safeState.examHalls || [] },
     league: {
       leagueMentors: safeState.leagueMentors || {},
@@ -1029,30 +1027,27 @@ export const writeModularSchoolState = async (
   try {
     const promises: Promise<void>[] = [];
 
-    // Always write complete root school document without unbounded results array to protect 1MB limit
-    const rootSchoolRef = doc(dbInstance, 'schools', schoolId);
-    promises.push(setDoc(rootSchoolRef, deepCleanForFirestore({
+    // Lightweight root school document without dumping raw students or sensitive budget (stored in Google Drive)
+    const rootPayload = deepCleanForFirestore({
       name: "Kırklareli Atatürk Ortaokulu",
       version: safeState.version || 1,
       lastPublishedAt: safeState.lastPublishedAt || new Date().toISOString(),
       lastPublishedBy: safeState.lastPublishedBy || 'admin',
       admins: safeState.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
       teachers: safeState.teachers || [],
-      students: safeState.students || [],
-      exams: safeState.exams || [],
-      results: isSmallResults ? safeState.results || [] : [],
-      resultCount: allResults.length,
-      examHalls: safeState.examHalls || [],
-      budget: safeState.budget || { incomes: [], expenses: [], debts: [] },
-      leagueMentors: safeState.leagueMentors || {},
-      leagueTeamPoints: safeState.leagueTeamPoints || {},
-      approvedTransfers: safeState.approvedTransfers || [],
       studentCount: safeState.students?.length || 0,
       examCount: safeState.exams?.length || 0,
       hallCount: safeState.examHalls?.length || 0,
+      resultCount: allResults.length,
       canonicalDriveFileId: safeState.canonicalDriveFileId || null,
       canonicalDriveFileLink: safeState.canonicalDriveFileLink || null
-    }), { merge: true }));
+    });
+    const rootPayloadStr = JSON.stringify(rootPayload);
+    if (forceAll || lastHashes['root_school'] !== rootPayloadStr) {
+      const rootSchoolRef = doc(dbInstance, 'schools', schoolId);
+      promises.push(setDoc(rootSchoolRef, rootPayload, { merge: true }));
+      newHashes['root_school'] = rootPayloadStr;
+    }
 
     // Write partitioned exam results to schools/{schoolId}/exam_results/{examId}
     for (const [examKey, examGroup] of Object.entries(resultsByExam)) {
