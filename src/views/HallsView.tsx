@@ -1179,7 +1179,7 @@ export const HallsView = () => {
       )}
 
       {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 pb-2 border-b border-brand-border/60">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-2.5 border-b border-brand-border/60">
         <div>
           <h2 className="text-xl sm:text-2xl font-serif text-brand-ink font-bold tracking-tight">
             Salonlar & Oturma Planı
@@ -1238,9 +1238,9 @@ export const HallsView = () => {
 
           {isReadOnly && (
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-gradient-to-r from-indigo-50 to-indigo-100/70 text-indigo-900 border border-indigo-200/90 rounded-xl text-[11px] sm:text-xs font-bold shrink-0 shadow-2xs">
-                <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                <span>Gözetmen Öğretmen Paneli</span>
+              <div className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-indigo-50 to-indigo-100/70 text-indigo-950 border border-indigo-200/90 rounded-xl text-[11px] sm:text-xs font-bold shrink-0 shadow-2xs">
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="truncate">Gözetmen Paneli</span>
               </div>
               <button
                 type="button"
@@ -1257,80 +1257,80 @@ export const HallsView = () => {
                   }
                 }}
                 disabled={isRefreshingDrive}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[11px] sm:text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[11px] sm:text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer disabled:opacity-50 touch-manipulation"
                 title="Google Drive üzerindeki güncel kütükten salonları ve öğrencileri çek"
               >
                 <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isRefreshingDrive ? 'animate-spin' : ''}`} />
-                <span>{isRefreshingDrive ? 'Eşitleniyor...' : 'Drive Kütüğünü Yenile'}</span>
+                <span className="truncate">{isRefreshingDrive ? 'Eşitleniyor...' : 'Kütüğü Yenile'}</span>
               </button>
             </div>
           )}
         </div>
       </header>
 
-      {/* Summary Stats (Mobile Optimized Grid) */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-5 animate-fade-in">
+      {/* Summary Stats (Mobile Optimized Responsive Grid) */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-5 animate-fade-in">
         {/* Stat 1: Toplam Salon */}
-        <div className="bg-white p-2.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
+        <div className="bg-white p-3 sm:p-4 md:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
           <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-            <span className="text-[9px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
+            <span className="text-[10px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
               Toplam Salon
             </span>
-            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100 group-hover:scale-105 transition-transform">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100 group-hover:scale-105 transition-transform">
               <Building className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1 sm:gap-1.5">
-            <span className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalHalls}</span>
+            <span className="font-serif text-xl sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalHalls}</span>
             <span className="text-[10px] sm:text-xs text-brand-ink/50 font-medium">salon</span>
           </div>
         </div>
 
         {/* Stat 2: Toplam Kapasite */}
-        <div className="bg-white p-2.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
+        <div className="bg-white p-3 sm:p-4 md:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-indigo-300 group">
           <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-            <span className="text-[9px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
+            <span className="text-[10px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
               Toplam Kapasite
             </span>
-            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 border border-sky-100 group-hover:scale-105 transition-transform">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 border border-sky-100 group-hover:scale-105 transition-transform">
               <LayoutTemplate className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1 sm:gap-1.5">
-            <span className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalCapacity}</span>
+            <span className="font-serif text-xl sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalCapacity}</span>
             <span className="text-[10px] sm:text-xs text-brand-ink/50 font-medium">sıra</span>
           </div>
         </div>
 
         {/* Stat 3: Yerleşen Öğrenci */}
-        <div className="bg-white p-2.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-emerald-300 group">
+        <div className="bg-white p-3 sm:p-4 md:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-emerald-300 group">
           <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-            <span className="text-[9px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
+            <span className="text-[10px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
               Yerleşen Öğrenci
             </span>
-            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100 group-hover:scale-105 transition-transform">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100 group-hover:scale-105 transition-transform">
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1 sm:gap-1.5">
-            <span className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalSeated}</span>
+            <span className="font-serif text-xl sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">{summaryStats.totalSeated}</span>
             <span className="text-[10px] sm:text-xs text-brand-ink/50 font-medium">öğrenci</span>
           </div>
         </div>
 
         {/* Stat 4: Doluluk Oranı */}
-        <div className="bg-white p-2.5 sm:p-4 md:p-5 border border-brand-border/70 rounded-xl sm:rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-amber-300 group">
+        <div className="bg-white p-3 sm:p-4 md:p-5 border border-brand-border/70 rounded-2xl shadow-2xs hover:shadow-xs flex flex-col justify-between transition-all hover:border-amber-300 group">
           <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-            <span className="text-[9px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
+            <span className="text-[10px] sm:text-xs font-bold text-brand-ink/60 uppercase tracking-wider truncate">
               Doluluk Oranı
             </span>
-            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100 group-hover:scale-105 transition-transform">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100 group-hover:scale-105 transition-transform">
               <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1.5">
             <div className="flex items-baseline gap-1 sm:gap-1.5">
-              <span className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">%{summaryStats.occupancyRate}</span>
+              <span className="font-serif text-xl sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">%{summaryStats.occupancyRate}</span>
               <span className="text-[10px] sm:text-xs text-brand-ink/50 font-medium">doluluk</span>
             </div>
             <div className="w-full bg-[#FAF9F6] h-2 rounded-full overflow-hidden border border-brand-border/50 p-0.5 shadow-2xs">
