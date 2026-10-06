@@ -127,22 +127,29 @@ export const listBackupsFromGoogleDrive = async (): Promise<DriveBackupItem[]> =
 
 export const downloadBackupFromGoogleDrive = async (fileId: string): Promise<any> => {
   let token = await ensureDriveAccessToken();
-  let response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
-    headers: { Authorization: `Bearer ${token}` }
+  const cacheBuster = `&_ts=${Date.now()}`;
+  let response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true${cacheBuster}`, {
+    headers: { 
+      Authorization: `Bearer ${token}`,
+      'Cache-Control': 'no-cache, no-store'
+    }
   });
 
   if (response.status === 401 || response.status === 403) {
     const freshToken = await connectGoogleDrive(false, true);
     if (freshToken) {
       token = freshToken;
-      response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
-        headers: { Authorization: `Bearer ${token}` }
+      response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true${cacheBuster}`, {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Cache-Control': 'no-cache, no-store'
+        }
       });
     }
   }
 
   if (!response.ok) {
-    throw new Error(`Google Drive'dan yedek indirilemedi (Durum: ${response.status})`);
+    throw new Error(`Google Drive'dan kütük indirilemedi (Durum: ${response.status})`);
   }
 
   return await response.json();
@@ -500,18 +507,28 @@ export const findLiveMasterDriveFile = async (
       knownMeta = await getDriveFileMetadata(knownId, token);
       if (knownMeta && !knownMeta.trashed) {
         const knownScore = calculateFileScore(knownMeta);
+        const knownTime = knownMeta.modifiedTime ? new Date(knownMeta.modifiedTime).getTime() : 0;
         const topCandidate = candidateFiles[0];
 
-        // If topCandidate has a much higher score (e.g. "akademi panel" file found in Shared With Me)
-        if (topCandidate && calculateFileScore(topCandidate) > knownScore + 300 && topCandidate.id !== knownMeta.id) {
-          const webLink = topCandidate.webViewLink || `https://drive.google.com/file/d/${topCandidate.id}/view`;
-          setLiveMasterFileId(topCandidate.id, webLink);
-          return {
-            id: topCandidate.id,
-            name: topCandidate.name,
-            modifiedTime: topCandidate.modifiedTime,
-            webViewLink: webLink
-          };
+        // Always check if candidateFiles has a NEWER or BETTER-SCORING file
+        if (topCandidate && topCandidate.id !== knownMeta.id) {
+          const topScore = calculateFileScore(topCandidate);
+          const topTime = topCandidate.modifiedTime ? new Date(topCandidate.modifiedTime).getTime() : 0;
+
+          // Switch to topCandidate if it is newer in time or has higher/equal relevance score
+          const isTopCandidateNewer = topTime > knownTime + 1000 && topScore >= knownScore - 200;
+          const isTopCandidateBetterScore = topScore > knownScore + 100;
+
+          if (isTopCandidateNewer || isTopCandidateBetterScore) {
+            const webLink = topCandidate.webViewLink || `https://drive.google.com/file/d/${topCandidate.id}/view`;
+            setLiveMasterFileId(topCandidate.id, webLink);
+            return {
+              id: topCandidate.id,
+              name: topCandidate.name,
+              modifiedTime: topCandidate.modifiedTime,
+              webViewLink: webLink
+            };
+          }
         }
 
         if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink);

@@ -738,7 +738,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
 
       setDriveStartupStatusText('Google Drive üzerindeki kütük dosyaları taranıyor...');
-      const file = await findLiveMasterDriveFile(token);
+      const file = await findLiveMasterDriveFile(token, null, true);
       if (!file?.id) {
         console.warn('Google Drive açılış kontrolü: Canlı kütük dosyası bulunamadı.');
         return false;
