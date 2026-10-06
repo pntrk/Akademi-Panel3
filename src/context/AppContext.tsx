@@ -738,7 +738,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
 
       setDriveStartupStatusText('Google Drive üzerindeki kütük dosyaları taranıyor...');
-      const file = await findLiveMasterDriveFile(token);
+      const file = await findLiveMasterDriveFile(token, null, true);
       if (!file?.id) {
         console.warn('Google Drive açılış kontrolü: Canlı kütük dosyası bulunamadı.');
         return false;
@@ -865,11 +865,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   const connectDriveAndHydrateOnStartup = async (): Promise<boolean> => {
     setIsConnectingDriveStartup(true);
-    setDriveStartupStatusText('Google Drive hesabına bağlanılıyor...');
+    setDriveStartupStatusText('Google Drive izin penceresi açılıyor...');
     try {
       const token = await connectGoogleDrive(false, true);
       if (!token) {
-        setDriveStartupStatusText('Google Drive bağlantısı onaylanamadı. Lütfen tekrar deneyiniz.');
+        setDriveStartupStatusText('Google Drive izin penceresi onaylanmadı veya kapatıldı. "Google Drive\'a Bağlan" butonuna tekrar basarak izni onaylayabilirsiniz.');
         setIsConnectingDriveStartup(false);
         return false;
       }
@@ -898,7 +898,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
     } catch (e: any) {
       console.warn('Connect drive and hydrate error:', e);
-      setDriveStartupStatusText('Bağlantı hatası: ' + (e?.message || 'Drive bağlantısı kurulamadı.'));
+      const msg = e?.message || 'Drive bağlantısı kurulamadı.';
+      setDriveStartupStatusText('Bağlantı uyarısı: ' + msg);
       setIsConnectingDriveStartup(false);
       return false;
     }
