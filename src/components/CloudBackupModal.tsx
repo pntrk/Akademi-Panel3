@@ -358,21 +358,28 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     }
   };
 
-  // 3. ADMIN ACTION: Publish to Teachers (Firebase)
+  // 3. ADMIN ACTION: Publish to Teachers (Direct Google Drive Master)
   const handlePublishToTeachers = async () => {
     if (!isAdmin) return;
     setIsPublishingToTeachers(true);
     setFeedback(null);
     try {
-      await saveNow();
-      setFeedback({
-        type: 'success',
-        message: 'Tüm güncellemeler Firebase üzerine başarıyla aktarıldı. Öğretmenlerin panellerine anında yansıtıldı!'
-      });
+      const res = await publishToTeachersNow();
+      if (res.success) {
+        setFeedback({
+          type: 'success',
+          message: `✓ Tüm güncellemeler Google Drive canlı kütüğüne aktarıldı (${res.publishedDate}). Öğretmen panellerine 0 Firebase kotası ile doğrudan iletildi!`
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          message: res.error || 'Google Drive yayını yapılırken bir hata oluştu.'
+        });
+      }
     } catch (err: any) {
       setFeedback({
         type: 'error',
-        message: err?.message || 'Firebase yayını yapılırken bir hata oluştu.'
+        message: err?.message || 'Google Drive yayını yapılırken bir hata oluştu.'
       });
     } finally {
       setIsPublishingToTeachers(false);
@@ -978,20 +985,20 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                 </div>
               </div>
 
-              {/* PILLAR 2: FIREBASE (ÖĞRETMENLERE YAYINLAMA) */}
-              <div className="bg-gradient-to-br from-amber-50/80 via-white to-orange-50/30 rounded-2xl p-4 sm:p-5 border border-amber-200 shadow-2xs space-y-3">
+              {/* PILLAR 2: GOOGLE DRIVE (ÖĞRETMENLERE YAYINLAMA) */}
+              <div className="bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/30 rounded-2xl p-4 sm:p-5 border border-emerald-200 shadow-2xs space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
-                      <UploadCloud className="w-5 h-5" />
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                      <Radio className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-sm text-amber-950 font-serif">
-                          2. Firebase — Öğretmen Kullanıcılara Yayınlama
+                        <h3 className="font-bold text-sm text-emerald-950 font-serif">
+                          2. Google Drive — Öğretmen Kullanıcılara Yayınlama (0 Firebase Kotası)
                         </h3>
                         {hasPendingChanges ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 animate-pulse">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 border border-emerald-300 animate-pulse">
                             {pendingSyncCount} Değişiklik Yayına Hazır
                           </span>
                         ) : (
@@ -1000,8 +1007,8 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-amber-900 mt-1 leading-relaxed">
-                        İdarecilerin girdiği öğrenci kütüğü, deneme sınavları ve optik sonuçlar bu butona basıldığında Firebase'e yüklenir ve <strong>öğretmenlerin ekranına anında yansır.</strong>
+                      <p className="text-[11px] text-emerald-900 mt-1 leading-relaxed">
+                        İdarecilerin girdiği öğrenci kütüğü, deneme sınavları, salon yerleşimleri ve optik sonuçlar doğrudan <strong>Google Drive canlı kütük dosyasına</strong> aktarılır. Öğretmenler verileri doğrudan Google Drive üzerinden çeker (Firebase kotası harcamaz).
                       </p>
                     </div>
                   </div>
@@ -1009,26 +1016,26 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                   <button
                     onClick={handlePublishToTeachers}
                     disabled={isPublishingToTeachers}
-                    className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0 active:scale-95"
-                    title="Firebase üzerinden herkesin görebileceği şekilde yayınla"
+                    className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0 active:scale-95"
+                    title="Google Drive canlı kütüğünü öğretmenlerin okumasına aç"
                   >
-                    <UploadCloud className={`w-4 h-4 ${isPublishingToTeachers ? 'animate-bounce' : ''}`} />
-                    <span>{isPublishingToTeachers ? 'Yayınlanıyor...' : 'Yayınla (Firebase)'}</span>
+                    <Radio className={`w-4 h-4 ${isPublishingToTeachers ? 'animate-pulse' : ''}`} />
+                    <span>{isPublishingToTeachers ? 'Yayınlanıyor...' : 'Öğretmene Yayınla (Google Drive)'}</span>
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-amber-200/60 text-xs">
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200/50">
-                    <span className="text-[10px] text-amber-700 font-semibold block">Yayın Tetikleme</span>
-                    <span className="font-bold text-amber-950">Yalnızca Manuel Buton</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-200/60 text-xs">
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200/50">
+                    <span className="text-[10px] text-emerald-700 font-semibold block">Yayın Deposu</span>
+                    <span className="font-bold text-emerald-950">Google Drive Canlı JSON</span>
                   </div>
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200/50">
-                    <span className="text-[10px] text-amber-700 font-semibold block">Son Yayın Zamanı</span>
-                    <span className="font-bold text-amber-950">{lastSyncedAt || 'Henüz yayınlanmadı'}</span>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200/50">
+                    <span className="text-[10px] text-emerald-700 font-semibold block">Son Yayın Zamanı</span>
+                    <span className="font-bold text-emerald-950">{lastTeacherPublishedDate || lastSyncedAt || 'Henüz yayınlanmadı'}</span>
                   </div>
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200/50">
-                    <span className="text-[10px] text-amber-700 font-semibold block">Öğretmen Yetkisi</span>
-                    <span className="font-bold text-amber-950">Otomatik Salt-Okunur İndirme</span>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200/50">
+                    <span className="text-[10px] text-emerald-700 font-semibold block">Öğretmen Kotası</span>
+                    <span className="font-bold text-emerald-950">0 Firebase Kotası (Limitsiz)</span>
                   </div>
                 </div>
               </div>
