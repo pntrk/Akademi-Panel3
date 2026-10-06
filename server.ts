@@ -108,7 +108,12 @@ app.get('/api/drive-proxy', async (req, res) => {
         const driveRes = await fetch(url);
         if (driveRes.ok) {
           const json = await driveRes.json();
-          return res.json({ success: true, data: json });
+          // Unwrap if nested
+          let cleanData = json;
+          if (json && json.data && (Array.isArray(json.data.students) || Array.isArray(json.data.exams) || Array.isArray(json.data.examHalls))) {
+            cleanData = json.data;
+          }
+          return res.json({ success: true, data: cleanData, raw: json });
         }
       } catch {}
     }

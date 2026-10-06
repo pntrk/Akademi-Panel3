@@ -1202,6 +1202,33 @@ export const publishToTeachers = async (
   }
 };
 
+export const unwrapSchoolStatePayload = (raw: any): any => {
+  if (!raw || typeof raw !== 'object') return null;
+  let curr = raw;
+  // If wrapped in API success envelope { success: true, data: ... }
+  if (curr.success && curr.data) {
+    curr = curr.data;
+  }
+  // If payload structure is { appName: '...', data: { students: [...] } }
+  if (curr && curr.data && (Array.isArray(curr.data.students) || Array.isArray(curr.data.exams) || Array.isArray(curr.data.examHalls))) {
+    return curr.data;
+  }
+  if (curr && curr.appState && (Array.isArray(curr.appState.students) || Array.isArray(curr.appState.exams) || Array.isArray(curr.appState.examHalls))) {
+    return curr.appState;
+  }
+  if (Array.isArray(curr.students) || Array.isArray(curr.exams) || Array.isArray(curr.examHalls)) {
+    return curr;
+  }
+  // Try 2-levels deep if double wrapped
+  if (curr && typeof curr === 'object' && curr.data && typeof curr.data === 'object') {
+    const deeper = curr.data;
+    if (deeper.data && (Array.isArray(deeper.data.students) || Array.isArray(deeper.data.exams) || Array.isArray(deeper.data.examHalls))) {
+      return deeper.data;
+    }
+  }
+  return curr.data || curr.appState || curr;
+};
+
 /**
  * Fast-path teacher data fetcher:
  * 1. Tries Express server /api/teacher-data (RAM cache, <50ms, 0 Firestore reads).
@@ -1256,9 +1283,9 @@ export const fetchTeacherBroadcastData = async (
           const driveRes = await fetch(url);
           if (driveRes.ok) {
             const raw = await driveRes.json();
-            const targetData = raw.data || raw.appState || raw;
-            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || Array.isArray(targetData.results))) {
-              const publishedDate = raw.publishedDateFormatted || targetData.lastTeacherPublishedDate || targetData.lastPublishedAt;
+            const targetData = unwrapSchoolStatePayload(raw);
+            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || Array.isArray(targetData.examHalls) || Array.isArray(targetData.results))) {
+              const publishedDate = raw.publishedDateFormatted || raw.data?.publishedDateFormatted || targetData.lastTeacherPublishedDate || targetData.lastPublishedAt;
               if (publishedDate) setLastTeacherPublishedDate(publishedDate);
               if (targetId) setLiveMasterFileId(targetId);
               return {
