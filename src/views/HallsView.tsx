@@ -1142,7 +1142,7 @@ export const HallsView = () => {
       )}
 
       {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-1 border-b border-brand-border/60">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 pb-2 border-b border-brand-border/60">
         <div>
           <h2 className="text-xl sm:text-2xl font-serif text-brand-ink font-bold tracking-tight">
             Salonlar & Oturma Planı
@@ -1154,14 +1154,16 @@ export const HallsView = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end shrink-0 flex-wrap sm:flex-nowrap">
           {/* Yalnızca Yönetici / Admin Panelinde Manuel Takvim Değiştirme Görüntüsü */}
           {!isReadOnly && (
-            <div className="flex items-center gap-1.5 bg-white border border-brand-border/80 px-2.5 py-1.5 rounded-xl shadow-2xs text-xs">
-              <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-              <span className="text-[11px] font-bold text-brand-ink/70">
-                {simulationDateStr ? 'Test Tarihi:' : 'Takvim Tarihi:'}
-              </span>
+            <div className="flex items-center justify-between gap-1.5 bg-white border border-brand-border/80 px-3 py-2 sm:px-2.5 sm:py-1.5 rounded-xl shadow-2xs text-xs w-full sm:w-auto">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="text-[11px] font-bold text-brand-ink/70">
+                  {simulationDateStr ? 'Test Tarihi:' : 'Takvim Tarihi:'}
+                </span>
+              </div>
               <select
                 value={simulationDateStr}
                 onChange={(e) => setSimulationDateStr(e.target.value)}
@@ -1190,7 +1192,7 @@ export const HallsView = () => {
           {!isReadOnly && (
             <button 
               onClick={openNewModal} 
-              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#151618] hover:bg-black text-white rounded-xl text-xs font-bold active:scale-95 shadow-xs transition-all cursor-pointer"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#151618] hover:bg-black text-white rounded-xl text-xs font-bold active:scale-95 shadow-xs transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4 text-amber-400" />
               <span>Yeni Salon Oluştur</span>
@@ -1198,8 +1200,8 @@ export const HallsView = () => {
           )}
 
           {isReadOnly && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-indigo-100/70 text-indigo-900 border border-indigo-200/90 rounded-xl text-xs font-bold shrink-0 shadow-2xs">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-gradient-to-r from-indigo-50 to-indigo-100/70 text-indigo-900 border border-indigo-200/90 rounded-xl text-[11px] sm:text-xs font-bold shrink-0 shadow-2xs">
                 <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
                 <span>Gözetmen Öğretmen Paneli</span>
               </div>
@@ -1218,7 +1220,7 @@ export const HallsView = () => {
                   }
                 }}
                 disabled={isRefreshingDrive}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[11px] sm:text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
                 title="Google Drive üzerindeki güncel kütükten salonları ve öğrencileri çek"
               >
                 <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isRefreshingDrive ? 'animate-spin' : ''}`} />
@@ -1305,7 +1307,7 @@ export const HallsView = () => {
       </section>
 
       {/* Sınav Günü / Önizleme Modu Bilgilendirme Çubuğu */}
-      {examsOnSelectedDate.length > 0 ? (
+      {examsOnSelectedDate.length > 0 && (
         <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-500/15 via-indigo-500/10 to-emerald-500/10 border border-amber-300 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
@@ -1330,26 +1332,7 @@ export const HallsView = () => {
             Öğretmenler salon kartlarındaki <strong className="text-indigo-800">"Yoklama Al"</strong> butonuyla devamsız öğrencileri işaretleyip idareye anlık bildirebilir. Oturma düzeni kilitlidir.
           </div>
         </div>
-      ) : isReadOnly ? (
-        <div className="p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-white border border-brand-border/70 shadow-2xs flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 border border-indigo-100">
-              <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-bold text-brand-ink">Önizleme Modu (Oturma Planı Kilitli)</span>
-                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">Salt Okunur</span>
-              </div>
-              <p className="text-[11px] text-brand-ink/60 truncate mt-0.5">Bugün sınav günü değildir. Salonları ve yerleşimleri inceleyebilirsiniz; sınav salonuna müdahale edilemez.</p>
-            </div>
-          </div>
-          <span className="text-[10px] font-bold px-2 py-1 bg-gray-100 text-gray-700 border border-gray-200 rounded-lg shrink-0 hidden sm:inline-flex items-center gap-1">
-            <Lock className="w-3 h-3 text-gray-500" />
-            Düzenleme Kapalı
-          </span>
-        </div>
-      ) : null}
+      )}
 
       {/* Halls Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5 overflow-auto pb-10">
