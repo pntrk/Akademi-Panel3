@@ -1254,22 +1254,14 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         setLoading(false);
       }
     } else {
-      // 3. If TEACHER: Zero Firebase quota! Hydrate published master backup from Express Server RAM cache or Google Drive direct link
+      // 3. If TEACHER: Zero Firebase quota! Download directly from Google Drive master file
       setLoading(true);
       setIsInitialHydrating(true);
       setIsWaitingForDriveAuth(false);
-      setDriveStartupStatusText('Yönetim tarafından yayınlanmış güncel sınav verileri yükleniyor...');
-      fetchTeacherBroadcastData(stateRef.current.canonicalDriveFileId).then((res) => {
+      setDriveStartupStatusText('Google Drive üzerindeki güncel okul kütüğü indiriliyor...');
+      fetchTeacherDataNow().then((res) => {
         if (res.success && res.data) {
-          const safeData = sanitizeSchoolState(res.data);
-          setState(safeData);
-          stateRef.current = safeData;
-          if (res.publishedDate) {
-            setLastTeacherPublishedDateState(res.publishedDate);
-          }
-          try {
-            localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
-          } catch {}
+          // Success
         }
       }).catch((err) => {
         console.warn('Teacher broadcast initial fetch note:', err);
@@ -1435,158 +1427,25 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   })());
 
-  // Selective delta synchronization for teachers & guests:
-  // 1. Checks meta document only (1 read or 0 if from onSnapshot).
-  // 2. If hashes match local cache -> 0 reads! (Instant response from localStorage).
-  // 3. If any of ['halls', 'results', 'league', 'exams', 'students'] changed -> only downloads that specific doc.
-  const syncTeacherDelta = async (injectedMeta?: any): Promise<boolean> => {
+  // Google Drive fast synchronization for teachers & viewers (0 Firestore Quota):
+  const syncTeacherDelta = async (_injectedMeta?: any): Promise<boolean> => {
     if (userRole !== 'teacher' && userRole !== 'guest') return false;
-    if (checkIsQuotaExceededToday() || isQuotaExceededRef.current) return false;
-
     try {
-      // Step 1: Read ONLY meta document (1 read, or 0 if injected from onSnapshot)
-      const meta = injectedMeta || (await fetchSchoolMeta(db, 'main'));
-      if (!meta) return false;
-
-      const remoteVer = Number(meta.version) || 0;
-      const remoteHashes: Record<string, string> = meta.moduleHashes || {};
-      const localHashes = lastTeacherModuleHashesRef.current || {};
-
-      // Modules relevant to teacher / viewer roles (Only the 3 display menus plus minimal exams)
-      const teacherTargetModules = ['halls', 'results', 'league', 'exams'];
-      const changedModules = teacherTargetModules.filter(m => {
-        const rH = remoteHashes[m];
-        const lH = localHashes[m];
-        // If remote has a hash for this module and it doesn't match our local hash, it needs update!
-        return rH && rH !== lH;
-      });
-
-      // If local state is completely empty or initial, fetch all target modules
-      const isLocalEmpty = !stateRef.current.students || stateRef.current.students.length <= 1;
-      const modulesToFetch = isLocalEmpty 
-        ? teacherTargetModules 
-        : changedModules;
-
-      // If nothing changed and local state has data, WE ARE 100% UP TO DATE! (0 reads!)
-      if (modulesToFetch.length === 0 && !isLocalEmpty) {
-        setSyncStatus('synced');
-        setPendingSyncCount(0);
-        setLastSyncedAt(new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
-        return true;
-      }
-
-      // Step 2: Fetch ONLY the changed modules (exactly 1 read per changed module!)
-      const selectiveData = await fetchTeacherSelectiveModules(db, modulesToFetch, 'main');
-      if (Object.keys(selectiveData).length === 0 && !isLocalEmpty) {
-        return false;
-      }
-
-      // Step 3: Merge updated modules into current local state
-      setState(prev => {
-        const next: any = { ...prev };
-        if (selectiveData.halls?.examHalls) {
-          next.examHalls = selectiveData.halls.examHalls;
-        }
-        if (selectiveData.results?.results) {
-          next.results = selectiveData.results.results;
-        }
-        if (selectiveData.exam_results_partitions) {
-          const partitions = selectiveData.exam_results_partitions;
-          next.exams = (next.exams || []).map((ex: any) => {
-            const key = sanitizeDocId(ex.id || ex.name);
-            const part = partitions[key] || Object.values(partitions).find((p: any) => String(p.examId) === String(ex.id) || p.examName === ex.name);
-            if (part && Array.isArray(part.results) && part.results.length > 0) {
-              return {
-                ...ex,
-                results: part.results,
-                participantCount: Math.max(ex.participantCount || 0, part.results.length)
-              };
-            }
-            return ex;
-          });
-        }
-        if (selectiveData.league) {
-          if (selectiveData.league.leagueMentors) next.leagueMentors = selectiveData.league.leagueMentors;
-          if (selectiveData.league.leagueTeamPoints) next.leagueTeamPoints = selectiveData.league.leagueTeamPoints;
-          if (selectiveData.league.approvedTransfers) next.approvedTransfers = selectiveData.league.approvedTransfers;
-          if (selectiveData.league.monthSummaries) next.arenaMonthSummaries = selectiveData.league.monthSummaries;
-        }
-        if (selectiveData.arena_monthly_partitions) {
-          next.arenaMonthlyData = {
-            ...(next.arenaMonthlyData || {}),
-            ...selectiveData.arena_monthly_partitions
-          };
-        }
-        if (selectiveData.exams?.exams) {
-          next.exams = selectiveData.exams.exams;
-        }
-        if (selectiveData.students?.students && selectiveData.students.students.length > 0) {
-          next.students = selectiveData.students.students;
-        }
-        if (meta.admins) next.admins = meta.admins;
-        if (meta.teachers) next.teachers = meta.teachers;
-        next.version = remoteVer || next.version;
-        next.lastPublishedAt = meta.lastPublishedAt || next.lastPublishedAt;
-
-        const sanitized = sanitizeSchoolState(next);
-        stateRef.current = sanitized;
-        try {
-          localStorage.setItem('okulYonetimState', JSON.stringify(sanitized));
-          lastSavedPayloadRef.current = JSON.stringify(sanitized);
-        } catch (e) {}
-        return sanitized;
-      });
-
-      // Update local hashes
-      const updatedHashes = { ...localHashes };
-      modulesToFetch.forEach(m => {
-        if (remoteHashes[m]) {
-          updatedHashes[m] = remoteHashes[m];
-        }
-      });
-      lastTeacherModuleHashesRef.current = updatedHashes;
-      try {
-        localStorage.setItem('akademi_teacher_module_hashes', JSON.stringify(updatedHashes));
-      } catch (e) {}
-
-      // Update role if changed
-      const cleanEmail = (user?.email || '').trim().toLowerCase();
-      const computedRole = evaluateUserRole(cleanEmail, meta.admins || stateRef.current.admins, meta.teachers || stateRef.current.teachers, userRole);
-      setUserRole(computedRole);
-
-      setSyncStatus('synced');
-      setPendingSyncCount(0);
-      setLastSyncedAt(new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
-      return true;
-    } catch (err: any) {
-      console.warn('syncTeacherDelta notice:', err);
+      const res = await fetchTeacherDataNow();
+      return res.success;
+    } catch {
       return false;
     }
   };
 
-  // Manual button / check for teacher updates with informative report
+  // Manual button / check for teacher updates directly from Google Drive
   const checkTeacherUpdatesNow = async (): Promise<{ updated: boolean; changedModules?: string[]; message?: string }> => {
     try {
-      const meta = await fetchSchoolMeta(db, 'main');
-      if (!meta) {
-        return { updated: false, message: 'Bulut sunucusuna ulaşılamadı veya kota koruma modunda.' };
+      const res = await fetchTeacherDataNow();
+      if (res.success) {
+        return { updated: true, message: 'Google Drive üzerindeki en güncel kütük başarıyla eşitlendi.' };
       }
-
-      const remoteHashes: Record<string, string> = meta.moduleHashes || {};
-      const localHashes = lastTeacherModuleHashesRef.current || {};
-      const teacherTargetModules = ['halls', 'results', 'league', 'exams', 'students'];
-      const changed = teacherTargetModules.filter(m => remoteHashes[m] && remoteHashes[m] !== localHashes[m]);
-
-      if (changed.length === 0) {
-        setSyncStatus('synced');
-        return { updated: false, message: 'Verileriniz zaten en güncel versiyonda (0 bayt indirildi).' };
-      }
-
-      const success = await syncTeacherDelta(meta);
-      if (success) {
-        return { updated: true, changedModules: changed, message: `Güncellenen modüller: ${changed.join(', ')}` };
-      }
-      return { updated: false, message: 'Güncelleme alınırken bir sorun oluştu.' };
+      return { updated: false, message: res.error || 'Google Drive kütüğüne ulaşılamadı.' };
     } catch (e: any) {
       return { updated: false, message: e?.message || 'Bağlantı hatası' };
     }
