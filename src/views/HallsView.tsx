@@ -1615,10 +1615,7 @@ export const HallsView = () => {
                         <Eye className="w-4 h-4 text-indigo-600 shrink-0" />
                         <span>Oturma Planını İncele (Önizleme)</span>
                       </div>
-                      <div className="flex items-center gap-1 text-[10px] text-indigo-700 font-semibold bg-white/70 px-2 py-0.5 rounded-lg border border-indigo-200">
-                        <Lock className="w-2.5 h-2.5 text-indigo-500" />
-                        <span>Kilitli</span>
-                      </div>
+                      <ChevronRight className="w-4 h-4 text-indigo-600/70 group-hover:translate-x-0.5 transition-transform" />
                     </button>
                   )
                 ) : (
@@ -1774,10 +1771,6 @@ export const HallsView = () => {
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl shadow-2xs border text-[11px] sm:text-xs font-bold bg-white text-indigo-900">
                           <Eye className="w-3.5 h-3.5 text-indigo-600" />
                           <span>Oturma Planı Önizleme</span>
-                          <span className="text-[9.5px] font-semibold text-brand-ink/60 bg-gray-100 px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
-                            <Lock className="w-2.5 h-2.5 text-gray-500" />
-                            Kilitli
-                          </span>
                         </div>
                       )
                     )}
@@ -2579,7 +2572,7 @@ export const HallsView = () => {
                 <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
                   <div className="hidden sm:block text-xs text-brand-ink/60 font-medium">
                     {isReadOnly 
-                      ? `${seatingPlan.length} öğrenci yerleşimi görüntüleniyor (Önizleme - Kilitli)`
+                      ? `${seatingPlan.length} öğrenci yerleşimi görüntüleniyor (Önizleme)`
                       : 'Değişiklikleri kaydetmek için butonu kullanabilirsiniz.'}
                   </div>
                   
