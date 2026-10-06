@@ -405,7 +405,7 @@ export const HallsView = () => {
     // Otomatik Sınav ve Gün Tespiti:
     // Salona ait bugünkü sınavı veya seçilen sınavı tespit et
     const detectedTodayExam = specificExam || findTodayExamForHall(hall, state.exams, effectiveCalendarDate);
-    const matchedExam = detectedTodayExam || (state.exams.length > 0 ? state.exams[0] : null);
+    const matchedExam = detectedTodayExam || null;
     setActiveExamForAttendance(matchedExam);
 
     // Eğer bu sınav ve salon için önceden kaydedilmiş yoklama varsa devamsızları yükle
