@@ -29,13 +29,21 @@ const syncUserRegistration = async (targetUser: User) => {
     const docRef = doc(db, 'access_requests', cleanEmail);
     const snap = await getDoc(docRef).catch(() => null);
     if (snap && snap.exists()) {
-      // Document already exists: update lastLoginAt and profile info without modifying role
-      await setDoc(docRef, {
-        email: cleanEmail,
-        name: targetUser.displayName || cleanEmail.split('@')[0],
-        photoURL: targetUser.photoURL || null,
-        lastLoginAt: new Date().toISOString()
-      }, { merge: true });
+      // Document already exists: only write if at least 12 hours passed or profile info changed
+      const existing = snap.data();
+      const lastLoginTime = existing?.lastLoginAt ? new Date(existing.lastLoginAt).getTime() : 0;
+      const hoursSinceLogin = (Date.now() - lastLoginTime) / (1000 * 60 * 60);
+      const nameChanged = targetUser.displayName && existing?.name !== targetUser.displayName;
+      const photoChanged = targetUser.photoURL && existing?.photoURL !== targetUser.photoURL;
+
+      if (hoursSinceLogin > 12 || nameChanged || photoChanged) {
+        await setDoc(docRef, {
+          email: cleanEmail,
+          name: targetUser.displayName || existing?.name || cleanEmail.split('@')[0],
+          photoURL: targetUser.photoURL || existing?.photoURL || null,
+          lastLoginAt: new Date().toISOString()
+        }, { merge: true });
+      }
     } else {
       // First time login: create new pending access request for admin approval!
       await setDoc(docRef, {

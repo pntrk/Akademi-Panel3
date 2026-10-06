@@ -738,7 +738,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
 
       setDriveStartupStatusText('Google Drive üzerindeki kütük dosyaları taranıyor...');
-      const file = await findLiveMasterDriveFile(token, null, true);
+      const file = await findLiveMasterDriveFile(token);
       if (!file?.id) {
         console.warn('Google Drive açılış kontrolü: Canlı kütük dosyası bulunamadı.');
         return false;
@@ -778,14 +778,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           setHasPendingChanges(false);
           setPendingSyncCount(0);
 
-          // CRITICAL: Synchronize fresh Google Drive data to Firebase Firestore
-          // Prevents Firebase from staying stuck on old state (e.g. 66 students)
-          if (firebaseConfig.projectId) {
-            writeModularSchoolState(db, safeData, {}, 'main').catch(err => {
-              console.warn('Background sync to Firebase after Drive hydration notice:', err);
-            });
-          }
-
+          // KOTA OPTİMİZASYONU: Google Drive kütüğü yerel duruma güvenle yüklendi.
+          // Firestore kotasını korumak için arka planda otomatik yazma yapılmaz.
+          // Yönetici öğretmenlerin görmesini istediğinde kontrollü olarak "Öğretmene Yayınla" butonuna basar.
           setDriveStartupStatusText(`Google Drive kütüğü başarıyla yüklendi: ${studentCount} Öğrenci, ${examCount} Sınav.`);
           return true;
         }
@@ -842,11 +837,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         } catch {}
       }
 
-      // Automatically sync downloaded state to Firebase
-      if (firebaseConfig.projectId) {
-        writeModularSchoolState(db, safeData, {}, 'main').catch(() => {});
-      }
-
+      // KOTA OPTİMİZASYONU: Google Drive verisi yerel hafızaya aktarıldı.
+      // Firestore kotasını korumak için otomatik Firestore yazması yapılmaz;
+      // İdareci veriyi öğretmenlere açmak isterse üst çubuktaki "Öğretmene Yayınla" butonunu kullanabilir.
       hasUnsavedLocalEditsRef.current = false;
       setHasPendingChanges(false);
       setPendingSyncCount(0);
@@ -865,11 +858,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   const connectDriveAndHydrateOnStartup = async (): Promise<boolean> => {
     setIsConnectingDriveStartup(true);
-    setDriveStartupStatusText('Google Drive izin penceresi açılıyor...');
+    setDriveStartupStatusText('Google Drive hesabına bağlanılıyor...');
     try {
       const token = await connectGoogleDrive(false, true);
       if (!token) {
-        setDriveStartupStatusText('Google Drive izin penceresi onaylanmadı veya kapatıldı. "Google Drive\'a Bağlan" butonuna tekrar basarak izni onaylayabilirsiniz.');
+        setDriveStartupStatusText('Google Drive bağlantısı onaylanamadı. Lütfen tekrar deneyiniz.');
         setIsConnectingDriveStartup(false);
         return false;
       }
@@ -898,8 +891,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
     } catch (e: any) {
       console.warn('Connect drive and hydrate error:', e);
-      const msg = e?.message || 'Drive bağlantısı kurulamadı.';
-      setDriveStartupStatusText('Bağlantı uyarısı: ' + msg);
+      setDriveStartupStatusText('Bağlantı hatası: ' + (e?.message || 'Drive bağlantısı kurulamadı.'));
       setIsConnectingDriveStartup(false);
       return false;
     }
@@ -1023,13 +1015,20 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             }
           }
 
-          // ONLY update lastLoginAt and profile info WITHOUT overwriting role or status!
-          setDoc(userDocRef, {
-            email: cleanUserEmail,
-            name: user.displayName || cleanUserEmail.split('@')[0],
-            photoURL: user.photoURL || null,
-            lastLoginAt: new Date().toISOString()
-          }, { merge: true }).catch(() => {});
+          // KOTA OPTİMİZASYONU: Sadece son girişin üzerinden 12 saat geçmişse veya isim/foto değişmişse yaz
+          const lastLoginTime = existingData?.lastLoginAt ? new Date(existingData.lastLoginAt).getTime() : 0;
+          const hoursSinceLogin = (Date.now() - lastLoginTime) / (1000 * 60 * 60);
+          const nameChanged = user.displayName && existingData?.name !== user.displayName;
+          const photoChanged = user.photoURL && existingData?.photoURL !== user.photoURL;
+
+          if (hoursSinceLogin > 12 || nameChanged || photoChanged) {
+            setDoc(userDocRef, {
+              email: cleanUserEmail,
+              name: user.displayName || existingData?.name || cleanUserEmail.split('@')[0],
+              photoURL: user.photoURL || existingData?.photoURL || null,
+              lastLoginAt: new Date().toISOString()
+            }, { merge: true }).catch(() => {});
+          }
         } else {
           // Document does not exist yet -> create initial access request
           const finalRole = initialComputedRole;
