@@ -58,6 +58,10 @@ import {
   getLiveMasterFileLink,
   isLiveMasterFileLocked,
   getDriveFileMetadata,
+  publishToTeachers,
+  fetchTeacherBroadcastData,
+  getLastTeacherPublishedDate,
+  setLastTeacherPublishedDate,
   LIVE_MASTER_FILE_NAME 
 } from '../lib/googleDrive';
 import { getCachedAccessToken, connectGoogleDrive, saveCanonicalDriveFileToFirestore } from '../lib/firebase';
@@ -103,6 +107,10 @@ interface AppContextType {
   downloadLockedDriveFileLocally: () => Promise<{ success: boolean; fileName?: string; studentCount?: number; error?: string }>;
   isDriveAutoSyncing?: boolean;
   syncToDriveNow: () => Promise<{ success: boolean; modifiedTime?: string; error?: string }>;
+  lastTeacherPublishedDate?: string | null;
+  isPublishingToTeachers: boolean;
+  publishToTeachersNow: () => Promise<{ success: boolean; publishedDate?: string; error?: string }>;
+  fetchTeacherDataNow: () => Promise<{ success: boolean; data?: any; error?: string }>;
   hasPendingChanges: boolean;
   publishToCloud: () => Promise<void>;
   batchUpdateState: (updater: (currentState: AppState) => AppState) => void;
@@ -531,6 +539,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     } catch {}
   };
   const [isDriveAutoSyncing, setIsDriveAutoSyncing] = useState<boolean>(false);
+  const [lastTeacherPublishedDate, setLastTeacherPublishedDateState] = useState<string | null>(() => {
+    return getLastTeacherPublishedDate() || null;
+  });
+  const [isPublishingToTeachers, setIsPublishingToTeachers] = useState<boolean>(false);
   const [lastDataSource, setLastDataSource] = useState<'drive' | 'firebase' | 'local'>('local');
   const [activeMasterFileName, setActiveMasterFileName] = useState<string | null>(null);
   const driveSyncTimerRef = useRef<any>(null);
@@ -1239,12 +1251,26 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         setLoading(false);
       }
     } else {
-      // 3. If TEACHER: NEVER touch Google Drive! Hydrate via cache-first selective delta sync
+      // 3. If TEACHER: Zero Firebase quota! Hydrate published master backup from Express Server RAM cache or Google Drive direct link
       setLoading(true);
       setIsInitialHydrating(true);
       setIsWaitingForDriveAuth(false);
-      setDriveStartupStatusText('Yönetim tarafından yayınlanmış güncel sınav verileri kontrol ediliyor...');
-      syncTeacherDelta().finally(() => {
+      setDriveStartupStatusText('Yönetim tarafından yayınlanmış güncel sınav verileri yükleniyor...');
+      fetchTeacherBroadcastData(stateRef.current.canonicalDriveFileId).then((res) => {
+        if (res.success && res.data) {
+          const safeData = sanitizeSchoolState(res.data);
+          setState(safeData);
+          stateRef.current = safeData;
+          if (res.publishedDate) {
+            setLastTeacherPublishedDateState(res.publishedDate);
+          }
+          try {
+            localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+          } catch {}
+        }
+      }).catch((err) => {
+        console.warn('Teacher broadcast initial fetch note:', err);
+      }).finally(() => {
         isInitialCloudHydrationDoneRef.current = true;
         setIsInitialHydrating(false);
         setLoading(false);
@@ -1269,7 +1295,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             setCachedAuthorizedRole(cleanUserEmail, existingRole);
             setUserRole(existingRole);
             if (existingRole === 'teacher') {
-              syncTeacherDelta().catch(() => {});
+              fetchTeacherBroadcastData(stateRef.current.canonicalDriveFileId).then(res => {
+                if (res.success && res.data) {
+                  const safeData = sanitizeSchoolState(res.data);
+                  setState(safeData);
+                  stateRef.current = safeData;
+                }
+              }).catch(() => {});
             } else {
               syncFromCloudStorage(true).catch(() => {});
             }
@@ -1296,7 +1328,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
               setCachedAuthorizedRole(cleanUserEmail, grantedRole);
               setUserRole(grantedRole);
               if (grantedRole === 'teacher') {
-                syncTeacherDelta().catch(() => {});
+                fetchTeacherBroadcastData(stateRef.current.canonicalDriveFileId).then(res => {
+                  if (res.success && res.data) {
+                    const safeData = sanitizeSchoolState(res.data);
+                    setState(safeData);
+                    stateRef.current = safeData;
+                  }
+                }).catch(() => {});
               } else {
                 syncFromCloudStorage(true).catch(() => {});
               }
@@ -1739,6 +1777,60 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       return { success: false, error: e?.message || 'Google Drive senkronizasyon hatası' };
     } finally {
       setIsDriveAutoSyncing(false);
+    }
+  };
+
+  // Publish Master State to Teachers (Google Drive reader permission + Express Server RAM cache + push notification)
+  const publishToTeachersNow = async (): Promise<{ success: boolean; publishedDate?: string; error?: string }> => {
+    if (userRole !== 'admin') return { success: false, error: 'Yalnızca yöneticiler öğretmenlere yayın yapabilir.' };
+
+    setIsPublishingToTeachers(true);
+    try {
+      const res = await publishToTeachers(stateRef.current, user?.email);
+      if (res.success && res.publishedDate) {
+        setLastTeacherPublishedDateState(res.publishedDate);
+        setState(prev => ({
+          ...prev,
+          lastTeacherPublishedDate: res.publishedDate
+        }));
+        stateRef.current.lastTeacherPublishedDate = res.publishedDate;
+
+        // Broadcast notification to teachers via Firebase
+        publishCloudNotification({
+          title: '📢 Güncel Sınav & Salon Kütüğü Yayınlandı',
+          message: `Yönetim tarafından güncel okul kütüğü yayınlandı (${res.publishedDate}). Salonlar, sınav sonuçları ve lig durumunu görüntüleyebilirsiniz.`,
+          targetRole: 'teachers',
+          type: 'announcement',
+          urgent: true
+        }).catch(() => {});
+      }
+      return res;
+    } catch (e: any) {
+      console.error('publishToTeachersNow error:', e);
+      return { success: false, error: e?.message || 'Öğretmenlere yayınlama başarısız oldu' };
+    } finally {
+      setIsPublishingToTeachers(false);
+    }
+  };
+
+  const fetchTeacherDataNow = async (): Promise<{ success: boolean; data?: any; error?: string }> => {
+    try {
+      const res = await fetchTeacherBroadcastData(stateRef.current.canonicalDriveFileId);
+      if (res.success && res.data) {
+        const safeData = sanitizeSchoolState(res.data);
+        setState(safeData);
+        stateRef.current = safeData;
+        if (res.publishedDate) {
+          setLastTeacherPublishedDateState(res.publishedDate);
+        }
+        try {
+          localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+        } catch {}
+        return { success: true, data: safeData };
+      }
+      return { success: false, error: res.error || 'Yayınlanan veri bulunamadı' };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Veri çekilemedi' };
     }
   };
 
@@ -2840,6 +2932,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       downloadLockedDriveFileLocally,
       isDriveAutoSyncing,
       syncToDriveNow,
+      lastTeacherPublishedDate,
+      isPublishingToTeachers,
+      publishToTeachersNow,
+      fetchTeacherDataNow,
       hasPendingChanges,
       publishToCloud: saveNow,
       batchUpdateState,

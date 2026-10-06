@@ -292,8 +292,23 @@ export interface AppState {
   canonicalDriveFileId?: string;
   canonicalDriveFileLink?: string;
   isDriveFileLocked?: boolean;
+  lastTeacherPublishedDate?: string;
   arenaMonthlyData?: Record<string, ArenaMonthlyPartition>;
   arenaMonthSummaries?: ArenaMonthSummary[];
+}
+
+export interface ExamHallAttendance {
+  id: string; // `${examId}_${hallId}`
+  examId: string;
+  examName: string;
+  hallId: string;
+  hallName: string;
+  teacherEmail: string;
+  submittedAt: string;
+  absentStudentIds: string[];
+  totalStudents: number;
+  presentCount: number;
+  notes?: string;
 }
 
 export interface ArenaMonthlyStudentSummary {

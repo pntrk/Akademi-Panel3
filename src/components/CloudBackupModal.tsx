@@ -3,7 +3,7 @@ import {
   Cloud, CheckCircle2, AlertTriangle, RefreshCw, X, Eye, 
   UploadCloud, FolderCheck, Download, Trash2, Plus, 
   User as UserIcon, ShieldCheck, Database, ExternalLink,
-  Link2, Copy, Check, Lock, Unlock, HardDriveDownload
+  Link2, Copy, Check, Lock, Unlock, HardDriveDownload, Radio
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { 
@@ -55,6 +55,8 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     downloadLatestFromDrive,
     downloadLockedDriveFileLocally,
     lastDriveBackupDate,
+    lastTeacherPublishedDate,
+    publishToTeachersNow,
     lastDataSource,
     activeMasterFileName
   } = useAppContext();
@@ -771,6 +773,9 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                             <span className="text-[10.5px] text-emerald-800 font-semibold block truncate">
                               🕒 Son Yedeklenme Tarihi: <span className="font-bold text-emerald-950">{lastDriveBackupDate || lastDriveSyncedAt || 'Henüz kaydedilmedi'}</span>
                             </span>
+                            <span className="text-[10.5px] text-sky-800 font-semibold block truncate">
+                              📢 Son Öğretmen Yayını: <span className="font-bold text-sky-950">{lastTeacherPublishedDate || 'Henüz yayınlanmadı'}</span>
+                            </span>
                           </div>
                         ) : (
                           <span className="text-[10.5px] text-amber-700 block mt-0.5">
@@ -781,6 +786,34 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+                      {/* Öğretmene Yayınla Butonu */}
+                      <button
+                        onClick={async () => {
+                          setIsPublishingToTeachers(true);
+                          try {
+                            const res = await publishToTeachersNow();
+                            if (res.success) {
+                              setFeedback({
+                                type: 'success',
+                                message: `✓ Son kütük yedeği başarıyla yayınlandı (${res.publishedDate})! Öğretmen kullanıcılar uygulamaya girerken bu güncel sürümü okuyacaktır.`
+                              });
+                            } else {
+                              setFeedback({ type: 'error', message: res.error || 'Yayınlanamadı' });
+                            }
+                          } catch (e: any) {
+                            setFeedback({ type: 'error', message: 'Yayınlama sırasında bir hata oluştu' });
+                          } finally {
+                            setIsPublishingToTeachers(false);
+                          }
+                        }}
+                        disabled={isPublishingToTeachers}
+                        className="flex-1 sm:flex-initial px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-2xs disabled:opacity-50"
+                        title={`Google Drive üzerindeki kütüğün son sürümünü öğretmenlerin okumasına açar.\nSon Yayın: ${lastTeacherPublishedDate || 'Henüz yayınlanmadı'}`}
+                      >
+                        <Radio className={`w-3.5 h-3.5 ${isPublishingToTeachers ? 'animate-pulse' : ''}`} />
+                        <span>{isPublishingToTeachers ? 'Yayınlanıyor...' : 'Öğretmene Yayınla'}</span>
+                      </button>
+
                       {/* Fiziki JSON İndir Butonu */}
                       <button
                         onClick={async () => {

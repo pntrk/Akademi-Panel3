@@ -38,6 +38,7 @@ import {
   type FirebaseStorage
 } from 'firebase/storage';
 import { compileMonthlyArenaSnapshots } from './utils';
+import type { ExamHallAttendance } from '../types';
 import rawFirebaseConfig from '../../firebase-applet-config.json';
 
 export interface FirebaseAppConfig {
@@ -1122,6 +1123,44 @@ export const writeModularSchoolState = async (
   } catch (err: any) {
     console.warn('writeModularSchoolState notice:', err);
     return { success: false, updatedModules, newHashes, error: err?.message || String(err) };
+  }
+};
+
+export const submitHallAttendance = async (attendance: ExamHallAttendance): Promise<{ success: boolean; error?: string }> => {
+  try {
+    if (!firebaseConfig.projectId) return { success: true };
+    const docId = `${attendance.examId}_${attendance.hallId}`;
+    const attendanceDocRef = doc(db, 'exam_attendance', docId);
+    await setDoc(attendanceDocRef, {
+      ...attendance,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    return { success: true };
+  } catch (err: any) {
+    console.warn('submitHallAttendance error:', err);
+    return { success: false, error: err?.message || 'Yoklama iletilemedi' };
+  }
+};
+
+export const subscribeToHallAttendance = (examId: string, callback: (attendances: Record<string, ExamHallAttendance>) => void): (() => void) => {
+  try {
+    if (!firebaseConfig.projectId || !examId) return () => {};
+    const attCol = collection(db, 'exam_attendance');
+    const unsub = onSnapshot(attCol, (snapshot) => {
+      const results: Record<string, ExamHallAttendance> = {};
+      snapshot.forEach(d => {
+        const data = d.data() as ExamHallAttendance;
+        if (data.examId === examId) {
+          results[data.hallId] = data;
+        }
+      });
+      callback(results);
+    }, (err) => {
+      console.warn('subscribeToHallAttendance notice:', err);
+    });
+    return unsub;
+  } catch {
+    return () => {};
   }
 };
 

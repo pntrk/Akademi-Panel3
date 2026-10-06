@@ -969,3 +969,269 @@ export const fetchLatestDriveBackup = async (
   }
 };
 
+/**
+ * Grants public reader permission ("Anyone with link can view") to the Google Drive file
+ * so teacher users do not need a Google OAuth token to download the JSON.
+ */
+export const makeFilePubliclyReadable = async (fileId: string, token: string): Promise<boolean> => {
+  try {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        role: 'reader',
+        type: 'anyone'
+      })
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('makeFilePubliclyReadable notice:', e);
+    return false;
+  }
+};
+
+export const getLastTeacherPublishedDate = (): string | null => {
+  try {
+    return localStorage.getItem('akademi_last_teacher_published_date');
+  } catch {
+    return null;
+  }
+};
+
+export const setLastTeacherPublishedDate = (dateStr: string) => {
+  try {
+    localStorage.setItem('akademi_last_teacher_published_date', dateStr);
+  } catch {}
+};
+
+/**
+ * Prepares the sanitized school state for teachers:
+ * Includes Exam Halls, Exam Results, and League Arena data,
+ * but strips out internal budget, accounting, and system secrets.
+ */
+export const prepareTeacherBroadcastPayload = (state: any, publishedBy = 'admin') => {
+  const now = new Date();
+  const timeFormatted = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const fullFormatted = `${day}.${month}.${year} ${timeFormatted}`;
+
+  // Sanitize student list (only basic academic details)
+  const safeStudents = (state.students || []).map((s: any) => ({
+    id: s.id,
+    no: s.no,
+    name: s.name,
+    surname: s.surname,
+    className: s.className,
+    classStr: s.classStr,
+    sectionStr: s.sectionStr,
+    gender: s.gender,
+    team: s.team
+  }));
+
+  // Sanitize exams
+  const safeExams = (state.exams || []).map((e: any) => ({
+    id: e.id,
+    no: e.no,
+    name: e.name,
+    date: e.date,
+    participantCount: e.participantCount,
+    examType: e.examType,
+    publisher: e.publisher,
+    participatingClasses: e.participatingClasses || [],
+    assignedHalls: e.assignedHalls || [],
+    keys: e.keys,
+    omrMap: e.omrMap,
+    results: e.results || []
+  }));
+
+  return {
+    appName: 'AkademiPanel',
+    fileType: 'teacher_public_broadcast',
+    version: Number(state.version || 1) + 1,
+    publishedAt: now.toISOString(),
+    publishedDateFormatted: fullFormatted,
+    publishedBy,
+    summary: {
+      studentCount: safeStudents.length,
+      examCount: safeExams.length,
+      hallCount: (state.examHalls || []).length,
+      resultCount: (state.results || []).length
+    },
+    data: {
+      students: safeStudents,
+      exams: safeExams,
+      results: state.results || [],
+      examHalls: state.examHalls || [],
+      leagueMentors: state.leagueMentors || {},
+      leagueTeamPoints: state.leagueTeamPoints || {},
+      approvedTransfers: state.approvedTransfers || [],
+      arenaMonthlyData: state.arenaMonthlyData || {},
+      arenaMonthSummaries: state.arenaMonthSummaries || [],
+      admins: state.admins || [],
+      teachers: state.teachers || [],
+      lastTeacherPublishedDate: fullFormatted
+    }
+  };
+};
+
+/**
+ * Publishes the latest school state for teachers:
+ * 1. Synchronizes the master state to the locked Google Drive JSON file.
+ * 2. Grants reader permissions on the Drive file so anyone with the link can view.
+ * 3. Sends the sanitized payload to Express server RAM cache (/api/teacher-broadcast/update).
+ * 4. Records the timestamp for UI indicators.
+ */
+export const publishToTeachers = async (
+  state: any,
+  userEmail?: string
+): Promise<{
+  success: boolean;
+  publishedDate?: string;
+  fileId?: string;
+  error?: string;
+}> => {
+  try {
+    let token = getCachedAccessToken();
+    if (!token) {
+      token = await connectGoogleDrive(false, true);
+    }
+
+    // 1. Sync live master to Google Drive first
+    const driveRes = await syncLiveMasterToGoogleDrive(state, userEmail);
+    const targetFileId = driveRes.fileId || getLiveMasterFileId();
+
+    // 2. Grant public reader permission to the Drive file
+    if (targetFileId && token) {
+      await makeFilePubliclyReadable(targetFileId, token).catch(() => false);
+    }
+
+    // 3. Prepare sanitized teacher payload
+    const payload = prepareTeacherBroadcastPayload(state, userEmail || 'admin');
+
+    // 4. Update Express server in-memory cache
+    try {
+      await fetch('/api/teacher-broadcast/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (serverErr) {
+      console.warn('Express server teacher-broadcast update note:', serverErr);
+    }
+
+    // 5. Update local storage timestamp
+    setLastTeacherPublishedDate(payload.publishedDateFormatted);
+
+    return {
+      success: true,
+      publishedDate: payload.publishedDateFormatted,
+      fileId: targetFileId || undefined
+    };
+  } catch (err: any) {
+    console.error('publishToTeachers error:', err);
+    return {
+      success: false,
+      error: err?.message || 'Öğretmenlere yayınlama işlemi tamamlanamadı.'
+    };
+  }
+};
+
+/**
+ * Fast-path teacher data fetcher:
+ * 1. Tries Express server /api/teacher-data (RAM cache, <50ms, 0 Firestore reads).
+ * 2. Fallback: Fetches directly from Google Drive public download link.
+ * 3. Fallback: Loads from localStorage.
+ */
+export const fetchTeacherBroadcastData = async (
+  customFileId?: string | null
+): Promise<{
+  success: boolean;
+  data?: any;
+  publishedDate?: string;
+  source: 'server' | 'drive' | 'local';
+  error?: string;
+}> => {
+  // 1. First priority: Server-side Express proxy cache
+  try {
+    const res = await fetch('/api/teacher-data');
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success && json.data) {
+        const publishedDate = json.publishedDateFormatted || json.data.lastTeacherPublishedDate || json.publishedAt;
+        if (publishedDate) setLastTeacherPublishedDate(publishedDate);
+        return {
+          success: true,
+          data: json.data,
+          publishedDate,
+          source: 'server'
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Server /api/teacher-data fetch note:', e);
+  }
+
+  // 2. Secondary priority: Direct Google Drive public download URL
+  const targetId = customFileId || getLiveMasterFileId();
+  if (targetId) {
+    try {
+      const urls = [
+        `https://drive.google.com/uc?export=download&id=${targetId}`,
+        `https://drive.usercontent.google.com/download?id=${targetId}&export=download`,
+        `https://www.googleapis.com/drive/v3/files/${targetId}?alt=media&supportsAllDrives=true`
+      ];
+
+      for (const url of urls) {
+        try {
+          const driveRes = await fetch(url);
+          if (driveRes.ok) {
+            const raw = await driveRes.json();
+            const targetData = raw.data || raw.appState || raw;
+            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || Array.isArray(targetData.results))) {
+              const publishedDate = raw.publishedDateFormatted || targetData.lastTeacherPublishedDate || targetData.lastPublishedAt;
+              if (publishedDate) setLastTeacherPublishedDate(publishedDate);
+              return {
+                success: true,
+                data: targetData,
+                publishedDate,
+                source: 'drive'
+              };
+            }
+          }
+        } catch {}
+      }
+    } catch (driveErr) {
+      console.warn('Direct Google Drive teacher download note:', driveErr);
+    }
+  }
+
+  // 3. Fallback: Local browser storage
+  try {
+    const saved = localStorage.getItem('okulYonetimState');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && (Array.isArray(parsed.students) || Array.isArray(parsed.exams))) {
+        return {
+          success: true,
+          data: parsed,
+          publishedDate: getLastTeacherPublishedDate() || undefined,
+          source: 'local'
+        };
+      }
+    }
+  } catch {}
+
+  return {
+    success: false,
+    source: 'local',
+    error: 'Öğretmen yayın verisi bulunamadı.'
+  };
+};
+

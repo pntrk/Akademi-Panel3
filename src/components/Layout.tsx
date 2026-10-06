@@ -5,7 +5,7 @@ import {
   LogOut, Shield, Download, Globe, HardDriveDownload, Cloud, 
   Bell, Camera, Printer, TrendingUp, HelpCircle, ChevronRight, 
   Sparkles, Zap, CheckCircle2, User as UserIcon, RefreshCw,
-  Sliders, AlertCircle, AlertTriangle, ExternalLink, FolderCheck, Eye, Lock
+  Sliders, AlertCircle, AlertTriangle, ExternalLink, FolderCheck, Eye, Lock, Radio
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAppContext } from '../context/AppContext';
@@ -145,6 +145,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     lastDriveSyncedAt,
     isDriveAutoSyncing,
     syncToDriveNow,
+    lastTeacherPublishedDate,
+    isPublishingToTeachers,
+    publishToTeachersNow,
+    fetchTeacherDataNow,
     saveNow, 
     retrySync,
     cloudBackups,
@@ -157,6 +161,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   } = useAppContext();
   
   const [isPublishing, setIsPublishing] = useState(false);
+  const [teacherRefreshFeedback, setTeacherRefreshFeedback] = useState<string | null>(null);
+  const [isTeacherRefreshing, setIsTeacherRefreshing] = useState(false);
   const [isDriveDownloading, setIsDriveDownloading] = useState(false);
   const [driveDownloadFeedback, setDriveDownloadFeedback] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1014,83 +1020,85 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   </button>
                 </div>
 
-                {/* 2. Publish to Teachers (Öğretmene Yayınla) Button */}
+                {/* 2. Publish to Teachers (Öğretmene Yayınla - Google Drive Kütüğünü Öğretmenlere Aç & Sunucu Önbelleğini Mühürle) */}
                 <button
                   onClick={async () => {
-                    setIsPublishing(true);
                     try {
-                      await publishToCloud();
-                      setSaveFeedback("✓ Öğretmenlere yayınlandı");
-                      setTimeout(() => setSaveFeedback(null), 3000);
-                    } catch (e) {
+                      const res = await publishToTeachersNow();
+                      if (res.success) {
+                        setSaveFeedback(`✓ Öğretmenlere yayınlandı (${res.publishedDate || 'Güncel'})`);
+                      } else {
+                        setSaveFeedback(`⚠️ ${res.error || 'Yayınlanamadı'}`);
+                      }
+                      setTimeout(() => setSaveFeedback(null), 4000);
+                    } catch (e: any) {
                       setSaveFeedback("⚠️ Yayınlama hatası");
                       setTimeout(() => setSaveFeedback(null), 3000);
-                    } finally {
-                      setIsPublishing(false);
                     }
                   }}
-                  disabled={isPublishing}
+                  disabled={isPublishingToTeachers}
                   className={cn(
-                    "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs disabled:opacity-50",
+                    "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs disabled:opacity-50 active:scale-95",
                     hasPendingChanges || syncStatus === 'pending_publish'
                       ? "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/30 ring-2 ring-amber-400/50 animate-pulse"
-                      : "bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 border border-emerald-500"
                   )}
-                  title="Salon, Sınav Sonuçları ve Akademi Arena aylık değişikliklerini Firebase üzerinden öğretmenlere yayınla"
+                  title={`Google Drive üzerindeki son kütük yedeğini öğretmenlerin okumasına açar.\nSon Yayınlanma: ${lastTeacherPublishedDate || 'Henüz yayınlanmadı'}`}
                 >
-                  <UploadCloud className={cn("w-4 h-4", isPublishing && "animate-spin")} />
+                  <Radio className={cn("w-3.5 h-3.5 text-white", isPublishingToTeachers && "animate-pulse")} />
                   <span>
-                    {isPublishing
+                    {isPublishingToTeachers
                       ? 'Yayınlanıyor...'
-                      : hasPendingChanges || pendingSyncCount > 0
-                        ? `Öğretmenlere Yayınla (${pendingSyncCount})`
-                        : 'Öğretmenlere Yayınla'}
+                      : 'Öğretmene Yayınla'}
                   </span>
+                  {lastTeacherPublishedDate && !isPublishingToTeachers && (
+                    <span className="hidden xl:inline text-[9.5px] opacity-90 font-mono font-normal">
+                      ({lastTeacherPublishedDate.split(' ')[1] || lastTeacherPublishedDate})
+                    </span>
+                  )}
                 </button>
               </>
             )}
 
-            {/* TEACHER SYNC STATUS */}
+            {/* TEACHER MODE STATUS & BROADCAST REFRESH (0 FIRESTORE QUOTA) */}
             {userRole === 'teacher' && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-[11px]">
-                  {saveFeedback || (lastSyncedAt ? `Bulutla Eşit (${lastSyncedAt})` : 'Bulutla Eşit')}
-                </span>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-300 text-xs shadow-2xs">
+                <Shield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <div className="flex flex-col">
+                  <span className="text-[11px] font-bold leading-tight">
+                    Öğretmen Paneli (Salt Okunur)
+                  </span>
+                  <span className="text-[9.5px] text-emerald-700 dark:text-emerald-400 font-mono">
+                    {teacherRefreshFeedback || (lastTeacherPublishedDate ? `Yayın: ${lastTeacherPublishedDate}` : 'Güncel Yayın')}
+                  </span>
+                </div>
                 <button
                   onClick={async () => {
-                    setSaveFeedback('Kontrol ediliyor...');
-                    const res = await checkTeacherUpdatesNow();
-                    setSaveFeedback(res.message || 'Güncel');
-                    setTimeout(() => setSaveFeedback(null), 3500);
+                    setIsTeacherRefreshing(true);
+                    setTeacherRefreshFeedback('Çekiliyor...');
+                    try {
+                      const res = await fetchTeacherDataNow();
+                      if (res.success) {
+                        setTeacherRefreshFeedback('✓ Güncellendi');
+                      } else {
+                        setTeacherRefreshFeedback('⚠️ ' + (res.error || 'Hata'));
+                      }
+                    } catch {
+                      setTeacherRefreshFeedback('⚠️ Hata');
+                    } finally {
+                      setIsTeacherRefreshing(false);
+                      setTimeout(() => setTeacherRefreshFeedback(null), 3500);
+                    }
                   }}
-                  className="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-md text-[10px] font-bold transition-colors cursor-pointer"
-                  title="Yayınlanan yeni sınav veya salon verilerini kontrol et"
+                  disabled={isTeacherRefreshing}
+                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 disabled:opacity-50 ml-1"
+                  title="Yönetim tarafından yayınlanan son güncel kütüğü çek (0 Kota)"
                 >
-                  Yenile
+                  <RefreshCw className={cn("w-3 h-3", isTeacherRefreshing && "animate-spin")} />
+                  <span>Yenile</span>
                 </button>
               </div>
             )}
-
-            {/* Quick Guide Button */}
-            <button
-              onClick={() => setIsGuideOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-100 dark:bg-purple-500/20 hover:bg-purple-200 dark:hover:bg-purple-500/30 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30 font-bold text-xs transition-all cursor-pointer shadow-2xs"
-              title="Kurum İçi Optik Deneme İş Akışı Rehberi"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-500 fill-current" />
-              <span>Nasıl Çalışır?</span>
-            </button>
-
-            {/* Theme Toggle */}
-            <button 
-              onClick={() => setIsDarkMode(!isDarkMode)} 
-              aria-label="Temayı Değiştir"
-              title={isDarkMode ? 'Aydınlık Mod' : 'Karanlık Mod'}
-              className="w-8 h-8 flex items-center justify-center rounded-xl bg-white dark:bg-white/10 hover:bg-gray-100 text-[#5a5a40] dark:text-white/80 border border-[#e6e2d3] dark:border-white/10 transition-all cursor-pointer shadow-2xs"
-            >
-              {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-indigo-500" />}
-            </button>
           </div>
         </header>
 
