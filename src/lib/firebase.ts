@@ -273,19 +273,13 @@ export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // Dedicated Google Drive Provider for Drive File sync (Used by Admin when logging in / connecting Google Drive)
-export const createFreshGoogleDriveProvider = (forceConsent = true) => {
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({
-    prompt: forceConsent ? 'consent select_account' : 'select_account',
-    access_type: 'offline',
-    include_granted_scopes: 'true'
-  });
-  provider.addScope('https://www.googleapis.com/auth/drive');
-  provider.addScope('https://www.googleapis.com/auth/drive.file');
-  return provider;
-};
-
-export const googleDriveProvider = createFreshGoogleDriveProvider(true);
+export const googleDriveProvider = new GoogleAuthProvider();
+googleDriveProvider.setCustomParameters({
+  prompt: 'select_account',
+  include_granted_scopes: 'true'
+});
+googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
+googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
 
 // Token keys for persistent session/local storage
 const DRIVE_TOKEN_KEY = 'akademi_drive_access_token';
@@ -381,9 +375,8 @@ export const connectGoogleDrive = async (silentOnly = false, forceRefresh = fals
   }
 
   try {
-    // Explicit consent prompt forces Google OAuth to display the Drive permission checkboxes
-    const provider = createFreshGoogleDriveProvider(true);
-    const result = await signInWithPopup(auth, provider);
+    // Uses drive.file and select_account (One-time approval, Google remembers consent permanently)
+    const result = await signInWithPopup(auth, googleDriveProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
       setCachedAccessToken(credential.accessToken);
@@ -394,10 +387,6 @@ export const connectGoogleDrive = async (silentOnly = false, forceRefresh = fals
     if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
       // User closed drive popup
       return null;
-    }
-    if (error?.code === 'auth/popup-blocked') {
-      console.warn('Google Drive popup blocked by browser.');
-      throw new Error('Tarayıcınız açılır izin penceresini (popup) engelledi. Lütfen tarayıcı ayarlarından popup izni verip tekrar deneyiniz.');
     }
     console.warn('Drive connection notice:', error?.message);
     if (!silentOnly) {
