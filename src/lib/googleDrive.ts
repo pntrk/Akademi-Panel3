@@ -1272,11 +1272,12 @@ export const fetchTeacherBroadcastData = async (
     }
   }
 
-  // 3. Third priority: Direct Google Drive public download URL
+  // 3. Third priority: Direct Google Drive public download URL (via Express server proxy or direct)
   const targetId = knownDriveId || getLiveMasterFileId();
   if (targetId) {
     try {
       const urls = [
+        `/api/drive-proxy?fileId=${targetId}`,
         `https://drive.google.com/uc?export=download&id=${targetId}`,
         `https://drive.usercontent.google.com/download?id=${targetId}&export=download`,
         `https://www.googleapis.com/drive/v3/files/${targetId}?alt=media&supportsAllDrives=true`

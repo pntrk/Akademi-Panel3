@@ -35,7 +35,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Teacher broadcast read endpoint (0 Firebase Quota)
-app.get('/api/teacher-data', (_req, res) => {
+app.get('/api/teacher-data', async (req, res) => {
   if (teacherBroadcastCache && teacherBroadcastCache.data) {
     return res.json({
       success: true,
@@ -47,12 +47,78 @@ app.get('/api/teacher-data', (_req, res) => {
     });
   }
 
+  // If cache is empty in RAM, check query fileId or cached fileId to fetch directly from Google Drive (Server-side 0-quota fetch)
+  const fileId = (req.query.fileId as string) || teacherBroadcastCache?.data?.canonicalDriveFileId;
+  if (fileId) {
+    try {
+      const urls = [
+        `https://drive.google.com/uc?export=download&id=${fileId}`,
+        `https://drive.usercontent.google.com/download?id=${fileId}&export=download`,
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`
+      ];
+      for (const url of urls) {
+        try {
+          const driveRes = await fetch(url);
+          if (driveRes.ok) {
+            const raw = await driveRes.json();
+            const targetData = raw.data || raw.appState || raw;
+            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams))) {
+              return res.json({
+                success: true,
+                publishedAt: raw.publishedAt || new Date().toISOString(),
+                publishedDateFormatted: raw.publishedDateFormatted || raw.lastTeacherPublishedDate || 'Güncel',
+                version: raw.version || 1,
+                summary: raw.summary || {
+                  studentCount: targetData.students?.length || 0,
+                  examCount: targetData.exams?.length || 0
+                },
+                data: targetData
+              });
+            }
+          }
+        } catch {}
+      }
+    } catch (e) {
+      console.warn('Server fallback Google Drive fetch notice:', e);
+    }
+  }
+
   // If no broadcast cache is present yet, respond with empty payload
   return res.status(200).json({
     success: false,
     message: 'Henüz öğretmenler için yayınlanmış veri bulunmamaktadır.',
     data: null
   });
+});
+
+// Google Drive Server-Side Proxy (Bypasses browser CORS & protects 0 Firebase Quota)
+app.get('/api/drive-proxy', async (req, res) => {
+  const fileId = req.query.fileId as string;
+  if (!fileId) {
+    return res.status(400).json({ success: false, error: 'Dosya kimliği (fileId) belirtilmedi.' });
+  }
+
+  try {
+    const urls = [
+      `https://drive.google.com/uc?export=download&id=${fileId}`,
+      `https://drive.usercontent.google.com/download?id=${fileId}&export=download`,
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`
+    ];
+
+    for (const url of urls) {
+      try {
+        const driveRes = await fetch(url);
+        if (driveRes.ok) {
+          const json = await driveRes.json();
+          return res.json({ success: true, data: json });
+        }
+      } catch {}
+    }
+
+    return res.status(502).json({ success: false, error: 'Google Drive kütük dosyasına erişilemedi veya dosya herkese açık değil.' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Sunucu hatası' });
+  }
 });
 
 // Admin publish endpoint to update server broadcast cache
