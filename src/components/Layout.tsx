@@ -955,8 +955,26 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" title="Sabit ve kilitli ortak Google Drive dosyası" />
                   )}
                   <span 
-                    className="font-semibold text-[11px] truncate max-w-[210px] xl:max-w-[260px] flex items-center gap-1 select-none" 
-                    title={`Kilitli Google Drive JSON Dosyası\nDosya: ${activeMasterFileName || 'AkademiPanel_Canli_Kutuk.json'}\nSon Yedeklenme Tarihi: ${lastDriveBackupDate || lastDriveSyncedAt || 'Henüz kaydedilmedi'}\nDurum: ${isDriveLocked ? 'Sabit & Kilitli' : 'Bağlı'}`}
+                    onClick={async () => {
+                      if (isDriveDownloading) return;
+                      setIsDriveDownloading(true);
+                      setDriveDownloadFeedback('İndiriliyor...');
+                      try {
+                        const res = await downloadLockedDriveFileLocally();
+                        if (res.success) {
+                          setDriveDownloadFeedback('✓ JSON İndirildi');
+                        } else {
+                          setDriveDownloadFeedback('⚠️ ' + (res.error || 'Hata'));
+                        }
+                      } catch (e: any) {
+                        setDriveDownloadFeedback('⚠️ Hata');
+                      } finally {
+                        setIsDriveDownloading(false);
+                        setTimeout(() => setDriveDownloadFeedback(null), 3500);
+                      }
+                    }}
+                    className="font-semibold text-[11px] truncate max-w-[210px] xl:max-w-[260px] flex items-center gap-1 cursor-pointer hover:underline select-none" 
+                    title={`Kilitli Google Drive JSON Dosyası\nDosya: ${activeMasterFileName || 'AkademiPanel_Canli_Kutuk.json'}\nSon Yedeklenme Tarihi: ${lastDriveBackupDate || lastDriveSyncedAt || 'Henüz kaydedilmedi'}\nDurum: ${isDriveLocked ? 'Sabit & Kilitli' : 'Bağlı'}\n\n(Dosyayı fiziki olarak bilgisayara indirmek için tıklayın)`}
                   >
                     {driveDownloadFeedback || (
                       lastDriveBackupDate 

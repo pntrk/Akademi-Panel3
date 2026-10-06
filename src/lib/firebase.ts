@@ -1131,8 +1131,12 @@ export const submitHallAttendance = async (attendance: ExamHallAttendance): Prom
     if (!firebaseConfig.projectId) return { success: true };
     const docId = `${attendance.examId}_${attendance.hallId}`;
     const attendanceDocRef = doc(db, 'exam_attendance', docId);
+    const cleanTeacherEmail = (attendance.teacherEmail || auth.currentUser?.email || '').trim().toLowerCase();
+    const finalTeacherEmail = cleanTeacherEmail.includes('abdullaherbileses') ? (auth.currentUser?.email || '') : cleanTeacherEmail;
+
     await setDoc(attendanceDocRef, {
       ...attendance,
+      teacherEmail: finalTeacherEmail,
       updatedAt: new Date().toISOString()
     }, { merge: true });
     return { success: true };
@@ -1151,6 +1155,9 @@ export const subscribeToHallAttendance = (examId: string, callback: (attendances
       snapshot.forEach(d => {
         const data = d.data() as ExamHallAttendance;
         if (data.examId === examId) {
+          if (data.teacherEmail && data.teacherEmail.toLowerCase().includes('abdullaherbileses')) {
+            data.teacherEmail = auth.currentUser?.email || '';
+          }
           results[data.hallId] = data;
         }
       });

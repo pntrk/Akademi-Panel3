@@ -134,6 +134,49 @@ export const HallsView = () => {
     }, 3500);
   };
 
+  // Yoklamayı gönderen öğretmenin gerçek ve doğrulanmış e-posta adresini çözer (Eski abdullaherbileses hatalı varsayılanını engeller)
+  const getResolvedTeacherEmail = (att: HallAttendance | null): string => {
+    if (!att) return '';
+
+    // 1. Doğrudan yoklama kaydındaki doğrulanmış gerçek e-posta adresi
+    const rawEmail = (att.takenByEmail || '').trim().toLowerCase();
+    if (rawEmail && !rawEmail.includes('abdullaherbileses') && rawEmail.includes('@')) {
+      return rawEmail;
+    }
+
+    // 2. takenBy içinde kayıtlı e-posta adresi varsa
+    const rawTakenBy = (att.takenBy || '').trim();
+    const emailMatch = rawTakenBy.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (emailMatch && !emailMatch[0].toLowerCase().includes('abdullaherbileses')) {
+      return emailMatch[0].toLowerCase();
+    }
+
+    // 3. takenBy bir öğretmen adı ise, sistemdeki öğretmenler listesinde kayıtlı gerçek öğretmenin e-postasını eşle
+    if (rawTakenBy && !rawTakenBy.toLowerCase().includes('abdullaherbileses') && !rawTakenBy.includes('Gözetmen')) {
+      const cleanName = rawTakenBy.toLowerCase().replace(/[^a-z0-9ğüşıöç]/g, '');
+      const matchedTeacher = (state.teachers || []).find(t => {
+        const cleanT = t.toLowerCase();
+        if (cleanT.includes('abdullaherbileses')) return false;
+        const teacherPart = cleanT.replace(/[^a-z0-9ğüşıöç]/g, '');
+        return cleanT.includes('@') && (teacherPart.includes(cleanName) || cleanName.includes(cleanT.split('@')[0]));
+      });
+      if (matchedTeacher) {
+        return matchedTeacher.toLowerCase();
+      }
+    }
+
+    // 4. Eğer yoklama henüz yeni alınmış ve oturum açmış aktif bir öğretmen tarafından gönderiliyorsa
+    if (userRole === 'teacher') {
+      const activeTeacherEmail = (currentUser?.email || auth.currentUser?.email || '').trim().toLowerCase();
+      if (activeTeacherEmail && !activeTeacherEmail.includes('abdullaherbileses') && activeTeacherEmail.includes('@')) {
+        return activeTeacherEmail;
+      }
+    }
+
+    // Kesinlikle varsayılan veya idareci e-postası atanmaz
+    return '';
+  };
+
   // Yoklama verilerini başlangıçta yükle ve sekmeler/ekranlar arası otomatik senkronize et
   useEffect(() => {
     const syncAttendances = () => {
@@ -580,11 +623,23 @@ export const HallsView = () => {
 
       const attendanceId = `${activeExamForAttendance.id}_${currentHall.id}`;
       const teacherIdentity = getActiveTeacherIdentity(currentUser);
-      const teacherEmail = teacherIdentity.email || '';
-      const teacherName = teacherIdentity.displayName || 'Gözetmen Öğretmen';
+      const rawTeacherEmail = (
+        currentUser?.email || 
+        auth.currentUser?.email || 
+        teacherIdentity.email || 
+        ''
+      ).trim().toLowerCase();
 
-      // İdarecilerin bildirimde ve kayıtta göreceği gözetmen ismi
-      const takenByDisplay = teacherName || 'Gözetmen Öğretmen';
+      const teacherEmail = (!rawTeacherEmail.includes('abdullaherbileses') && rawTeacherEmail.includes('@'))
+        ? rawTeacherEmail
+        : ((auth.currentUser?.email && !auth.currentUser.email.toLowerCase().includes('abdullaherbileses')) ? auth.currentUser.email.trim().toLowerCase() : '');
+
+      const teacherName = teacherIdentity.displayName && !teacherIdentity.displayName.toLowerCase().includes('abdullaherbileses')
+        ? teacherIdentity.displayName
+        : (teacherEmail ? teacherEmail.split('@')[0] : 'Gözetmen Öğretmen');
+
+      // İdarecilerin bildirimde ve kayıtta göreceği gözetmen e-posta / isim bilgisi
+      const takenByDisplay = teacherEmail || teacherName || 'Gözetmen Öğretmen';
 
       const payload: HallAttendance = {
         id: attendanceId,
@@ -1395,14 +1450,20 @@ export const HallsView = () => {
                           <span>📅 {todayExam.date || 'Bugün'}</span>
                           <span>•</span>
                           <span>{todayExam.institution || 'Kurumsal Deneme'}</span>
-                          {hallAttendance && (hallAttendance.takenByEmail || hallAttendance.takenBy) && (
-                            <>
-                              <span>•</span>
-                              <span className="text-emerald-800 font-semibold truncate" title={`Yoklamayı Gönderen: ${hallAttendance.takenBy}`}>
-                                👤 {hallAttendance.takenByEmail || hallAttendance.takenBy}
-                              </span>
-                            </>
-                          )}
+                          {hallAttendance && (() => {
+                            const teacherEmail = getResolvedTeacherEmail(hallAttendance);
+                            const rawTakenBy = (hallAttendance.takenBy || '').trim();
+                            const cleanTakenBy = (rawTakenBy && !rawTakenBy.toLowerCase().includes('abdullaherbileses') && !rawTakenBy.includes('Gözetmen')) ? rawTakenBy : '';
+                            const teacherDisplay = teacherEmail || cleanTakenBy || 'Gözetmen Öğretmen';
+                            return (
+                              <>
+                                <span>•</span>
+                                <span className="text-emerald-800 font-semibold truncate" title={`Yoklamayı Gönderen Öğretmen: ${teacherEmail || teacherDisplay}`}>
+                                  👤 {teacherEmail || teacherDisplay}
+                                </span>
+                              </>
+                            );
+                          })()}
                         </p>
                       </div>
 
@@ -2019,11 +2080,22 @@ export const HallsView = () => {
                         </span>
                         {(() => {
                           const teacher = getActiveTeacherIdentity(currentUser);
-                          if (!teacher.email && !teacher.displayName) return null;
+                          const cleanEmail = (
+                            currentUser?.email || 
+                            auth.currentUser?.email || 
+                            teacher.email || 
+                            ''
+                          ).trim().toLowerCase();
+                          const finalEmail = cleanEmail.includes('abdullaherbileses') ? '' : cleanEmail;
+                          const cleanName = teacher.displayName && !teacher.displayName.toLowerCase().includes('abdullaherbileses')
+                            ? teacher.displayName
+                            : (finalEmail ? finalEmail.split('@')[0] : 'Gözetmen');
+
+                          if (!finalEmail && !cleanName) return null;
                           return (
                             <span className="text-[9.5px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-indigo-50/90 text-indigo-900 border border-indigo-200/80 flex items-center gap-1 truncate max-w-full">
                               <ShieldCheck className="w-3 h-3 text-indigo-600 shrink-0" />
-                              <span className="truncate">Gözetmen: <strong>{teacher.displayName}</strong>{teacher.email ? ` (${teacher.email})` : ''}</span>
+                              <span className="truncate">Gözetmen: <strong>{cleanName}</strong>{finalEmail ? ` (${finalEmail})` : ''}</span>
                             </span>
                           );
                         })()}

@@ -1,4 +1,13 @@
-import { getCachedAccessToken, connectGoogleDrive } from './firebase';
+import { 
+  getCachedAccessToken, 
+  connectGoogleDrive, 
+  db, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  firebaseConfig, 
+  fetchModularSchoolState 
+} from './firebase';
 
 export interface DriveBackupItem {
   id: string;
@@ -1020,7 +1029,7 @@ export const prepareTeacherBroadcastPayload = (state: any, publishedBy = 'admin'
   const year = now.getFullYear();
   const fullFormatted = `${day}.${month}.${year} ${timeFormatted}`;
 
-  // Sanitize student list (only basic academic details)
+  // Sanitize student list (preserve academic details, exam registrations, and hall assignments)
   const safeStudents = (state.students || []).map((s: any) => ({
     id: s.id,
     no: s.no,
@@ -1030,7 +1039,13 @@ export const prepareTeacherBroadcastPayload = (state: any, publishedBy = 'admin'
     classStr: s.classStr,
     sectionStr: s.sectionStr,
     gender: s.gender,
-    team: s.team
+    team: s.team,
+    examRegistrations: s.examRegistrations || [],
+    isAssignedToHall: s.isAssignedToHall,
+    assignedHallId: s.assignedHallId,
+    assignedDeskNumber: s.assignedDeskNumber,
+    order: s.order,
+    room: s.room
   }));
 
   // Sanitize exams
@@ -1046,8 +1061,11 @@ export const prepareTeacherBroadcastPayload = (state: any, publishedBy = 'admin'
     assignedHalls: e.assignedHalls || [],
     keys: e.keys,
     omrMap: e.omrMap,
-    results: e.results || []
+    results: e.results || [],
+    studentList: e.studentList || []
   }));
+
+  const targetDriveId = state.canonicalDriveFileId || getLiveMasterFileId();
 
   return {
     appName: 'AkademiPanel',
@@ -1060,7 +1078,8 @@ export const prepareTeacherBroadcastPayload = (state: any, publishedBy = 'admin'
       studentCount: safeStudents.length,
       examCount: safeExams.length,
       hallCount: (state.examHalls || []).length,
-      resultCount: (state.results || []).length
+      resultCount: (state.results || []).length,
+      totalSeatedCount: (state.examHalls || []).reduce((acc: number, h: any) => acc + (h.seatingPlan?.length || 0), 0)
     },
     data: {
       students: safeStudents,
@@ -1074,6 +1093,8 @@ export const prepareTeacherBroadcastPayload = (state: any, publishedBy = 'admin'
       arenaMonthSummaries: state.arenaMonthSummaries || [],
       admins: state.admins || [],
       teachers: state.teachers || [],
+      canonicalDriveFileId: targetDriveId || undefined,
+      canonicalDriveFileLink: targetDriveId ? `https://drive.google.com/uc?export=download&id=${targetDriveId}` : undefined,
       lastTeacherPublishedDate: fullFormatted
     }
   };
@@ -1084,7 +1105,9 @@ export const prepareTeacherBroadcastPayload = (state: any, publishedBy = 'admin'
  * 1. Synchronizes the master state to the locked Google Drive JSON file.
  * 2. Grants reader permissions on the Drive file so anyone with the link can view.
  * 3. Sends the sanitized payload to Express server RAM cache (/api/teacher-broadcast/update).
- * 4. Records the timestamp for UI indicators.
+ * 4. Writes cross-device broadcast metadata to Firestore (schools/main/modules/teacher_broadcast and meta)
+ *    so ANY teacher device across different networks immediately discovers the Drive file ID and published state!
+ * 5. Records the timestamp for UI indicators.
  */
 export const publishToTeachers = async (
   state: any,
@@ -1110,8 +1133,12 @@ export const publishToTeachers = async (
       await makeFilePubliclyReadable(targetFileId, token).catch(() => false);
     }
 
-    // 3. Prepare sanitized teacher payload
+    // 3. Prepare complete teacher payload
     const payload = prepareTeacherBroadcastPayload(state, userEmail || 'admin');
+    if (targetFileId) {
+      (payload.data as any).canonicalDriveFileId = targetFileId;
+      (payload.data as any).canonicalDriveFileLink = `https://drive.google.com/uc?export=download&id=${targetFileId}`;
+    }
 
     // 4. Update Express server in-memory cache
     try {
@@ -1126,7 +1153,36 @@ export const publishToTeachers = async (
       console.warn('Express server teacher-broadcast update note:', serverErr);
     }
 
-    // 5. Update local storage timestamp
+    // 5. Cross-Device Cloud Sync: Write to Firestore teacher_broadcast & meta
+    // This allows another device (e.g. teacher's phone/laptop) to immediately know the canonical Google Drive file ID!
+    if (firebaseConfig.projectId) {
+      try {
+        const broadcastDocRef = doc(db, 'schools', 'main', 'modules', 'teacher_broadcast');
+        const metaDocRef = doc(db, 'schools', 'main', 'modules', 'meta');
+        const broadcastDoc = {
+          fileId: targetFileId || null,
+          canonicalDriveFileId: targetFileId || null,
+          canonicalDriveFileLink: targetFileId ? `https://drive.google.com/uc?export=download&id=${targetFileId}` : null,
+          publishedDateFormatted: payload.publishedDateFormatted,
+          publishedAt: payload.publishedAt,
+          publishedBy: userEmail || 'admin',
+          summary: payload.summary,
+          data: payload.data
+        };
+        await setDoc(broadcastDocRef, broadcastDoc, { merge: true });
+        await setDoc(metaDocRef, {
+          canonicalDriveFileId: targetFileId || null,
+          canonicalDriveFileLink: targetFileId ? `https://drive.google.com/uc?export=download&id=${targetFileId}` : null,
+          lastTeacherPublishedDate: payload.publishedDateFormatted,
+          lastPublishedAt: payload.publishedAt,
+          lastPublishedBy: userEmail || 'admin'
+        }, { merge: true });
+      } catch (fsErr) {
+        console.warn('Firestore teacher broadcast write notice:', fsErr);
+      }
+    }
+
+    // 6. Update local storage timestamp
     setLastTeacherPublishedDate(payload.publishedDateFormatted);
 
     return {
@@ -1146,8 +1202,10 @@ export const publishToTeachers = async (
 /**
  * Fast-path teacher data fetcher:
  * 1. Tries Express server /api/teacher-data (RAM cache, <50ms, 0 Firestore reads).
- * 2. Fallback: Fetches directly from Google Drive public download link.
- * 3. Fallback: Loads from localStorage.
+ * 2. Cross-Device Cloud Broadcast: If on another device where Express cache is local-only,
+ *    queries Firestore 'teacher_broadcast' to discover the canonical Google Drive File ID and get the latest published roster.
+ * 3. Fallback: Fetches directly from Google Drive public download link using the discovered file ID.
+ * 4. Fallback: Loads from localStorage.
  */
 export const fetchTeacherBroadcastData = async (
   customFileId?: string | null
@@ -1155,9 +1213,11 @@ export const fetchTeacherBroadcastData = async (
   success: boolean;
   data?: any;
   publishedDate?: string;
-  source: 'server' | 'drive' | 'local';
+  source: 'server' | 'drive' | 'cloud' | 'local';
   error?: string;
 }> => {
+  let knownDriveId = customFileId || getLiveMasterFileId();
+
   // 1. First priority: Server-side Express proxy cache
   try {
     const res = await fetch('/api/teacher-data');
@@ -1166,6 +1226,10 @@ export const fetchTeacherBroadcastData = async (
       if (json && json.success && json.data) {
         const publishedDate = json.publishedDateFormatted || json.data.lastTeacherPublishedDate || json.publishedAt;
         if (publishedDate) setLastTeacherPublishedDate(publishedDate);
+        if (json.data.canonicalDriveFileId) {
+          setLiveMasterFileId(json.data.canonicalDriveFileId);
+          knownDriveId = json.data.canonicalDriveFileId;
+        }
         return {
           success: true,
           data: json.data,
@@ -1178,8 +1242,38 @@ export const fetchTeacherBroadcastData = async (
     console.warn('Server /api/teacher-data fetch note:', e);
   }
 
-  // 2. Secondary priority: Direct Google Drive public download URL
-  const targetId = customFileId || getLiveMasterFileId();
+  // 2. Second priority: Cross-Device Cloud Sync via Firestore
+  // On other devices, this provides the canonical Google Drive File ID and the complete published school state!
+  if (firebaseConfig.projectId) {
+    try {
+      const broadcastRef = doc(db, 'schools', 'main', 'modules', 'teacher_broadcast');
+      const snap = await getDoc(broadcastRef);
+      if (snap.exists()) {
+        const bData = snap.data();
+        const driveId = bData?.canonicalDriveFileId || bData?.fileId;
+        if (driveId) {
+          setLiveMasterFileId(driveId, bData.canonicalDriveFileLink);
+          knownDriveId = driveId;
+        }
+        if (bData?.publishedDateFormatted) {
+          setLastTeacherPublishedDate(bData.publishedDateFormatted);
+        }
+        if (bData?.data && (Array.isArray(bData.data.students) || Array.isArray(bData.data.exams))) {
+          return {
+            success: true,
+            data: bData.data,
+            publishedDate: bData.publishedDateFormatted || bData.data.lastTeacherPublishedDate,
+            source: 'cloud'
+          };
+        }
+      }
+    } catch (fsErr) {
+      console.warn('Teacher broadcast Firestore fetch note:', fsErr);
+    }
+  }
+
+  // 3. Third priority: Direct Google Drive public download URL
+  const targetId = knownDriveId || getLiveMasterFileId();
   if (targetId) {
     try {
       const urls = [
@@ -1212,7 +1306,7 @@ export const fetchTeacherBroadcastData = async (
     }
   }
 
-  // 3. Fallback: Local browser storage
+  // 4. Fallback: Local browser storage
   try {
     const saved = localStorage.getItem('okulYonetimState');
     if (saved) {

@@ -515,7 +515,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   });
   const [lastDriveBackupDate, setLastDriveBackupDate] = useState<string | null>(() => {
     try {
-      return localStorage.getItem('akademi_last_drive_backup_date');
+      return localStorage.getItem('akademi_last_drive_backup_date') || 
+             localStorage.getItem('akademi_last_drive_sync_formatted') || 
+             localStorage.getItem('akademi_last_teacher_published_date') || 
+             null;
     } catch {
       return null;
     }
@@ -1619,9 +1622,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     return null;
   };
 
-  // Ultra-lightweight Real-time Firestore listener for teachers (Only listens to 1 single 'meta' doc!)
+  // Ultra-lightweight Real-time Firestore listener for teachers (Listens to 'meta' and 'teacher_broadcast')
   useEffect(() => {
     let unsubMeta: (() => void) | null = null;
+    let unsubBroadcast: (() => void) | null = null;
 
     if (userRole === 'teacher' && firebaseConfig.projectId && !checkIsQuotaExceededToday()) {
       try {
@@ -1635,21 +1639,46 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             console.warn('Realtime cloud meta listener notice:', err?.message || err);
           }
         });
+
+        // Instant broadcast listener: As soon as admin publishes, other devices update in real-time!
+        const broadcastDocRef = doc(db, 'schools', 'main', 'modules', 'teacher_broadcast');
+        unsubBroadcast = onSnapshot(broadcastDocRef, (snap) => {
+          if (snap.exists()) {
+            const bData = snap.data();
+            if (bData?.data && (Array.isArray(bData.data.students) || Array.isArray(bData.data.exams))) {
+              const safeData = sanitizeSchoolState(bData.data);
+              setState(safeData);
+              stateRef.current = safeData;
+              if (bData.publishedDateFormatted) {
+                setLastTeacherPublishedDateState(bData.publishedDateFormatted);
+              }
+              try {
+                localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+              } catch {}
+            }
+          }
+        }, (err: any) => {
+          if (err?.code !== 'unavailable') {
+            console.warn('Realtime cloud teacher broadcast listener notice:', err?.message || err);
+          }
+        });
       } catch (e) {}
     }
 
-    // Sync on tab focus for teachers - throttled to at most once per 30 seconds, checking ONLY meta
+    // Sync on tab focus for teachers - throttled to at most once per 30 seconds
     const handleFocus = () => {
       const now = Date.now();
       if (userRole === 'teacher' && now - lastFocusSyncRef.current > 30000 && isInitialCloudHydrationDoneRef.current) {
         lastFocusSyncRef.current = now;
         syncTeacherDelta().catch(() => {});
+        fetchTeacherDataNow().catch(() => {});
       }
     };
     window.addEventListener('focus', handleFocus);
 
     return () => {
       if (unsubMeta) unsubMeta();
+      if (unsubBroadcast) unsubBroadcast();
       window.removeEventListener('focus', handleFocus);
     };
   }, [user?.email, userRole]);
@@ -1789,8 +1818,14 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       const res = await publishToTeachers(stateRef.current, user?.email);
       if (res.success && res.publishedDate) {
         setLastTeacherPublishedDateState(res.publishedDate);
+        recordDriveSyncTimestamps(new Date().toISOString());
+        if (res.fileId) {
+          stateRef.current.canonicalDriveFileId = res.fileId;
+          setLiveMasterFileId(res.fileId);
+        }
         setState(prev => ({
           ...prev,
+          canonicalDriveFileId: res.fileId || prev.canonicalDriveFileId,
           lastTeacherPublishedDate: res.publishedDate
         }));
         stateRef.current.lastTeacherPublishedDate = res.publishedDate;

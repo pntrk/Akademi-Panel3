@@ -91,6 +91,12 @@ service cloud.firestore {
         allow write: if isSchoolTeacher() || isSchoolAdmin() || isSuperAdmin();
       }
 
+      // Teacher broadcast subcollection (Admin publishes with 1 write, all teachers read with 1 read)
+      match /broadcast/{broadcastId} {
+        allow read: if isSignedIn();
+        allow write: if isSchoolAdmin() || isSuperAdmin();
+      }
+
       // Cloud Backups subcollection
       match /backups/{backupId} {
         allow read: if isSignedIn();

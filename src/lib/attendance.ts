@@ -22,42 +22,56 @@ export const getActiveTeacherIdentity = (currentUserObj?: any): { email: string;
 
   // 1. AppContext / Props üzerinden gelen doğrulanmış oturum kullanıcısı
   if (currentUserObj?.email) {
-    email = currentUserObj.email.trim().toLowerCase();
-    displayName = currentUserObj.displayName || currentUserObj.name || '';
+    const raw = currentUserObj.email.trim().toLowerCase();
+    if (!raw.includes('abdullaherbileses')) {
+      email = raw;
+      displayName = currentUserObj.displayName || currentUserObj.name || '';
+    }
   }
 
   // 2. Firebase Auth doğrudan kontrolü (eğer henüz AppContext oturumu senkron değilse)
   if (!email && auth.currentUser?.email) {
-    email = auth.currentUser.email.trim().toLowerCase();
-    displayName = auth.currentUser.displayName || displayName;
+    const raw = auth.currentUser.email.trim().toLowerCase();
+    if (!raw.includes('abdullaherbileses')) {
+      email = raw;
+      displayName = auth.currentUser.displayName || displayName;
+    }
   }
 
-  // 3. Tarayıcı oturum hafızası kontrolü
+  // 3. Tarayıcı oturum hafızası kontrolü (Eski abdullaherbileses test kayıtları temizlenir)
   if (!email) {
     try {
       const rawSession = localStorage.getItem('akademi_user_session');
       if (rawSession) {
-        const parsed = JSON.parse(rawSession);
-        if (parsed?.email) {
-          email = parsed.email.trim().toLowerCase();
-          displayName = parsed.displayName || parsed.name || displayName;
+        if (rawSession.toLowerCase().includes('abdullaherbileses')) {
+          localStorage.removeItem('akademi_user_session');
+        } else {
+          const parsed = JSON.parse(rawSession);
+          if (parsed?.email && !parsed.email.toLowerCase().includes('abdullaherbileses')) {
+            email = parsed.email.trim().toLowerCase();
+            displayName = parsed.displayName || parsed.name || displayName;
+          }
         }
       }
     } catch {}
   }
 
-  // 4. Tekil kullanıcı e-posta hafızası
+  // 4. Tekil kullanıcı e-posta hafızası (Eski abdullaherbileses temizlenir)
   if (!email) {
     try {
       const savedEmail = localStorage.getItem('akademi_user_email');
       if (savedEmail) {
-        email = savedEmail.trim().toLowerCase();
+        if (savedEmail.toLowerCase().includes('abdullaherbileses')) {
+          localStorage.removeItem('akademi_user_email');
+        } else {
+          email = savedEmail.trim().toLowerCase();
+        }
       }
     } catch {}
   }
 
   // E-postadan veya profilden temiz görünen isim oluşturma
-  if (!displayName) {
+  if (!displayName || displayName.toLowerCase().includes('abdullaherbileses')) {
     if (email) {
       const prefix = email.split('@')[0];
       displayName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
@@ -67,7 +81,10 @@ export const getActiveTeacherIdentity = (currentUserObj?: any): { email: string;
   }
 
   // İsim içinde gereksiz e-posta parantezleri veya bozuklukları temizle
-  const cleanDisplayName = displayName.replace(/\s*\([^)]*@.*?\)/g, '').trim() || 'Gözetmen Öğretmen';
+  let cleanDisplayName = displayName.replace(/\s*\([^)]*@.*?\)/g, '').trim() || 'Gözetmen Öğretmen';
+  if (cleanDisplayName.toLowerCase().includes('abdullaherbileses')) {
+    cleanDisplayName = email ? email.split('@')[0] : 'Gözetmen Öğretmen';
+  }
 
   return {
     email: email || '',
@@ -75,11 +92,37 @@ export const getActiveTeacherIdentity = (currentUserObj?: any): { email: string;
   };
 };
 
-// Load cached attendances from localStorage
+// Load cached attendances from localStorage (Eski abdullaherbileses kayıtlarını dinamik temizler)
 export const getLocalAttendances = (): Record<string, HallAttendance> => {
   try {
     const raw = localStorage.getItem(LOCAL_ATTENDANCE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, HallAttendance>;
+    let hasModified = false;
+    const currentRealEmail = (auth.currentUser?.email || '').trim().toLowerCase();
+
+    for (const key of Object.keys(parsed)) {
+      const item = parsed[key];
+      if (item) {
+        const isLegacyEmail = item.takenByEmail && item.takenByEmail.toLowerCase().includes('abdullaherbileses');
+        const isLegacyName = item.takenBy && item.takenBy.toLowerCase().includes('abdullaherbileses');
+        if (isLegacyEmail || isLegacyName) {
+          hasModified = true;
+          const cleanEmail = (currentRealEmail && !currentRealEmail.includes('abdullaherbileses'))
+            ? currentRealEmail
+            : '';
+          item.takenByEmail = cleanEmail;
+          if (isLegacyName) {
+            item.takenBy = cleanEmail || 'Gözetmen Öğretmen';
+          }
+        }
+      }
+    }
+
+    if (hasModified) {
+      localStorage.setItem(LOCAL_ATTENDANCE_KEY, JSON.stringify(parsed));
+    }
+    return parsed;
   } catch {
     return {};
   }
@@ -328,7 +371,15 @@ export const fetchAllAttendances = async (
     if (!snap.empty) {
       snap.forEach(docSnap => {
         const data = docSnap.data() as HallAttendance;
-        local[data.id] = data;
+        if (data) {
+          if (data.takenByEmail && data.takenByEmail.toLowerCase().includes('abdullaherbileses')) {
+            data.takenByEmail = '';
+          }
+          if (data.takenBy && data.takenBy.toLowerCase().includes('abdullaherbileses')) {
+            data.takenBy = data.takenByEmail || 'Gözetmen Öğretmen';
+          }
+          local[data.id] = data;
+        }
       });
       // Update cache and timestamp
       localStorage.setItem(LOCAL_ATTENDANCE_KEY, JSON.stringify(local));
