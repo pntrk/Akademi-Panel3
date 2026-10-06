@@ -196,7 +196,19 @@ export const getLiveMasterFileLink = (): string | null => {
   }
 };
 
-export const setLiveMasterFileId = (id: string | null, link?: string | null) => {
+export const isLiveMasterFileLocked = (): boolean => {
+  try {
+    const id = getLiveMasterFileId();
+    if (!id) return false;
+    const locked = localStorage.getItem('akademi_live_drive_file_locked');
+    // If an ID has been saved, default to locked unless explicitly set to 'false'
+    return locked !== 'false';
+  } catch {
+    return false;
+  }
+};
+
+export const setLiveMasterFileId = (id: string | null, link?: string | null, locked = true) => {
   cachedLiveFileId = id;
   const webLink = link || (id ? `https://drive.google.com/file/d/${id}/view` : null);
   cachedLiveFileLink = webLink;
@@ -204,10 +216,20 @@ export const setLiveMasterFileId = (id: string | null, link?: string | null) => 
     if (id) {
       localStorage.setItem('akademi_live_drive_file_id', id);
       if (webLink) localStorage.setItem('akademi_live_drive_file_link', webLink);
+      if (locked) {
+        localStorage.setItem('akademi_live_drive_file_locked', 'true');
+      }
     } else {
       localStorage.removeItem('akademi_live_drive_file_id');
       localStorage.removeItem('akademi_live_drive_file_link');
+      localStorage.removeItem('akademi_live_drive_file_locked');
     }
+  } catch {}
+};
+
+export const unlockLiveMasterFile = () => {
+  try {
+    localStorage.setItem('akademi_live_drive_file_locked', 'false');
   } catch {}
 };
 
@@ -277,7 +299,7 @@ export const lockToCanonicalDriveFile = async (
       const autoFound = await findLiveMasterDriveFile(token);
       if (autoFound?.id) {
         const webLink = autoFound.webViewLink || `https://drive.google.com/file/d/${autoFound.id}/view`;
-        setLiveMasterFileId(autoFound.id, webLink);
+        setLiveMasterFileId(autoFound.id, webLink, true);
         return {
           success: true,
           fileId: autoFound.id,
@@ -319,7 +341,7 @@ export const lockToCanonicalDriveFile = async (
           const folderFiles = await folderSearchRes.json();
           const target = folderFiles.files?.find((f: any) => f.name.includes('Canli_Kutuk') || f.name.includes('AkademiPanel')) || folderFiles.files?.[0];
           if (target) {
-            setLiveMasterFileId(target.id, target.webViewLink);
+            setLiveMasterFileId(target.id, target.webViewLink, true);
             return {
               success: true,
               fileId: target.id,
@@ -332,7 +354,7 @@ export const lockToCanonicalDriveFile = async (
 
       if (!meta.trashed) {
         const webLink = meta.webViewLink || `https://drive.google.com/file/d/${meta.id}/view`;
-        setLiveMasterFileId(meta.id, webLink);
+        setLiveMasterFileId(meta.id, webLink, true);
         return {
           success: true,
           fileId: meta.id,
@@ -349,7 +371,7 @@ export const lockToCanonicalDriveFile = async (
 
     if (testDownload.ok) {
       const webLink = `https://drive.google.com/file/d/${fileId}/view`;
-      setLiveMasterFileId(fileId, webLink);
+      setLiveMasterFileId(fileId, webLink, true);
       return {
         success: true,
         fileId: fileId,
@@ -457,6 +479,17 @@ export const findLiveMasterDriveFile = async (
 
     // If knownId exists and is valid
     if (knownMeta && !knownMeta.trashed) {
+      // If locked, NEVER overwrite with candidate files! Return the fixed master file immediately.
+      if (isLiveMasterFileLocked()) {
+        if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink, true);
+        return {
+          id: knownMeta.id,
+          name: knownMeta.name || LIVE_MASTER_FILE_NAME,
+          modifiedTime: knownMeta.modifiedTime,
+          webViewLink: knownMeta.webViewLink
+        };
+      }
+
       const knownTime = knownMeta.modifiedTime ? new Date(knownMeta.modifiedTime).getTime() : 0;
       
       // Look for candidate files that are newer than knownMeta
@@ -468,7 +501,7 @@ export const findLiveMasterDriveFile = async (
 
       if (fresherCandidate) {
         const webLink = fresherCandidate.webViewLink || `https://drive.google.com/file/d/${fresherCandidate.id}/view`;
-        setLiveMasterFileId(fresherCandidate.id, webLink);
+        setLiveMasterFileId(fresherCandidate.id, webLink, false);
         return {
           id: fresherCandidate.id,
           name: fresherCandidate.name,
@@ -477,7 +510,7 @@ export const findLiveMasterDriveFile = async (
         };
       }
 
-      if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink);
+      if (knownMeta.webViewLink) setLiveMasterFileId(knownMeta.id, knownMeta.webViewLink, false);
       return {
         id: knownMeta.id,
         name: knownMeta.name || LIVE_MASTER_FILE_NAME,
@@ -837,6 +870,29 @@ export const fetchLatestDriveBackup = async (
       return { success: false, error: 'Google Drive erişim belirteci bulunamadı.' };
     }
 
+    // 1. FAST-PATH: If canonical file is locked and known, prioritize it above all else!
+    const lockedId = getLiveMasterFileId();
+    if (lockedId && isLiveMasterFileLocked()) {
+      try {
+        const rawData = await downloadBackupFromGoogleDrive(lockedId);
+        const targetState = rawData?.data || rawData?.appState || rawData;
+        if (targetState && (Array.isArray(targetState.students) || Array.isArray(targetState.exams) || targetState.budget)) {
+          const meta = await getDriveFileMetadata(lockedId, activeToken).catch(() => null);
+          return {
+            success: true,
+            fileId: lockedId,
+            fileName: meta?.name || LIVE_MASTER_FILE_NAME,
+            modifiedTime: meta?.modifiedTime || new Date().toISOString(),
+            data: targetState,
+            studentCount: Array.isArray(targetState.students) ? targetState.students.length : (Array.isArray(targetState.ogrenciler) ? targetState.ogrenciler.length : 0),
+            examCount: Array.isArray(targetState.exams) ? targetState.exams.length : (Array.isArray(targetState.sinavlar) ? targetState.sinavlar.length : 0)
+          };
+        }
+      } catch (lockedErr) {
+        console.warn('Locked canonical file fetch notice, scanning candidates fallback:', lockedErr);
+      }
+    }
+
     // Search query for all AkademiPanel / school backup JSON files
     const query = "trashed = false and (name contains 'Canli_Kutuk' or name contains 'Akademi' or name contains 'Kutuk' or name contains 'Ogrenci' or name contains 'Yedek' or name contains '.json' or mimeType = 'application/json')";
     const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,createdTime,size,webViewLink,owners)&orderBy=modifiedTime desc&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`;
@@ -894,7 +950,9 @@ export const fetchLatestDriveBackup = async (
       return { success: false, error: 'İndirilen dosya içeriği boş veya okunamadı.' };
     }
 
-    setLiveMasterFileId(latestFile.id, latestFile.webViewLink);
+    if (!isLiveMasterFileLocked()) {
+      setLiveMasterFileId(latestFile.id, latestFile.webViewLink, false);
+    }
 
     return {
       success: true,

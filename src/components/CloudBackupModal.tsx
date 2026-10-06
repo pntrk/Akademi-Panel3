@@ -3,7 +3,7 @@ import {
   Cloud, CheckCircle2, AlertTriangle, RefreshCw, X, Eye, 
   UploadCloud, FolderCheck, Download, Trash2, Plus, 
   User as UserIcon, ShieldCheck, Database, ExternalLink,
-  Link2, Copy, Check, Lock
+  Link2, Copy, Check, Lock, Unlock, HardDriveDownload
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { 
@@ -22,6 +22,8 @@ import {
   getLiveMasterFileId,
   setLiveMasterFileId,
   getLiveMasterFileLink,
+  isLiveMasterFileLocked,
+  unlockLiveMasterFile,
   getDriveFileMetadata,
   lockToCanonicalDriveFile
 } from '../lib/googleDrive';
@@ -51,6 +53,8 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     saveNow,
     restoreBackup,
     downloadLatestFromDrive,
+    downloadLockedDriveFileLocally,
+    lastDriveBackupDate,
     lastDataSource,
     activeMasterFileName
   } = useAppContext();
@@ -73,8 +77,10 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
   const [isConnectingDrive, setIsConnectingDrive] = useState<boolean>(false);
   const [canonicalFileId, setCanonicalFileId] = useState<string | null>(() => getLiveMasterFileId() || state.canonicalDriveFileId || null);
   const [canonicalFileLink, setCanonicalFileLink] = useState<string | null>(() => getLiveMasterFileLink() || state.canonicalDriveFileLink || null);
+  const [isLinkLocked, setIsLinkLocked] = useState<boolean>(() => isLiveMasterFileLocked());
+  const [isEditingLink, setIsEditingLink] = useState<boolean>(false);
   const [showLinkInput, setShowLinkInput] = useState<boolean>(false);
-  const [customFileLinkInput, setCustomFileLinkInput] = useState<string>('');
+  const [customFileLinkInput, setCustomFileLinkInput] = useState<string>(() => getLiveMasterFileLink() || state.canonicalDriveFileLink || '');
   const [isValidatingLink, setIsValidatingLink] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
@@ -101,6 +107,10 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
       const currentLink = getLiveMasterFileLink() || state.canonicalDriveFileLink || (currentId ? `https://drive.google.com/file/d/${currentId}/view` : null);
       setCanonicalFileId(currentId);
       setCanonicalFileLink(currentLink);
+      setIsLinkLocked(isLiveMasterFileLocked() || !!currentId);
+      if (currentLink) {
+        setCustomFileLinkInput(currentLink);
+      }
       setFeedback(null);
 
       // Fetch live metadata directly from Google Drive
@@ -222,13 +232,14 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
         setCanonicalFileId(res.fileId);
         const fullLink = res.webViewLink || `https://drive.google.com/file/d/${res.fileId}/view`;
         setCanonicalFileLink(fullLink);
-        await saveCanonicalDriveFileToFirestore(res.fileId, fullLink);
+        setCustomFileLinkInput(fullLink);
+        setIsLinkLocked(true);
+        setIsEditingLink(false);
+        await saveCanonicalDriveFileToFirestore(res.fileId, fullLink, true);
         setFeedback({
           type: 'success',
-          message: `Ortak master dosya ("${res.fileName || LIVE_MASTER_FILE_NAME}") başarıyla kilitlendi! Tüm yöneticiler artık bu tek dosyayı kullanacaktır.`
+          message: `Ortak Google Drive bağlantısı başarıyla sabitlendi ve kilitlendi! Her uygulama açılışında ve tüm admin kütük/yedekleme işlemlerinde daima bu sabit link kullanılacaktır.`
         });
-        setShowLinkInput(false);
-        setCustomFileLinkInput('');
         await syncToDriveNow().catch(() => {});
       } else {
         setFeedback({
@@ -244,6 +255,16 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     } finally {
       setIsValidatingLink(false);
     }
+  };
+
+  const handleUnlockLink = () => {
+    unlockLiveMasterFile();
+    setIsLinkLocked(false);
+    setIsEditingLink(true);
+    setFeedback({
+      type: 'success',
+      message: 'Google Drive kütük bağlantı kilidi açıldı. Yeni dosya bağlantısını girip "Sabitle & Kilitle" butonuna tıklayabilirsiniz.'
+    });
   };
 
   const handleCopyFileLink = () => {
@@ -727,24 +748,60 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                 <div className="bg-white/95 rounded-xl p-3 border border-emerald-200/80 shadow-2xs space-y-2.5 text-xs">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                     <div className="flex items-center gap-2 min-w-0">
-                      <Lock className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isLinkLocked ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                        <Lock className="w-4 h-4" />
+                      </div>
                       <div className="min-w-0">
-                        <span className="font-bold text-emerald-950 block truncate">
-                          Ortak Canlı Dosya: <code className="font-mono text-emerald-800 text-[11px] bg-emerald-50 px-1.5 py-0.5 rounded">{LIVE_MASTER_FILE_NAME}</code>
-                        </span>
-                        {canonicalFileId ? (
-                          <span className="text-[10.5px] text-emerald-700 font-mono block truncate mt-0.5">
-                            Dosya ID: {canonicalFileId}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-emerald-950 block truncate">
+                            Sabit Canlı Kütük: <code className="font-mono text-emerald-800 text-[11px] bg-emerald-50 px-1.5 py-0.5 rounded">{LIVE_MASTER_FILE_NAME}</code>
                           </span>
+                          {isLinkLocked && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white flex items-center gap-1 shadow-2xs">
+                              <Lock className="w-2.5 h-2.5" />
+                              SABİT & KİLİTLİ
+                            </span>
+                          )}
+                        </div>
+                        {canonicalFileId ? (
+                          <div className="flex flex-col gap-0.5 mt-0.5">
+                            <span className="text-[10.5px] text-emerald-700 font-mono block truncate">
+                              Dosya ID: {canonicalFileId} • Her açılışta ve yedeklemede sabit kullanılır
+                            </span>
+                            <span className="text-[10.5px] text-emerald-800 font-semibold block truncate">
+                              🕒 Son Yedeklenme Tarihi: <span className="font-bold text-emerald-950">{lastDriveBackupDate || lastDriveSyncedAt || 'Henüz kaydedilmedi'}</span>
+                            </span>
+                          </div>
                         ) : (
                           <span className="text-[10.5px] text-amber-700 block mt-0.5">
-                            İlk eşitlemede dosya ID'si otomatik kilitlenecektir.
+                            Ortak dosya bağlantısını girip "Sabitle & Kilitle" yapınız.
                           </span>
                         )}
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+                      {/* Fiziki JSON İndir Butonu */}
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await downloadLockedDriveFileLocally();
+                            if (res.success) {
+                              setFeedback({ type: 'success', message: `✓ Kilitli Google Drive JSON dosyası bilgisayarınıza fiziksel olarak indirildi (${res.fileName}).` });
+                            } else {
+                              setFeedback({ type: 'error', message: res.error || 'Dosya indirilemedi.' });
+                            }
+                          } catch (e: any) {
+                            setFeedback({ type: 'error', message: 'İndirme işlemi sırasında bir hata oluştu.' });
+                          }
+                        }}
+                        className="flex-1 sm:flex-initial px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-lg font-bold text-[11px] border border-sky-300 flex items-center justify-center gap-1 transition-colors cursor-pointer active:scale-95 shadow-2xs"
+                        title="Kilitli Google Drive JSON dosyasını fiziki olarak bilgisayara indir (.json)"
+                      >
+                        <HardDriveDownload className="w-3 h-3 text-sky-700" />
+                        <span>Fiziki JSON İndir</span>
+                      </button>
+
                       {canonicalFileLink && (
                         <>
                           <a
@@ -768,12 +825,21 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                         </>
                       )}
                       <button
-                        onClick={() => setShowLinkInput(prev => !prev)}
-                        className="w-full sm:w-auto px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 rounded-lg font-bold text-[11px] border border-emerald-300 flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-2xs active:scale-95"
-                        title="Diğer süperadminin paylaştığı Drive linkini gir"
+                        onClick={() => {
+                          setShowLinkInput(prev => !prev);
+                          if (!showLinkInput && canonicalFileLink && !customFileLinkInput) {
+                            setCustomFileLinkInput(canonicalFileLink);
+                          }
+                        }}
+                        className={`w-full sm:w-auto px-3 py-1.5 rounded-lg font-bold text-[11px] border flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-2xs active:scale-95 ${
+                          isLinkLocked 
+                            ? 'bg-emerald-50 text-emerald-900 border-emerald-400 hover:bg-emerald-100'
+                            : 'bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-300'
+                        }`}
+                        title="Sabit Google Drive bağlantısını görüntüle veya kilitle"
                       >
-                        <Link2 className="w-3 h-3 text-emerald-600" />
-                        <span>{showLinkInput ? 'Kapat' : 'Ortak Link Tanımla'}</span>
+                        {isLinkLocked ? <Lock className="w-3 h-3 text-emerald-700" /> : <Link2 className="w-3 h-3 text-emerald-600" />}
+                        <span>{showLinkInput ? 'Kapat' : (isLinkLocked ? 'Sabit Linki Yönet' : 'Ortak Linki Kilitle')}</span>
                       </button>
                     </div>
                   </div>
@@ -785,15 +851,21 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                       className="p-3.5 bg-emerald-50/90 rounded-xl border border-emerald-300 space-y-2.5 animate-fade-in mt-2"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                        <label className="block text-[11px] font-bold text-emerald-950">
-                          Ortak Google Drive Dosyası Bağlantısı veya ID:
+                        <label className="block text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
+                          <Lock className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>Ortak Google Drive Dosyası Bağlantısı veya ID:</span>
+                          {isLinkLocked && !isEditingLink && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white tracking-wide">
+                              SABİT & KİLİTLİ
+                            </span>
+                          )}
                         </label>
                         <button
                           type="button"
                           onClick={(e) => handleLockCanonicalLink(e, true)}
                           disabled={isValidatingLink}
                           className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
-                          title="Hesabınızdaki paylaşılan kütük dosyasını otomatik ara"
+                          title="Hesabınızdaki paylaşılan kütük dosyasını otomatik ara ve kilitle"
                         >
                           <RefreshCw className={`w-3 h-3 ${isValidatingLink ? 'animate-spin' : ''}`} />
                           <span>Drive'da Otomatik Bul & Kilitle</span>
@@ -805,22 +877,52 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                           type="text"
                           value={customFileLinkInput}
                           onChange={(e) => setCustomFileLinkInput(e.target.value)}
+                          readOnly={isLinkLocked && !isEditingLink}
                           placeholder="Örn: https://drive.google.com/file/d/1A2B3C.../view veya dosya ID"
-                          className="flex-1 bg-white border border-emerald-300 rounded-xl px-3 py-2 text-xs text-[#2d2c25] focus:outline-none focus:border-emerald-600 shadow-2xs"
+                          className={`flex-1 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-2xs focus:outline-none ${
+                            isLinkLocked && !isEditingLink
+                              ? 'bg-emerald-100/90 border-2 border-emerald-600 text-emerald-950 font-bold select-all cursor-default'
+                              : 'bg-white border border-emerald-300 focus:border-emerald-600 text-[#2d2c25]'
+                          }`}
                         />
-                        <button
-                          type="submit"
-                          disabled={isValidatingLink || !customFileLinkInput.trim()}
-                          className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0 active:scale-95"
-                        >
-                          <RefreshCw className={`w-3 h-3 ${isValidatingLink ? 'animate-spin' : ''}`} />
-                          <span>{isValidatingLink ? 'Doğrulanıyor...' : 'Bağla & Kilitle'}</span>
-                        </button>
+                        {isLinkLocked && !isEditingLink ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={handleUnlockLink}
+                              className="w-full sm:w-auto px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                              title="Sabit dosya kilidini açıp başka link tanımla"
+                            >
+                              <Unlock className="w-3.5 h-3.5" />
+                              <span>Kilidi Aç ve Değiştir</span>
+                            </button>
+                            <span className="hidden sm:flex items-center gap-1 px-3 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs">
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>Sabit Kilitli</span>
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            type="submit"
+                            disabled={isValidatingLink || !customFileLinkInput.trim()}
+                            className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0 active:scale-95"
+                            title="Bu bağlantıyı sabit kütük olarak kilitle"
+                          >
+                            <Lock className={`w-3.5 h-3.5 ${isValidatingLink ? 'animate-spin' : ''}`} />
+                            <span>{isValidatingLink ? 'Doğrulanıyor...' : 'Sabitle & Kilitle'}</span>
+                          </button>
+                        )}
                       </div>
 
-                      <p className="text-[10.5px] text-emerald-800 leading-relaxed bg-white/70 p-2.5 rounded-lg border border-emerald-200/70">
-                        💡 <strong>Nasıl Kullanılır?</strong> 1. Süperadmin Google Drive'daki <code>{LIVE_MASTER_FILE_NAME}</code> dosyasını sizin Gmail adresinizle <strong>"Düzenleyen"</strong> yetkisiyle paylaştığında, dosyanın linkini yukarıdaki kutuya yapıştırıp <strong>"Bağla & Kilitle"</strong> butonuna basın (veya doğrudan <strong>"Drive'da Otomatik Bul"</strong>a tıklayın). Tüm süperadminler tek bu dosyaya kilitlenir ve çift dosya oluşmaz.
-                      </p>
+                      <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-300/80 text-[10.5px] text-emerald-900 leading-relaxed space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-emerald-950">
+                          <Lock className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                          <span>Sabit & Kilitli Google Drive Bağlantısı:</span>
+                        </div>
+                        <p>
+                          Bu bölümde kaydedilen Google Drive linki sisteme <strong>sabitlenir ve kilitlenir</strong>. Her uygulama açılışında ve tüm admin dosya yedeklemelerinde (canlı kütük, anlık eşitleme, sistem arşivleri) daima bu <strong>sabit Google linki</strong> kullanılır; çift dosya oluşumu veya kütük karışıklığı kesin olarak engellenir.
+                        </p>
+                      </div>
                     </form>
                   )}
                 </div>

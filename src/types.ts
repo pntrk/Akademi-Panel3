@@ -291,6 +291,7 @@ export interface AppState {
   examCalendarPrintSettings?: any;
   canonicalDriveFileId?: string;
   canonicalDriveFileLink?: string;
+  isDriveFileLocked?: boolean;
   arenaMonthlyData?: Record<string, ArenaMonthlyPartition>;
   arenaMonthSummaries?: ArenaMonthSummary[];
 }
@@ -367,6 +368,7 @@ export interface FullBackupData {
   examCalendarPrintSettings?: any;
   canonicalDriveFileId?: string;
   canonicalDriveFileLink?: string;
+  isDriveFileLocked?: boolean;
 }
 
 export interface CloudBackupRecord {

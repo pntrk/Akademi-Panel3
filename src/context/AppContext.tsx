@@ -55,6 +55,9 @@ import {
   findLiveMasterDriveFile,
   setLiveMasterFileId,
   getLiveMasterFileId,
+  getLiveMasterFileLink,
+  isLiveMasterFileLocked,
+  getDriveFileMetadata,
   LIVE_MASTER_FILE_NAME 
 } from '../lib/googleDrive';
 import { getCachedAccessToken, connectGoogleDrive, saveCanonicalDriveFileToFirestore } from '../lib/firebase';
@@ -96,6 +99,8 @@ interface AppContextType {
   pendingSyncCount: number;
   lastSyncedAt?: string | null;
   lastDriveSyncedAt?: string | null;
+  lastDriveBackupDate?: string | null;
+  downloadLockedDriveFileLocally: () => Promise<{ success: boolean; fileName?: string; studentCount?: number; error?: string }>;
   isDriveAutoSyncing?: boolean;
   syncToDriveNow: () => Promise<{ success: boolean; modifiedTime?: string; error?: string }>;
   hasPendingChanges: boolean;
@@ -500,6 +505,31 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       return null;
     }
   });
+  const [lastDriveBackupDate, setLastDriveBackupDate] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('akademi_last_drive_backup_date');
+    } catch {
+      return null;
+    }
+  });
+
+  const recordDriveSyncTimestamps = (rawTime?: string | null) => {
+    try {
+      const d = rawTime ? new Date(rawTime) : new Date();
+      const validDate = isNaN(d.getTime()) ? new Date() : d;
+      const timeFormatted = validDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      const day = String(validDate.getDate()).padStart(2, '0');
+      const month = String(validDate.getMonth() + 1).padStart(2, '0');
+      const year = validDate.getFullYear();
+      const fullFormatted = `${day}.${month}.${year} ${timeFormatted}`;
+
+      setLastDriveSyncedAt(timeFormatted);
+      setLastDriveBackupDate(fullFormatted);
+      lastKnownDriveModifiedTimeRef.current = validDate.toISOString();
+      localStorage.setItem('akademi_last_drive_sync_time', timeFormatted);
+      localStorage.setItem('akademi_last_drive_backup_date', fullFormatted);
+    } catch {}
+  };
   const [isDriveAutoSyncing, setIsDriveAutoSyncing] = useState<boolean>(false);
   const [lastDataSource, setLastDataSource] = useState<'drive' | 'firebase' | 'local'>('local');
   const [activeMasterFileName, setActiveMasterFileName] = useState<string | null>(null);
@@ -738,9 +768,49 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         return false;
       }
 
+      // 1. ABSOLUTE TOP PRIORITY: If a fixed/locked canonical Google Drive file is saved, ALWAYS use it first!
+      const lockedId = getLiveMasterFileId() || stateRef.current.canonicalDriveFileId;
+      if (lockedId) {
+        setDriveStartupStatusText(`Sabit kilitli Google Drive kütüğü indiriliyor (${lockedId.slice(0, 10)}...)...`);
+        try {
+          const rawData = await downloadBackupFromGoogleDrive(lockedId);
+          if (rawData) {
+            const targetData = rawData.data || rawData.appState || rawData;
+            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget || targetData.admins)) {
+              const safeData = sanitizeSchoolState(targetData);
+              const studentCount = safeData.students?.length || 0;
+              const examCount = safeData.exams?.length || 0;
+              const fileName = LIVE_MASTER_FILE_NAME;
+              setActiveMasterFileName(fileName);
+
+              setState(safeData);
+              stateRef.current = safeData;
+              setLastDataSource('drive');
+
+              try {
+                localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+                lastSavedPayloadRef.current = JSON.stringify(safeData);
+              } catch (e) {}
+
+              const meta = await getDriveFileMetadata(lockedId, token).catch(() => null);
+              recordDriveSyncTimestamps(meta?.modifiedTime || new Date().toISOString());
+              isInitialCloudHydrationDoneRef.current = true;
+              hasUnsavedLocalEditsRef.current = false;
+              setHasPendingChanges(false);
+              setPendingSyncCount(0);
+
+              setDriveStartupStatusText(`Sabit kilitli Google Drive kütüğü başarıyla yüklendi: ${studentCount} Öğrenci, ${examCount} Sınav.`);
+              return true;
+            }
+          }
+        } catch (lockedErr) {
+          console.warn('Sabit kilitli dosya açılışta indirilemedi, genel yedek taranıyor:', lockedErr);
+        }
+      }
+
       setDriveStartupStatusText('Google Drive üzerindeki en son tarihli yedek dosyası taranıyor...');
       
-      // 1. First priority: Try downloading the latest dated backup from Drive
+      // 2. Secondary: Try downloading the latest dated backup from Drive
       const latestBackupRes = await fetchLatestDriveBackup(token);
       if (latestBackupRes.success && latestBackupRes.data) {
         const targetData = latestBackupRes.data;
@@ -759,14 +829,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           lastSavedPayloadRef.current = JSON.stringify(safeData);
         } catch (e) {}
 
-        if (latestBackupRes.modifiedTime) {
-          const formatted = new Date(latestBackupRes.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-          setLastDriveSyncedAt(formatted);
-          lastKnownDriveModifiedTimeRef.current = latestBackupRes.modifiedTime;
-          try {
-            localStorage.setItem('akademi_last_drive_sync_time', formatted);
-          } catch {}
-        }
+        recordDriveSyncTimestamps(latestBackupRes.modifiedTime || new Date().toISOString());
         isInitialCloudHydrationDoneRef.current = true;
         hasUnsavedLocalEditsRef.current = false;
         setHasPendingChanges(false);
@@ -778,7 +841,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         return true;
       }
 
-      // 2. Fallback: Search for live master file
+      // 3. Fallback: Search for live master file
       const file = await findLiveMasterDriveFile(token);
       if (!file?.id) {
         console.warn('Google Drive açılış kontrolü: Canlı kütük dosyası bulunamadı.');
@@ -806,14 +869,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             lastSavedPayloadRef.current = JSON.stringify(safeData);
           } catch (e) {}
 
-          if (file.modifiedTime) {
-            const formatted = new Date(file.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-            setLastDriveSyncedAt(formatted);
-            lastKnownDriveModifiedTimeRef.current = file.modifiedTime;
-            try {
-              localStorage.setItem('akademi_last_drive_sync_time', formatted);
-            } catch {}
-          }
+          recordDriveSyncTimestamps(file.modifiedTime || new Date().toISOString());
           isInitialCloudHydrationDoneRef.current = true;
           hasUnsavedLocalEditsRef.current = false;
           setHasPendingChanges(false);
@@ -840,7 +896,50 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         return { success: false, error: 'Google Drive oturumu açılamadı. Lütfen giriş yapın.' };
       }
 
-      // 1. Priority: Download latest dated backup
+      // 1. ABSOLUTE TOP PRIORITY: If fixed / locked canonical Drive file exists, load directly from this fixed file!
+      const lockedId = getLiveMasterFileId() || stateRef.current.canonicalDriveFileId;
+      if (lockedId) {
+        try {
+          const rawData = await downloadBackupFromGoogleDrive(lockedId);
+          if (rawData) {
+            const targetData = rawData.data || rawData.appState || rawData;
+            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget)) {
+              const safeData = sanitizeSchoolState(targetData);
+              const studentCount = safeData.students?.length || 0;
+              const examCount = safeData.exams?.length || 0;
+              const fileName = LIVE_MASTER_FILE_NAME;
+
+              setState(safeData);
+              stateRef.current = safeData;
+              setLastDataSource('drive');
+              setActiveMasterFileName(fileName);
+
+              try {
+                localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+                lastSavedPayloadRef.current = JSON.stringify(safeData);
+              } catch (e) {}
+
+              const meta = await getDriveFileMetadata(lockedId, token).catch(() => null);
+              recordDriveSyncTimestamps(meta?.modifiedTime || new Date().toISOString());
+
+              hasUnsavedLocalEditsRef.current = false;
+              setHasPendingChanges(false);
+              setPendingSyncCount(0);
+
+              return {
+                success: true,
+                studentCount,
+                examCount,
+                fileName
+              };
+            }
+          }
+        } catch (directErr) {
+          console.warn('Sabit kilitli Drive dosyası indirilemedi, yedekler aranıyor:', directErr);
+        }
+      }
+
+      // 2. Secondary: Download latest dated backup
       const latestRes = await fetchLatestDriveBackup(token);
       if (latestRes.success && latestRes.data) {
         const safeData = sanitizeSchoolState(latestRes.data);
@@ -858,14 +957,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           lastSavedPayloadRef.current = JSON.stringify(safeData);
         } catch (e) {}
 
-        if (latestRes.modifiedTime) {
-          const formatted = new Date(latestRes.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-          setLastDriveSyncedAt(formatted);
-          lastKnownDriveModifiedTimeRef.current = latestRes.modifiedTime;
-          try {
-            localStorage.setItem('akademi_last_drive_sync_time', formatted);
-          } catch {}
-        }
+        recordDriveSyncTimestamps(latestRes.modifiedTime || new Date().toISOString());
 
         hasUnsavedLocalEditsRef.current = false;
         setHasPendingChanges(false);
@@ -906,14 +998,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         lastSavedPayloadRef.current = JSON.stringify(safeData);
       } catch (e) {}
 
-      if (file.modifiedTime) {
-        const formatted = new Date(file.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-        setLastDriveSyncedAt(formatted);
-        lastKnownDriveModifiedTimeRef.current = file.modifiedTime;
-        try {
-          localStorage.setItem('akademi_last_drive_sync_time', formatted);
-        } catch {}
-      }
+      recordDriveSyncTimestamps(file.modifiedTime || new Date().toISOString());
 
       hasUnsavedLocalEditsRef.current = false;
       setHasPendingChanges(false);
@@ -928,6 +1013,106 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     } catch (err: any) {
       console.warn('Manual download from drive error:', err);
       return { success: false, error: err?.message || 'Google Drive indirme işlemi başarısız oldu.' };
+    }
+  };
+
+  // Physically download the locked Google Drive JSON file to the user's computer/device
+  const downloadLockedDriveFileLocally = async (): Promise<{ success: boolean; fileName?: string; studentCount?: number; error?: string }> => {
+    try {
+      let token = getCachedAccessToken();
+      if (!token) {
+        token = await connectGoogleDrive(false, true);
+      }
+      const lockedId = getLiveMasterFileId() || stateRef.current.canonicalDriveFileId;
+      let rawContent: any = null;
+      let downloadFileName = LIVE_MASTER_FILE_NAME;
+      let fileModifiedDate: string | null = null;
+
+      if (lockedId && token) {
+        try {
+          rawContent = await downloadBackupFromGoogleDrive(lockedId);
+          const meta = await getDriveFileMetadata(lockedId, token).catch(() => null);
+          if (meta?.name) downloadFileName = meta.name;
+          if (meta?.modifiedTime) {
+            fileModifiedDate = meta.modifiedTime;
+            recordDriveSyncTimestamps(meta.modifiedTime);
+          } else {
+            recordDriveSyncTimestamps(new Date().toISOString());
+          }
+        } catch (e) {
+          console.warn('Google Drive direct download note:', e);
+        }
+      } else if (token) {
+        try {
+          const autoFound = await findLiveMasterDriveFile(token);
+          if (autoFound?.id) {
+            rawContent = await downloadBackupFromGoogleDrive(autoFound.id);
+            setLiveMasterFileId(autoFound.id, autoFound.webViewLink, true);
+            if (autoFound.name) downloadFileName = autoFound.name;
+            if (autoFound.modifiedTime) {
+              fileModifiedDate = autoFound.modifiedTime;
+              recordDriveSyncTimestamps(autoFound.modifiedTime);
+            }
+          }
+        } catch (e) {
+          console.warn('Auto find drive file fallback note:', e);
+        }
+      }
+
+      // If network was unavailable or couldn't fetch directly, use current synced state
+      if (!rawContent) {
+        rawContent = {
+          appName: 'AkademiPanel',
+          fileType: 'live_master_sync',
+          school: 'Kırklareli Atatürk Ortaokulu',
+          downloadedAt: new Date().toISOString(),
+          canonicalDriveFileId: lockedId || undefined,
+          version: stateRef.current.version || 1,
+          summary: {
+            studentCount: stateRef.current.students?.length || 0,
+            examCount: stateRef.current.exams?.length || 0,
+            resultCount: stateRef.current.results?.length || 0,
+            hallCount: stateRef.current.examHalls?.length || 0
+          },
+          data: stateRef.current
+        };
+      }
+
+      // If rawContent contains school state, also hydrate memory state so the app is current
+      const targetState = rawContent.data || rawContent.appState || rawContent;
+      let studentCount = 0;
+      if (targetState && (Array.isArray(targetState.students) || Array.isArray(targetState.exams))) {
+        const safeData = sanitizeSchoolState(targetState);
+        studentCount = safeData.students?.length || 0;
+        setState(safeData);
+        stateRef.current = safeData;
+        setLastDataSource('drive');
+        try {
+          localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+        } catch {}
+      }
+
+      // Trigger physical browser JSON file download
+      const jsonContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent, null, 2);
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+
+      const datePart = (fileModifiedDate ? new Date(fileModifiedDate) : new Date()).toISOString().split('T')[0];
+      const baseName = downloadFileName.endsWith('.json') ? downloadFileName.slice(0, -5) : downloadFileName;
+      const finalFileName = `${baseName}_${datePart}.json`;
+
+      anchor.download = finalFileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(blobUrl);
+
+      return { success: true, fileName: finalFileName, studentCount };
+    } catch (err: any) {
+      console.error('Physical JSON file download error:', err);
+      return { success: false, error: err?.message || 'Dosya indirilemedi' };
     }
   };
 
@@ -1547,14 +1732,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     try {
       const res = await syncLiveMasterToGoogleDrive(stateRef.current, user?.email);
       if (res.success) {
-        const formattedTime = res.modifiedTime 
-          ? new Date(res.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
-          : new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-        setLastDriveSyncedAt(formattedTime);
-        lastKnownDriveModifiedTimeRef.current = res.modifiedTime || new Date().toISOString();
-        try {
-          localStorage.setItem('akademi_last_drive_sync_time', formattedTime);
-        } catch {}
+        recordDriveSyncTimestamps(res.modifiedTime || new Date().toISOString());
       }
       return res;
     } catch (e: any) {
@@ -1583,8 +1761,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           try {
             localStorage.setItem('okulYonetimState', JSON.stringify(updateCheck.data));
           } catch {}
-          const timeStr = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-          setLastDriveSyncedAt(timeStr);
+          recordDriveSyncTimestamps(updateCheck.modifiedTime || new Date().toISOString());
         }
       } catch (e) {}
     };
@@ -2403,6 +2580,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           approvedTransfers: s.approvedTransfers || [],
           admins: s.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
           teachers: s.teachers || [],
+          canonicalDriveFileId: s.canonicalDriveFileId || getLiveMasterFileId() || undefined,
+          canonicalDriveFileLink: s.canonicalDriveFileLink || getLiveMasterFileLink() || undefined,
+          isDriveFileLocked: s.isDriveFileLocked !== undefined ? s.isDriveFileLocked : isLiveMasterFileLocked(),
           examCalendarPrintSettings: (() => {
             try {
               const cfg = localStorage.getItem('akademi_exam_calendar_print_config');
@@ -2656,6 +2836,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       pendingSyncCount,
       lastSyncedAt,
       lastDriveSyncedAt,
+      lastDriveBackupDate,
+      downloadLockedDriveFileLocally,
       isDriveAutoSyncing,
       syncToDriveNow,
       hasPendingChanges,

@@ -649,8 +649,16 @@ export const fetchModularSchoolState = async (
           if (Array.isArray(d.admins) && d.admins.length > 0) merged.admins = d.admins;
           if (Array.isArray(d.teachers)) merged.teachers = d.teachers;
           if (d.examCalendarPrintSettings) merged.examCalendarPrintSettings = d.examCalendarPrintSettings;
-          if (d.canonicalDriveFileId) merged.canonicalDriveFileId = d.canonicalDriveFileId;
-          if (d.canonicalDriveFileLink) merged.canonicalDriveFileLink = d.canonicalDriveFileLink;
+          if (d.canonicalDriveFileId) {
+            merged.canonicalDriveFileId = d.canonicalDriveFileId;
+            merged.canonicalDriveFileLink = d.canonicalDriveFileLink;
+            merged.isDriveFileLocked = d.isDriveFileLocked !== false;
+            try {
+              localStorage.setItem('akademi_live_drive_file_id', d.canonicalDriveFileId);
+              if (d.canonicalDriveFileLink) localStorage.setItem('akademi_live_drive_file_link', d.canonicalDriveFileLink);
+              if (d.isDriveFileLocked !== false) localStorage.setItem('akademi_live_drive_file_locked', 'true');
+            } catch {}
+          }
         }
       });
     }
@@ -888,7 +896,7 @@ export const fetchTeacherSelectiveModules = async (
   return result;
 };
 
-export const saveCanonicalDriveFileToFirestore = async (fileId: string, fileLink?: string) => {
+export const saveCanonicalDriveFileToFirestore = async (fileId: string, fileLink?: string, isLocked = true) => {
   try {
     if (!firebaseConfig.projectId) return;
     const cleanId = fileId.trim();
@@ -896,11 +904,13 @@ export const saveCanonicalDriveFileToFirestore = async (fileId: string, fileLink
     await setDoc(doc(db, 'schools', 'main'), {
       canonicalDriveFileId: cleanId,
       canonicalDriveFileLink: cleanLink,
+      isDriveFileLocked: isLocked,
       lastDriveFileUpdatedAt: new Date().toISOString()
     }, { merge: true });
     await setDoc(doc(db, 'schools', 'main', 'modules', 'meta'), {
       canonicalDriveFileId: cleanId,
       canonicalDriveFileLink: cleanLink,
+      isDriveFileLocked: isLocked,
       lastDriveFileUpdatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (e) {

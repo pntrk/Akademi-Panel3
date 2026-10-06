@@ -5,10 +5,11 @@ import {
   LogOut, Shield, Download, Globe, HardDriveDownload, Cloud, 
   Bell, Camera, Printer, TrendingUp, HelpCircle, ChevronRight, 
   Sparkles, Zap, CheckCircle2, User as UserIcon, RefreshCw,
-  Sliders, AlertCircle, AlertTriangle, ExternalLink, FolderCheck, Eye
+  Sliders, AlertCircle, AlertTriangle, ExternalLink, FolderCheck, Eye, Lock
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAppContext } from '../context/AppContext';
+import { isLiveMasterFileLocked } from '../lib/googleDrive';
 import { SettingsModal } from './SettingsModal';
 import { FirebaseStatusModal } from './FirebaseStatusModal';
 import { CloudBackupModal } from './CloudBackupModal';
@@ -137,6 +138,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     hasPendingChanges,
     publishToCloud,
     downloadLatestFromDrive,
+    downloadLockedDriveFileLocally,
+    lastDriveBackupDate,
     activeMasterFileName,
     lastSyncedAt,
     lastDriveSyncedAt,
@@ -167,6 +170,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [isQuotaBannerDismissed, setIsQuotaBannerDismissed] = useState(false);
   const mobileNavRef = useRef<HTMLDivElement>(null);
+  const isDriveLocked = isLiveMasterFileLocked() || Boolean(state.canonicalDriveFileId) || Boolean((state as any).isDriveFileLocked);
 
   useEffect(() => {
     (window as any).__navigateToTab = (tab: string) => setActiveTab(tab);
@@ -939,15 +943,54 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
             {userRole === 'admin' && (
               <>
                 {/* 1. Google Drive Live Sync Status & Download Latest */}
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/20 text-sky-900 dark:text-sky-300 text-xs">
-                  <Cloud className={cn("w-3.5 h-3.5 text-sky-500", isDriveAutoSyncing && "animate-spin")} />
-                  <span className="font-semibold text-[11px] truncate max-w-[150px]" title={activeMasterFileName || 'Google Drive'}>
-                    {driveDownloadFeedback || (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : 'Drive Bağlı')}
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/20 text-sky-900 dark:text-sky-300 text-xs shadow-2xs">
+                  <Cloud className={cn("w-3.5 h-3.5 text-sky-500 shrink-0", isDriveAutoSyncing && "animate-spin")} />
+                  {isDriveLocked && (
+                    <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" title="Sabit ve kilitli ortak Google Drive dosyası" />
+                  )}
+                  <span 
+                    className="font-semibold text-[11px] truncate max-w-[210px] xl:max-w-[260px] flex items-center gap-1 select-none" 
+                    title={`Kilitli Google Drive JSON Dosyası\nDosya: ${activeMasterFileName || 'AkademiPanel_Canli_Kutuk.json'}\nSon Yedeklenme Tarihi: ${lastDriveBackupDate || lastDriveSyncedAt || 'Henüz kaydedilmedi'}\nDurum: ${isDriveLocked ? 'Sabit & Kilitli' : 'Bağlı'}`}
+                  >
+                    {driveDownloadFeedback || (
+                      lastDriveBackupDate 
+                        ? `Son Yedek: ${lastDriveBackupDate}` 
+                        : (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : 'Kilitli Drive Bağlı')
+                    )}
                   </span>
+                  
+                  {/* Fiziki Olarak Bilgisayara İndir (.json) Butonu */}
                   <button
                     onClick={async () => {
                       setIsDriveDownloading(true);
                       setDriveDownloadFeedback('İndiriliyor...');
+                      try {
+                        const res = await downloadLockedDriveFileLocally();
+                        if (res.success) {
+                          setDriveDownloadFeedback('✓ JSON İndirildi');
+                        } else {
+                          setDriveDownloadFeedback('⚠️ ' + (res.error || 'Hata'));
+                        }
+                      } catch (e: any) {
+                        setDriveDownloadFeedback('⚠️ Hata');
+                      } finally {
+                        setIsDriveDownloading(false);
+                        setTimeout(() => setDriveDownloadFeedback(null), 3500);
+                      }
+                    }}
+                    disabled={isDriveDownloading}
+                    className="p-1 hover:bg-sky-500/20 active:scale-95 rounded-lg text-sky-700 dark:text-sky-300 transition-all cursor-pointer disabled:opacity-50 flex items-center"
+                    title="Kilitli Google Drive JSON dosyasını fiziki olarak bilgisayara indir (.json)"
+                    aria-label="Kilitli Google Drive JSON dosyasını fiziki olarak indir"
+                  >
+                    <HardDriveDownload className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Canlı Kütüğü Uygulamaya Yenile / Senkronize Et Butonu */}
+                  <button
+                    onClick={async () => {
+                      setIsDriveDownloading(true);
+                      setDriveDownloadFeedback('Eşitleniyor...');
                       try {
                         const res = await downloadLatestFromDrive();
                         if (res.success) {
@@ -963,10 +1006,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                       }
                     }}
                     disabled={isDriveDownloading}
-                    className="p-1 hover:bg-sky-500/20 rounded-lg text-sky-700 dark:text-sky-300 transition-colors cursor-pointer disabled:opacity-50"
-                    title="Google Drive üzerindeki en son tarihli yedeği şimdi indir"
+                    className="p-1 hover:bg-sky-500/20 active:scale-95 rounded-lg text-sky-700 dark:text-sky-300 transition-all cursor-pointer disabled:opacity-50 flex items-center"
+                    title="Google Drive üzerindeki canlı kütüğü uygulamaya eşitle / yenile"
+                    aria-label="Google Drive canlı kütüğü eşitle"
                   >
-                    <DownloadCloud className="w-3.5 h-3.5" />
+                    <RefreshCw className={cn("w-3 h-3", isDriveDownloading && "animate-spin")} />
                   </button>
                 </div>
 
