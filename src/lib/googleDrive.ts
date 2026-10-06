@@ -153,6 +153,7 @@ export const deleteBackupFromGoogleDrive = async (fileId: string): Promise<boole
 // SINGLE CANONICAL MASTER FILE LOCK (TEK DOSYA KİLİDİ & EŞİTLEME)
 // -------------------------------------------------------------
 export const LIVE_MASTER_FILE_NAME = 'AkademiPanel_Canli_Kutuk.json';
+export const DEFAULT_CANONICAL_DRIVE_FILE_ID = '1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg';
 let cachedLiveFileId: string | null = null;
 let cachedLiveFileLink: string | null = null;
 
@@ -189,16 +190,18 @@ export const extractGoogleDriveFileId = (input: string): string | null => {
 export const getLiveMasterFileId = (): string | null => {
   if (cachedLiveFileId) return cachedLiveFileId;
   try {
-    return localStorage.getItem('akademi_live_drive_file_id');
+    return localStorage.getItem('akademi_live_drive_file_id') || 
+           localStorage.getItem('akademi_canonical_drive_file_id') || 
+           DEFAULT_CANONICAL_DRIVE_FILE_ID;
   } catch {
-    return null;
+    return DEFAULT_CANONICAL_DRIVE_FILE_ID;
   }
 };
 
 export const getLiveMasterFileLink = (): string | null => {
   if (cachedLiveFileLink) return cachedLiveFileLink;
   try {
-    return localStorage.getItem('akademi_live_drive_file_link');
+    return localStorage.getItem('akademi_live_drive_file_link') || `https://drive.google.com/file/d/${getLiveMasterFileId()}/view`;
   } catch {
     const id = getLiveMasterFileId();
     return id ? `https://drive.google.com/file/d/${id}/view` : null;

@@ -6,6 +6,7 @@ import fs from 'fs';
 const app = express();
 const PORT = 3000;
 const CACHE_FILE = path.resolve('.teacher_broadcast_cache.json');
+const DEFAULT_CANONICAL_DRIVE_FILE_ID = '1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg';
 
 // Memory cache for teacher broadcast
 let teacherBroadcastCache: any = null;
@@ -48,7 +49,7 @@ app.get('/api/teacher-data', async (req, res) => {
   }
 
   // If cache is empty in RAM, check query fileId or cached fileId to fetch directly from Google Drive (Server-side 0-quota fetch)
-  const fileId = (req.query.fileId as string) || teacherBroadcastCache?.data?.canonicalDriveFileId;
+  const fileId = (req.query.fileId as string) || teacherBroadcastCache?.data?.canonicalDriveFileId || DEFAULT_CANONICAL_DRIVE_FILE_ID;
   if (fileId) {
     try {
       const urls = [
@@ -93,10 +94,7 @@ app.get('/api/teacher-data', async (req, res) => {
 
 // Google Drive Server-Side Proxy (Bypasses browser CORS & protects 0 Firebase Quota)
 app.get('/api/drive-proxy', async (req, res) => {
-  const fileId = req.query.fileId as string;
-  if (!fileId) {
-    return res.status(400).json({ success: false, error: 'Dosya kimliği (fileId) belirtilmedi.' });
-  }
+  const fileId = (req.query.fileId as string) || DEFAULT_CANONICAL_DRIVE_FILE_ID;
 
   try {
     const urls = [

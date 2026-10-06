@@ -1220,15 +1220,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
     setUserRole(initialComputedRole);
 
-    // 1. If GUEST: Immediately disarm all loaders so user directly sees the "Erişim İsteğiniz Alındı" screen!
-    if (initialComputedRole === 'guest') {
-      setLoading(false);
-      setIsInitialHydrating(false);
-      setIsWaitingForDriveAuth(false);
-      isInitialCloudHydrationDoneRef.current = true;
-      setSyncStatus('synced');
-    } else if (initialComputedRole === 'admin') {
-      // 2. If ADMIN: Strictly connect and download the canonical live master from Google Drive (NOT Firebase!)
+    if (initialComputedRole === 'admin') {
+      // 1. If ADMIN: Strictly connect and download the canonical live master from Google Drive (NOT Firebase!)
       setLoading(true);
       setIsInitialHydrating(true);
       const cachedToken = getCachedAccessToken();
@@ -1254,23 +1247,24 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         setLoading(false);
       }
     } else {
-      // 3. If TEACHER: Zero Firebase quota! Download directly from Google Drive master file
+      // 2. If TEACHER / USER: Download master roster directly from Google Drive first (0 Firebase Quota)
+      // This ensures teachers and authorized users receive all 288 students and active teacher rosters immediately!
       setLoading(true);
       setIsInitialHydrating(true);
       setIsWaitingForDriveAuth(false);
       setDriveStartupStatusText('Google Drive üzerindeki güncel okul kütüğü indiriliyor...');
       fetchTeacherDataNow().then((res) => {
         if (res.success && res.data) {
-          // Success
+          // Master loaded from Google Drive
         }
       }).catch((err) => {
-        console.warn('Teacher broadcast initial fetch note:', err);
+        console.warn('Teacher Google Drive initial fetch notice:', err);
       }).finally(() => {
         isInitialCloudHydrationDoneRef.current = true;
         setIsInitialHydrating(false);
         setLoading(false);
-        const computedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
-        setUserRole(computedRole);
+        const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+        setUserRole(resolvedRole);
         setSyncStatus('synced');
         setSyncErrorMessage(null);
       });
