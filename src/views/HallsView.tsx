@@ -92,6 +92,41 @@ export const HallsView = () => {
   const [isRefreshingDrive, setIsRefreshingDrive] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
+  // Mobil Cihazlar için İki Parmak Pinch-to-Zoom Dokunmatik Hafızası
+  const touchStartDistRef = React.useRef<number | null>(null);
+  const touchStartZoomRef = React.useRef<number>(100);
+
+  const handlePinchTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartDistRef.current = dist;
+      touchStartZoomRef.current = zoomLevel;
+    }
+  };
+
+  const handlePinchTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && touchStartDistRef.current !== null) {
+      const currentDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (currentDist > 0) {
+        const scale = currentDist / touchStartDistRef.current;
+        const newZoom = Math.min(250, Math.max(50, Math.round(touchStartZoomRef.current * scale)));
+        setZoomLevel(newZoom);
+      }
+    }
+  };
+
+  const handlePinchTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length < 2) {
+      touchStartDistRef.current = null;
+    }
+  };
+
   // Auto-fetch Google Drive live master on mount if teacher sees empty halls
   useEffect(() => {
     if (isReadOnly && (!state.examHalls || state.examHalls.length === 0)) {
@@ -2176,27 +2211,6 @@ export const HallsView = () => {
                 ) : (
                   /* Oturma Planı Başlık & Arama Çubuğu */
                   <div className="space-y-2 mb-2 sm:mb-2.5 shrink-0">
-                    {isReadOnly && (
-                      <div className="p-2 sm:px-3 sm:py-2 bg-gradient-to-r from-indigo-50 to-indigo-100/70 border border-indigo-200/90 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
-                        <div className="flex items-center gap-1.5 text-indigo-950 min-w-0">
-                          <Lock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span className="text-[10px] xs:text-[11px] sm:text-xs font-bold truncate">
-                            Önizleme Modu: Oturma planı kilitlidir, sınav salonuna müdahale edilemez.
-                          </span>
-                        </div>
-                        {activeExamForAttendance && (
-                          <button
-                            type="button"
-                            onClick={() => setModalMode('attendance')}
-                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold shrink-0 cursor-pointer active:scale-95 transition-all shadow-2xs flex items-center gap-1"
-                          >
-                            <UserCheck className="w-3 h-3" />
-                            <span>Yoklamaya Geç</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
-
                     <div className="p-2 sm:px-3.5 sm:py-2 bg-white border border-brand-border/70 rounded-xl shadow-2xs flex flex-col xs:flex-row items-stretch xs:items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
                         <span className="text-xs sm:text-sm font-bold text-brand-ink truncate">
@@ -2302,8 +2316,11 @@ export const HallsView = () => {
 
                 {/* Oturma Düzeni & Yoklama Grid Konteyneri (Selector 3 & 5) */}
                 <div 
-                  className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-xl sm:rounded-2xl shadow-inner p-2 sm:p-3.5 md:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x touch-pan-y overscroll-contain select-none min-h-[220px]" 
+                  className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-xl sm:rounded-2xl shadow-inner p-2 sm:p-3.5 md:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-manipulation overscroll-contain select-none min-h-[220px]" 
                   id="seating-plan-printable"
+                  onTouchStart={handlePinchTouchStart}
+                  onTouchMove={handlePinchTouchMove}
+                  onTouchEnd={handlePinchTouchEnd}
                 >
                   <div 
                     style={{ 
