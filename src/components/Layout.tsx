@@ -136,6 +136,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     pendingSyncCount,
     hasPendingChanges,
     publishToCloud,
+    downloadLatestFromDrive,
+    activeMasterFileName,
     lastSyncedAt,
     lastDriveSyncedAt,
     isDriveAutoSyncing,
@@ -152,6 +154,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   } = useAppContext();
   
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isDriveDownloading, setIsDriveDownloading] = useState(false);
+  const [driveDownloadFeedback, setDriveDownloadFeedback] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFirebaseStatusOpen, setIsFirebaseStatusOpen] = useState(false);
   const [isCloudBackupOpen, setIsCloudBackupOpen] = useState(false);
@@ -900,6 +904,148 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                 {currentUser?.email ? currentUser.email.charAt(0).toUpperCase() : 'A'}
               </div>
               <Sliders className="w-3.5 h-3.5 text-[#737265] dark:text-white/70" />
+            </button>
+          </div>
+        </header>
+
+        {/* 💻 Desktop Top Action Bar */}
+        <header className="hidden md:flex items-center justify-between px-6 py-3 bg-[#FAF9F5]/90 dark:bg-[#131418]/90 backdrop-blur-xl border-b border-[#e6e2d3] dark:border-white/10 shrink-0 sticky top-0 z-30 shadow-2xs">
+          {/* Left: Active Section Info */}
+          <div className="flex items-center gap-3">
+            {(() => {
+              const current = navItems.find(i => i.id === activeTab);
+              if (!current) return null;
+              return (
+                <div className="flex items-center gap-2.5">
+                  <div className={cn("w-8 h-8 rounded-xl border flex items-center justify-center shrink-0", current.activeIconBg)}>
+                    <current.icon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-[#2d2c25] dark:text-white leading-tight">
+                      {current.id === 'halls' && userRole === 'teacher' ? 'Salonlar & Oturma Planı' : current.label}
+                    </h2>
+                    <p className="text-[10.5px] text-[#737265] dark:text-white/50 font-medium">
+                      {current.id === 'halls' && userRole === 'teacher' ? 'Yönetici tarafından yayınlanan salon düzeni' : current.subtitle}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Right: Actions, Drive Status, Publish & Theme */}
+          <div className="flex items-center gap-2.5">
+            {/* ADMIN ACTIONS */}
+            {userRole === 'admin' && (
+              <>
+                {/* 1. Google Drive Live Sync Status & Download Latest */}
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/20 text-sky-900 dark:text-sky-300 text-xs">
+                  <Cloud className={cn("w-3.5 h-3.5 text-sky-500", isDriveAutoSyncing && "animate-spin")} />
+                  <span className="font-semibold text-[11px] truncate max-w-[150px]" title={activeMasterFileName || 'Google Drive'}>
+                    {driveDownloadFeedback || (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : 'Drive Bağlı')}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      setIsDriveDownloading(true);
+                      setDriveDownloadFeedback('İndiriliyor...');
+                      try {
+                        const res = await downloadLatestFromDrive();
+                        if (res.success) {
+                          setDriveDownloadFeedback(`✓ ${res.studentCount} Öğr.`);
+                        } else {
+                          setDriveDownloadFeedback('⚠️ ' + (res.error || 'Hata'));
+                        }
+                      } catch (e: any) {
+                        setDriveDownloadFeedback('⚠️ Hata');
+                      } finally {
+                        setIsDriveDownloading(false);
+                        setTimeout(() => setDriveDownloadFeedback(null), 3500);
+                      }
+                    }}
+                    disabled={isDriveDownloading}
+                    className="p-1 hover:bg-sky-500/20 rounded-lg text-sky-700 dark:text-sky-300 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Google Drive üzerindeki en son tarihli yedeği şimdi indir"
+                  >
+                    <DownloadCloud className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* 2. Publish to Teachers (Öğretmene Yayınla) Button */}
+                <button
+                  onClick={async () => {
+                    setIsPublishing(true);
+                    try {
+                      await publishToCloud();
+                      setSaveFeedback("✓ Öğretmenlere yayınlandı");
+                      setTimeout(() => setSaveFeedback(null), 3000);
+                    } catch (e) {
+                      setSaveFeedback("⚠️ Yayınlama hatası");
+                      setTimeout(() => setSaveFeedback(null), 3000);
+                    } finally {
+                      setIsPublishing(false);
+                    }
+                  }}
+                  disabled={isPublishing}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs disabled:opacity-50",
+                    hasPendingChanges || syncStatus === 'pending_publish'
+                      ? "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/30 ring-2 ring-amber-400/50 animate-pulse"
+                      : "bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                  )}
+                  title="Salon, Sınav Sonuçları ve Akademi Arena aylık değişikliklerini Firebase üzerinden öğretmenlere yayınla"
+                >
+                  <UploadCloud className={cn("w-4 h-4", isPublishing && "animate-spin")} />
+                  <span>
+                    {isPublishing
+                      ? 'Yayınlanıyor...'
+                      : hasPendingChanges || pendingSyncCount > 0
+                        ? `Öğretmenlere Yayınla (${pendingSyncCount})`
+                        : 'Öğretmenlere Yayınla'}
+                  </span>
+                </button>
+              </>
+            )}
+
+            {/* TEACHER SYNC STATUS */}
+            {userRole === 'teacher' && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-[11px]">
+                  {saveFeedback || (lastSyncedAt ? `Bulutla Eşit (${lastSyncedAt})` : 'Bulutla Eşit')}
+                </span>
+                <button
+                  onClick={async () => {
+                    setSaveFeedback('Kontrol ediliyor...');
+                    const res = await checkTeacherUpdatesNow();
+                    setSaveFeedback(res.message || 'Güncel');
+                    setTimeout(() => setSaveFeedback(null), 3500);
+                  }}
+                  className="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-md text-[10px] font-bold transition-colors cursor-pointer"
+                  title="Yayınlanan yeni sınav veya salon verilerini kontrol et"
+                >
+                  Yenile
+                </button>
+              </div>
+            )}
+
+            {/* Quick Guide Button */}
+            <button
+              onClick={() => setIsGuideOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-100 dark:bg-purple-500/20 hover:bg-purple-200 dark:hover:bg-purple-500/30 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30 font-bold text-xs transition-all cursor-pointer shadow-2xs"
+              title="Kurum İçi Optik Deneme İş Akışı Rehberi"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-500 fill-current" />
+              <span>Nasıl Çalışır?</span>
+            </button>
+
+            {/* Theme Toggle */}
+            <button 
+              onClick={() => setIsDarkMode(!isDarkMode)} 
+              aria-label="Temayı Değiştir"
+              title={isDarkMode ? 'Aydınlık Mod' : 'Karanlık Mod'}
+              className="w-8 h-8 flex items-center justify-center rounded-xl bg-white dark:bg-white/10 hover:bg-gray-100 text-[#5a5a40] dark:text-white/80 border border-[#e6e2d3] dark:border-white/10 transition-all cursor-pointer shadow-2xs"
+            >
+              {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-indigo-500" />}
             </button>
           </div>
         </header>

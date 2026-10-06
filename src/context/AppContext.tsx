@@ -51,6 +51,7 @@ import {
   syncLiveMasterToGoogleDrive, 
   fetchLiveMasterFromGoogleDriveIfNewer, 
   downloadBackupFromGoogleDrive,
+  fetchLatestDriveBackup,
   findLiveMasterDriveFile,
   setLiveMasterFileId,
   getLiveMasterFileId,
@@ -737,7 +738,47 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         return false;
       }
 
-      setDriveStartupStatusText('Google Drive üzerindeki kütük dosyaları taranıyor...');
+      setDriveStartupStatusText('Google Drive üzerindeki en son tarihli yedek dosyası taranıyor...');
+      
+      // 1. First priority: Try downloading the latest dated backup from Drive
+      const latestBackupRes = await fetchLatestDriveBackup(token);
+      if (latestBackupRes.success && latestBackupRes.data) {
+        const targetData = latestBackupRes.data;
+        const safeData = sanitizeSchoolState(targetData);
+        const studentCount = safeData.students?.length || 0;
+        const examCount = safeData.exams?.length || 0;
+        const fileName = latestBackupRes.fileName || LIVE_MASTER_FILE_NAME;
+        setActiveMasterFileName(fileName);
+
+        setState(safeData);
+        stateRef.current = safeData;
+        setLastDataSource('drive');
+
+        try {
+          localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+          lastSavedPayloadRef.current = JSON.stringify(safeData);
+        } catch (e) {}
+
+        if (latestBackupRes.modifiedTime) {
+          const formatted = new Date(latestBackupRes.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+          setLastDriveSyncedAt(formatted);
+          lastKnownDriveModifiedTimeRef.current = latestBackupRes.modifiedTime;
+          try {
+            localStorage.setItem('akademi_last_drive_sync_time', formatted);
+          } catch {}
+        }
+        isInitialCloudHydrationDoneRef.current = true;
+        hasUnsavedLocalEditsRef.current = false;
+        setHasPendingChanges(false);
+        setPendingSyncCount(0);
+
+        // KOTA OPTİMİZASYONU: Google Drive en son yedeği yerel duruma güvenle yüklendi.
+        // Firestore kotasını korumak için arka planda otomatik yazma yapılmaz.
+        setDriveStartupStatusText(`Google Drive en son yedeği başarıyla yüklendi: "${fileName}" (${studentCount} Öğrenci, ${examCount} Sınav).`);
+        return true;
+      }
+
+      // 2. Fallback: Search for live master file
       const file = await findLiveMasterDriveFile(token);
       if (!file?.id) {
         console.warn('Google Drive açılış kontrolü: Canlı kütük dosyası bulunamadı.');
@@ -778,9 +819,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           setHasPendingChanges(false);
           setPendingSyncCount(0);
 
-          // KOTA OPTİMİZASYONU: Google Drive kütüğü yerel duruma güvenle yüklendi.
-          // Firestore kotasını korumak için arka planda otomatik yazma yapılmaz.
-          // Yönetici öğretmenlerin görmesini istediğinde kontrollü olarak "Öğretmene Yayınla" butonuna basar.
           setDriveStartupStatusText(`Google Drive kütüğü başarıyla yüklendi: ${studentCount} Öğrenci, ${examCount} Sınav.`);
           return true;
         }
@@ -802,9 +840,49 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         return { success: false, error: 'Google Drive oturumu açılamadı. Lütfen giriş yapın.' };
       }
 
+      // 1. Priority: Download latest dated backup
+      const latestRes = await fetchLatestDriveBackup(token);
+      if (latestRes.success && latestRes.data) {
+        const safeData = sanitizeSchoolState(latestRes.data);
+        const studentCount = safeData.students?.length || 0;
+        const examCount = safeData.exams?.length || 0;
+        const fileName = latestRes.fileName || LIVE_MASTER_FILE_NAME;
+
+        setState(safeData);
+        stateRef.current = safeData;
+        setLastDataSource('drive');
+        setActiveMasterFileName(fileName);
+
+        try {
+          localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+          lastSavedPayloadRef.current = JSON.stringify(safeData);
+        } catch (e) {}
+
+        if (latestRes.modifiedTime) {
+          const formatted = new Date(latestRes.modifiedTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+          setLastDriveSyncedAt(formatted);
+          lastKnownDriveModifiedTimeRef.current = latestRes.modifiedTime;
+          try {
+            localStorage.setItem('akademi_last_drive_sync_time', formatted);
+          } catch {}
+        }
+
+        hasUnsavedLocalEditsRef.current = false;
+        setHasPendingChanges(false);
+        setPendingSyncCount(0);
+
+        return {
+          success: true,
+          studentCount,
+          examCount,
+          fileName
+        };
+      }
+
+      // 2. Fallback: Find canonical file
       const file = await findLiveMasterDriveFile(token);
       if (!file?.id) {
-        return { success: false, error: 'Google Drive üzerinde geçerli bir kütük dosyası bulunamadı.' };
+        return { success: false, error: latestRes.error || 'Google Drive üzerinde geçerli bir kütük dosyası bulunamadı.' };
       }
 
       const rawData = await downloadBackupFromGoogleDrive(file.id);
@@ -837,9 +915,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         } catch {}
       }
 
-      // KOTA OPTİMİZASYONU: Google Drive verisi yerel hafızaya aktarıldı.
-      // Firestore kotasını korumak için otomatik Firestore yazması yapılmaz;
-      // İdareci veriyi öğretmenlere açmak isterse üst çubuktaki "Öğretmene Yayınla" butonunu kullanabilir.
       hasUnsavedLocalEditsRef.current = false;
       setHasPendingChanges(false);
       setPendingSyncCount(0);
@@ -995,7 +1070,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       });
     }
 
-    // Register or update user profile in access_requests on login so admin sees request immediately
+    // Register or check user profile in access_requests on login without performing unneeded writes
     if (cleanUserEmail && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
       const userDocRef = doc(db, 'access_requests', cleanUserEmail);
       getDoc(userDocRef).then((existingSnap) => {
@@ -1014,34 +1089,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
               syncFromCloudStorage(true).catch(() => {});
             }
           }
-
-          // KOTA OPTİMİZASYONU: Sadece son girişin üzerinden 12 saat geçmişse veya isim/foto değişmişse yaz
-          const lastLoginTime = existingData?.lastLoginAt ? new Date(existingData.lastLoginAt).getTime() : 0;
-          const hoursSinceLogin = (Date.now() - lastLoginTime) / (1000 * 60 * 60);
-          const nameChanged = user.displayName && existingData?.name !== user.displayName;
-          const photoChanged = user.photoURL && existingData?.photoURL !== user.photoURL;
-
-          if (hoursSinceLogin > 12 || nameChanged || photoChanged) {
-            setDoc(userDocRef, {
-              email: cleanUserEmail,
-              name: user.displayName || existingData?.name || cleanUserEmail.split('@')[0],
-              photoURL: user.photoURL || existingData?.photoURL || null,
-              lastLoginAt: new Date().toISOString()
-            }, { merge: true }).catch(() => {});
-          }
-        } else {
-          // Document does not exist yet -> create initial access request
-          const finalRole = initialComputedRole;
-          const finalStatus = (finalRole === 'admin' || finalRole === 'teacher') ? 'approved' : 'pending';
-          setDoc(userDocRef, {
-            email: cleanUserEmail,
-            name: user.displayName || cleanUserEmail.split('@')[0],
-            photoURL: user.photoURL || null,
-            role: finalRole,
-            status: finalStatus,
-            lastLoginAt: new Date().toISOString(),
-            timestamp: new Date().toISOString()
-          }, { merge: true }).catch(() => {});
         }
       }).catch((err) => {
         console.warn('Initial access_requests getDoc notice:', err);
@@ -1792,11 +1839,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       clearTimeout(debounceTimerRef.current);
     }
 
-    try {
-      await executeFirestoreWrite(s, true);
-    } catch (e) {
-      console.warn('Error syncing updated users to Firestore:', e);
-    }
+    hasUnsavedLocalEditsRef.current = true;
+    setHasPendingChanges(true);
+    setPendingSyncCount(prev => prev + 1);
+    syncToDriveNow().catch(() => {});
   };
 
   const setUserAccountRole = async (targetEmail: string, newRole: 'admin' | 'teacher' | 'guest') => {
@@ -2241,9 +2287,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       console.warn('LocalStorage save error:', e);
     }
 
-    // 10. Persist state to Drive and Firebase
+    // 10. Persist state to Google Drive and mark pending publish for Firebase
     syncToDriveNow().catch(() => {});
-    executeFirestoreWrite(fullState, true).catch(() => {});
+    hasUnsavedLocalEditsRef.current = true;
+    setHasPendingChanges(true);
+    setPendingSyncCount(prev => prev + 1);
 
     const summary = {
       studentCount: updatedStudents.length,
