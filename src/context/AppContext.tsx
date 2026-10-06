@@ -62,7 +62,8 @@ import {
   fetchTeacherBroadcastData,
   getLastTeacherPublishedDate,
   setLastTeacherPublishedDate,
-  LIVE_MASTER_FILE_NAME 
+  LIVE_MASTER_FILE_NAME,
+  DEFAULT_CANONICAL_DRIVE_FILE_ID
 } from '../lib/googleDrive';
 import { getCachedAccessToken, connectGoogleDrive, saveCanonicalDriveFileToFirestore } from '../lib/firebase';
 
@@ -668,16 +669,30 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   const checkAndRefreshRole = async (): Promise<'admin' | 'teacher' | 'guest'> => {
     try {
       const cleanEmail = (user?.email || '').trim().toLowerCase();
+      if (!cleanEmail) return 'guest';
 
-      // If quota is exceeded, resolve role locally without hitting Firestore
-      if (checkIsQuotaExceededToday() || isQuotaExceededRef.current) {
-        const localRole = evaluateUserRole(cleanEmail, stateRef.current.admins, stateRef.current.teachers);
+      // 1. Fast resolve from local school state (authoritative from Google Drive master file)
+      const localRole = evaluateUserRole(cleanEmail, stateRef.current.admins, stateRef.current.teachers);
+      if (localRole === 'admin' || localRole === 'teacher') {
         setUserRole(localRole);
         return localRole;
       }
 
-      // Check access_requests collection directly for explicit user approvals
-      if (cleanEmail && firebaseConfig.projectId) {
+      // 2. Check cached authorized role
+      const cachedRole = getCachedAuthorizedRole(cleanEmail);
+      if (cachedRole === 'admin' || cachedRole === 'teacher') {
+        setUserRole(cachedRole);
+        return cachedRole;
+      }
+
+      // 3. If quota is exceeded, resolve role locally without hitting Firestore
+      if (checkIsQuotaExceededToday() || isQuotaExceededRef.current) {
+        setUserRole(localRole);
+        return localRole;
+      }
+
+      // 4. Check access_requests collection directly for explicit user approvals
+      if (firebaseConfig.projectId) {
         try {
           const reqSnap = await getDoc(doc(db, 'access_requests', cleanEmail));
           if (reqSnap.exists()) {
@@ -689,7 +704,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             if (resolvedRole) {
               setCachedAuthorizedRole(cleanEmail, resolvedRole);
               setUserRole(resolvedRole);
-              syncFromCloudStorage(true).catch(() => {});
               return resolvedRole;
             }
           }
@@ -698,72 +712,27 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         }
       }
 
-      if (!auth.currentUser || !firebaseConfig.projectId) {
-        const localRole = evaluateUserRole(cleanEmail, stateRef.current.admins, stateRef.current.teachers);
-        setUserRole(localRole);
-        return localRole;
-      }
-
-      const docRef = doc(db, 'schools', 'main');
-      let snapshot;
-      try {
-        snapshot = await getDoc(docRef);
-        if (!snapshot.exists()) {
-          snapshot = await getDoc(doc(db, 'schools', 'main', 'modules', 'meta'));
-        }
-      } catch (err: any) {
-        console.warn('Role cloud check notice:', err?.message || err);
-        const localRole = evaluateUserRole(cleanEmail, stateRef.current.admins, stateRef.current.teachers);
-        setUserRole(localRole);
-        return localRole;
-      }
-      
-      if (snapshot.exists()) {
-        const data = snapshot.data() as AppState;
-        const cleanAdmins = Array.from(new Set(
-          (data.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com']).map(a => (a || '').trim().toLowerCase())
-        ));
-        const cleanTeachers = Array.from(new Set(
-          (data.teachers || []).map(t => (t || '').trim().toLowerCase())
-        ));
-
-        cleanAdmins.forEach(a => setCachedAuthorizedRole(a, 'admin'));
-        cleanTeachers.forEach(t => setCachedAuthorizedRole(t, 'teacher'));
-
-        const safeExams = (data.exams || []).map(e => {
-          if (!e.omrMap || !e.omrMap.specs) {
-            return { ...e, omrMap: generateExamOmrMap(e) };
-          }
-          return e;
-        });
-
-        const safeData: AppState = {
-          students: data.students || [],
-          exams: safeExams,
-          results: data.results || [],
-          budget: data.budget || { incomes: [], expenses: [], debts: [] },
-          examHalls: data.examHalls || [],
-          leagueMentors: data.leagueMentors || {},
-          leagueTeamPoints: data.leagueTeamPoints || {},
-          approvedTransfers: data.approvedTransfers || [],
-          admins: cleanAdmins,
-          teachers: cleanTeachers
-        };
-
-        safeData.budget = syncFinancials(safeData.students, safeData.exams, safeData.budget);
-        setState(safeData);
-        stateRef.current = safeData;
-
+      // 5. Query only modules/meta doc in Firestore for admin/teacher arrays WITHOUT overwriting state
+      if (auth.currentUser && firebaseConfig.projectId) {
         try {
-          localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
-        } catch (e) {}
-
-        const newRole = evaluateUserRole(cleanEmail, cleanAdmins, cleanTeachers);
-        setUserRole(newRole);
-        return newRole;
+          const metaSnap = await getDoc(doc(db, 'schools', 'main', 'modules', 'meta'));
+          if (metaSnap.exists()) {
+            const metaData = metaSnap.data();
+            const admins = Array.isArray(metaData.admins) ? metaData.admins : [];
+            const teachers = Array.isArray(metaData.teachers) ? metaData.teachers : [];
+            const metaRole = evaluateUserRole(cleanEmail, admins, teachers);
+            if (metaRole === 'admin' || metaRole === 'teacher') {
+              setCachedAuthorizedRole(cleanEmail, metaRole);
+              setUserRole(metaRole);
+              return metaRole;
+            }
+          }
+        } catch (err: any) {
+          console.warn('Role meta check notice:', err?.message || err);
+        }
       }
     } catch (e) {
-      console.warn('Error refreshing role from Firestore:', e);
+      console.warn('Error refreshing role:', e);
     }
 
     const currentRole = evaluateUserRole(user?.email || '', stateRef.current.admins, stateRef.current.teachers);
@@ -784,14 +753,14 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
 
       // 1. ABSOLUTE TOP PRIORITY: If a fixed/locked canonical Google Drive file is saved, ALWAYS use it first!
-      const lockedId = getLiveMasterFileId() || stateRef.current.canonicalDriveFileId;
+      const lockedId = getLiveMasterFileId() || stateRef.current.canonicalDriveFileId || DEFAULT_CANONICAL_DRIVE_FILE_ID;
       if (lockedId) {
         setDriveStartupStatusText(`Sabit kilitli Google Drive kütüğü indiriliyor (${lockedId.slice(0, 10)}...)...`);
         try {
           const rawData = await downloadBackupFromGoogleDrive(lockedId);
           if (rawData) {
             const targetData = rawData.data || rawData.appState || rawData;
-            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget || targetData.admins)) {
+            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget || targetData.admins || targetData.teachers)) {
               const safeData = sanitizeSchoolState(targetData);
               const studentCount = safeData.students?.length || 0;
               const examCount = safeData.exams?.length || 0;
@@ -813,6 +782,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
               hasUnsavedLocalEditsRef.current = false;
               setHasPendingChanges(false);
               setPendingSyncCount(0);
+
+              const cleanEmail = (user?.email || '').trim().toLowerCase();
+              const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+              setUserRole(newRole);
+              setCachedAuthorizedRole(cleanEmail, newRole);
 
               setDriveStartupStatusText(`Sabit kilitli Google Drive kütüğü başarıyla yüklendi: ${studentCount} Öğrenci, ${examCount} Sınav.`);
               return true;
@@ -850,6 +824,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         setHasPendingChanges(false);
         setPendingSyncCount(0);
 
+        const cleanEmail = (user?.email || '').trim().toLowerCase();
+        const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+        setUserRole(newRole);
+        setCachedAuthorizedRole(cleanEmail, newRole);
+
         // KOTA OPTİMİZASYONU: Google Drive en son yedeği yerel duruma güvenle yüklendi.
         // Firestore kotasını korumak için arka planda otomatik yazma yapılmaz.
         setDriveStartupStatusText(`Google Drive en son yedeği başarıyla yüklendi: "${fileName}" (${studentCount} Öğrenci, ${examCount} Sınav).`);
@@ -870,7 +849,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       const rawData = await downloadBackupFromGoogleDrive(file.id);
       if (rawData) {
         const targetData = rawData.data || rawData;
-        if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget || targetData.admins)) {
+        if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget || targetData.admins || targetData.teachers)) {
           const safeData = sanitizeSchoolState(targetData);
           const studentCount = safeData.students?.length || 0;
           const examCount = safeData.exams?.length || 0;
@@ -889,6 +868,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           hasUnsavedLocalEditsRef.current = false;
           setHasPendingChanges(false);
           setPendingSyncCount(0);
+
+          const cleanEmail = (user?.email || '').trim().toLowerCase();
+          const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+          setUserRole(newRole);
+          setCachedAuthorizedRole(cleanEmail, newRole);
 
           setDriveStartupStatusText(`Google Drive kütüğü başarıyla yüklendi: ${studentCount} Öğrenci, ${examCount} Sınav.`);
           return true;
@@ -912,13 +896,13 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
 
       // 1. ABSOLUTE TOP PRIORITY: If fixed / locked canonical Drive file exists, load directly from this fixed file!
-      const lockedId = getLiveMasterFileId() || stateRef.current.canonicalDriveFileId;
+      const lockedId = getLiveMasterFileId() || stateRef.current.canonicalDriveFileId || DEFAULT_CANONICAL_DRIVE_FILE_ID;
       if (lockedId) {
         try {
           const rawData = await downloadBackupFromGoogleDrive(lockedId);
           if (rawData) {
             const targetData = rawData.data || rawData.appState || rawData;
-            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget)) {
+            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || targetData.budget || targetData.teachers)) {
               const safeData = sanitizeSchoolState(targetData);
               const studentCount = safeData.students?.length || 0;
               const examCount = safeData.exams?.length || 0;
@@ -940,6 +924,11 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
               hasUnsavedLocalEditsRef.current = false;
               setHasPendingChanges(false);
               setPendingSyncCount(0);
+
+              const cleanEmail = (user?.email || '').trim().toLowerCase();
+              const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+              setUserRole(newRole);
+              setCachedAuthorizedRole(cleanEmail, newRole);
 
               return {
                 success: true,
@@ -1220,54 +1209,38 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
     setUserRole(initialComputedRole);
 
-    if (initialComputedRole === 'admin') {
-      // 1. If ADMIN: Strictly connect and download the canonical live master from Google Drive (NOT Firebase!)
-      setLoading(true);
-      setIsInitialHydrating(true);
-      const cachedToken = getCachedAccessToken();
-      if (cachedToken) {
-        // Active Drive token exists -> download canonical master directly from Google Drive!
-        setDriveStartupStatusText('Google Drive üzerindeki en güncel canlı okul kütüğü taranıyor ve sisteme yükleniyor...');
-        syncFromGoogleDriveOnStartup().then((syncedFromDrive) => {
+    // UNIFIED STARTUP HYDRATION:
+    // Both Admin and Teacher download canonical master 1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg directly from Google Drive (0 Firestore Quota)
+    setLoading(true);
+    setIsInitialHydrating(true);
+    const cachedToken = getCachedAccessToken();
+
+    if (cachedToken) {
+      setDriveStartupStatusText('Google Drive üzerindeki ortak canlı okul kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indiriliyor...');
+      syncFromGoogleDriveOnStartup()
+        .then((synced) => {
+          if (!synced) {
+            return fetchTeacherDataNow();
+          }
+        })
+        .catch((err) => {
+          console.warn('Google Drive startup sync notice:', err);
+        })
+        .finally(() => {
           isInitialCloudHydrationDoneRef.current = true;
           setIsInitialHydrating(false);
           setLoading(false);
+          const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+          setUserRole(resolvedRole);
+          setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
           setSyncStatus('synced');
           setSyncErrorMessage(null);
-        }).catch(() => {
-          isInitialCloudHydrationDoneRef.current = true;
-          setIsInitialHydrating(false);
-          setLoading(false);
-          setSyncStatus('synced');
         });
-      } else {
-        // No Drive token yet -> prompt admin to authorize Google Drive
-        setIsWaitingForDriveAuth(true);
-        setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü indirmek için yetkilendirme bekleniyor.');
-        setLoading(false);
-      }
     } else {
-      // 2. If TEACHER / USER: Download master roster directly from Google Drive first (0 Firebase Quota)
-      // This ensures teachers and authorized users receive all 288 students and active teacher rosters immediately!
-      setLoading(true);
-      setIsInitialHydrating(true);
-      setIsWaitingForDriveAuth(false);
-      setDriveStartupStatusText('Google Drive üzerindeki güncel okul kütüğü indiriliyor...');
-      fetchTeacherDataNow().then((res) => {
-        if (res.success && res.data) {
-          // Master loaded from Google Drive
-        }
-      }).catch((err) => {
-        console.warn('Teacher Google Drive initial fetch notice:', err);
-      }).finally(() => {
-        isInitialCloudHydrationDoneRef.current = true;
-        setIsInitialHydrating(false);
-        setLoading(false);
-        const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
-        setUserRole(resolvedRole);
-        setSyncStatus('synced');
-        setSyncErrorMessage(null);
-      });
+      // No token yet: show single-click Drive connection screen
+      setIsWaitingForDriveAuth(true);
+      setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
+      setLoading(false);
     }
 
     // Register or check user profile in access_requests on login without performing unneeded writes
@@ -1283,17 +1256,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           if (existingRole) {
             setCachedAuthorizedRole(cleanUserEmail, existingRole);
             setUserRole(existingRole);
-            if (existingRole === 'teacher') {
-              fetchTeacherBroadcastData(stateRef.current.canonicalDriveFileId).then(res => {
-                if (res.success && res.data) {
-                  const safeData = sanitizeSchoolState(res.data);
-                  setState(safeData);
-                  stateRef.current = safeData;
-                }
-              }).catch(() => {});
-            } else {
-              syncFromCloudStorage(true).catch(() => {});
-            }
           }
         }
       }).catch((err) => {
@@ -1316,17 +1278,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             if (grantedRole) {
               setCachedAuthorizedRole(cleanUserEmail, grantedRole);
               setUserRole(grantedRole);
-              if (grantedRole === 'teacher') {
-                fetchTeacherBroadcastData(stateRef.current.canonicalDriveFileId).then(res => {
-                  if (res.success && res.data) {
-                    const safeData = sanitizeSchoolState(res.data);
-                    setState(safeData);
-                    stateRef.current = safeData;
-                  }
-                }).catch(() => {});
-              } else {
-                syncFromCloudStorage(true).catch(() => {});
-              }
             }
           }
         }, (err) => {
@@ -1703,50 +1654,72 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
   const fetchTeacherDataNow = async (): Promise<{ success: boolean; data?: any; error?: string }> => {
     try {
-      const res = await fetchTeacherBroadcastData(stateRef.current.canonicalDriveFileId);
+      // 1. Direct Drive Download with active token (same as admin)
+      const driveRes = await downloadLatestFromDrive();
+      if (driveRes.success) {
+        return { success: true, data: stateRef.current };
+      }
+
+      // 2. Fallback to broadcast fetcher
+      const targetId = stateRef.current.canonicalDriveFileId || getLiveMasterFileId() || DEFAULT_CANONICAL_DRIVE_FILE_ID;
+      const res = await fetchTeacherBroadcastData(targetId);
       if (res.success && res.data) {
         const safeData = sanitizeSchoolState(res.data);
         setState(safeData);
         stateRef.current = safeData;
+        setLastDataSource('drive');
         if (res.publishedDate) {
           setLastTeacherPublishedDateState(res.publishedDate);
         }
         try {
           localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
         } catch {}
+
+        const cleanEmail = (user?.email || '').trim().toLowerCase();
+        const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+        setUserRole(newRole);
+        setCachedAuthorizedRole(cleanEmail, newRole);
+
         return { success: true, data: safeData };
       }
-      return { success: false, error: res.error || 'Yayınlanan veri bulunamadı' };
+      return { success: false, error: driveRes.error || res.error || 'Yayınlanan veri bulunamadı' };
     } catch (e: any) {
       return { success: false, error: e?.message || 'Veri çekilemedi' };
     }
   };
 
-  // Multi-Admin Google Drive Auto-Sync: Polls remote changes every 30s & on window focus + Emergency Flush on exit
+  // Google Drive Live Auto-Sync for Both Admin and Teachers: Polls remote master file every 30s & on window focus
   useEffect(() => {
-    if (userRole !== 'admin') return;
+    if (userRole !== 'admin' && userRole !== 'teacher') return;
 
     const checkDriveRemoteUpdate = async () => {
-      // Don't overwrite if local user is currently typing/has pending unsaved edits or not hydrated yet
+      // Don't overwrite if not hydrated yet or if admin has local unsaved edits
       if (!isInitialCloudHydrationDoneRef.current) return;
-      if (hasUnsavedLocalEditsRef.current) return;
+      if (userRole === 'admin' && hasUnsavedLocalEditsRef.current) return;
       if (!getCachedAccessToken()) return;
 
       try {
         const updateCheck = await fetchLiveMasterFromGoogleDriveIfNewer(lastKnownDriveModifiedTimeRef.current);
         if (updateCheck.hasUpdate && updateCheck.data) {
           lastKnownDriveModifiedTimeRef.current = updateCheck.modifiedTime || null;
-          stateRef.current = updateCheck.data;
-          setState(updateCheck.data);
+          const safeData = sanitizeSchoolState(updateCheck.data);
+          stateRef.current = safeData;
+          setState(safeData);
+          setLastDataSource('drive');
           try {
-            localStorage.setItem('okulYonetimState', JSON.stringify(updateCheck.data));
+            localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
           } catch {}
           recordDriveSyncTimestamps(updateCheck.modifiedTime || new Date().toISOString());
+
+          const cleanEmail = (user?.email || '').trim().toLowerCase();
+          const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+          setUserRole(newRole);
+          setCachedAuthorizedRole(cleanEmail, newRole);
         }
       } catch (e) {}
     };
 
-    // Emergency auto-sync to Google Drive when tab loses focus, minimizes, or user leaves page
+    // Emergency auto-sync to Google Drive when tab loses focus, minimizes, or user leaves page (ADMIN ONLY)
     const handleEmergencyDriveFlush = () => {
       if (userRole === 'admin' && isInitialCloudHydrationDoneRef.current && hasUnsavedLocalEditsRef.current) {
         syncToDriveNow().catch(() => {});

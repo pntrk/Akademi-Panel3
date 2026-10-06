@@ -52,14 +52,16 @@ app.get('/api/teacher-data', async (req, res) => {
   const fileId = (req.query.fileId as string) || teacherBroadcastCache?.data?.canonicalDriveFileId || DEFAULT_CANONICAL_DRIVE_FILE_ID;
   if (fileId) {
     try {
+      const authHeader = req.headers.authorization;
+      const headers = authHeader ? { Authorization: authHeader } : undefined;
       const urls = [
-        `https://drive.google.com/uc?export=download&id=${fileId}`,
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
         `https://drive.usercontent.google.com/download?id=${fileId}&export=download`,
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`
+        `https://drive.google.com/uc?export=download&id=${fileId}`
       ];
       for (const url of urls) {
         try {
-          const driveRes = await fetch(url);
+          const driveRes = await fetch(url, headers ? { headers } : undefined);
           if (driveRes.ok) {
             const raw = await driveRes.json();
             const targetData = raw.data || raw.appState || raw;
@@ -97,15 +99,17 @@ app.get('/api/drive-proxy', async (req, res) => {
   const fileId = (req.query.fileId as string) || DEFAULT_CANONICAL_DRIVE_FILE_ID;
 
   try {
+    const authHeader = req.headers.authorization;
+    const headers = authHeader ? { Authorization: authHeader } : undefined;
     const urls = [
-      `https://drive.google.com/uc?export=download&id=${fileId}`,
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
       `https://drive.usercontent.google.com/download?id=${fileId}&export=download`,
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`
+      `https://drive.google.com/uc?export=download&id=${fileId}`
     ];
 
     for (const url of urls) {
       try {
-        const driveRes = await fetch(url);
+        const driveRes = await fetch(url, headers ? { headers } : undefined);
         if (driveRes.ok) {
           const json = await driveRes.json();
           // Unwrap if nested

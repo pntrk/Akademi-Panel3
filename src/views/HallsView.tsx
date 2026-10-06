@@ -142,7 +142,7 @@ export const HallsView = () => {
   const capacity = columns.reduce((acc, col) => acc + (col.deskCount * col.seatsPerDesk), 0);
 
   // Toast bildirim yöneticisi
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, _type?: 'success' | 'error' | 'info') => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(prev => prev === msg ? null : prev);

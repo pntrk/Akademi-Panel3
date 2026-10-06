@@ -1246,7 +1246,7 @@ export const fetchTeacherBroadcastData = async (
   source: 'server' | 'drive' | 'cloud' | 'local';
   error?: string;
 }> => {
-  let knownDriveId = customFileId || getLiveMasterFileId();
+  let knownDriveId = customFileId || getLiveMasterFileId() || DEFAULT_CANONICAL_DRIVE_FILE_ID;
 
   // If knownDriveId is not yet in localStorage, discover it from server or Firestore meta (1 tiny read)
   if (!knownDriveId) {
@@ -1265,29 +1265,52 @@ export const fetchTeacherBroadcastData = async (
     }
   }
 
-  // 1. ABSOLUTE TOP PRIORITY: Direct Google Drive Download (via Server Proxy or Direct Link)
+  // 1. ABSOLUTE TOP PRIORITY: Direct Authenticated Google Drive API Download
   // Guarantees 100% live Google Drive data (with all 288 students) directly from the master JSON!
-  const targetId = knownDriveId || getLiveMasterFileId();
+  const targetId = knownDriveId || getLiveMasterFileId() || DEFAULT_CANONICAL_DRIVE_FILE_ID;
   if (targetId) {
+    // 1a. Try direct authenticated Google Drive API download first
     try {
+      const directRaw = await downloadBackupFromGoogleDrive(targetId);
+      const targetData = unwrapSchoolStatePayload(directRaw);
+      if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || Array.isArray(targetData.examHalls) || Array.isArray(targetData.results))) {
+        const publishedDate = directRaw.publishedDateFormatted || directRaw.data?.publishedDateFormatted || targetData.lastTeacherPublishedDate || targetData.lastPublishedAt || new Date().toISOString();
+        if (publishedDate) setLastTeacherPublishedDate(publishedDate);
+        setLiveMasterFileId(targetId);
+        return {
+          success: true,
+          data: targetData,
+          publishedDate,
+          source: 'drive'
+        };
+      }
+    } catch (directDriveErr) {
+      console.warn('Teacher direct drive API fetch attempt notice:', directDriveErr);
+    }
+
+    // 1b. Fallback: Authenticated or direct proxy URLs
+    try {
+      const activeToken = getCachedAccessToken();
+      const headers: Record<string, string> = activeToken ? { Authorization: `Bearer ${activeToken}` } : {};
+
       const urls = [
         `/api/drive-proxy?fileId=${targetId}`,
         `/api/teacher-data?fileId=${targetId}`,
-        `https://drive.google.com/uc?export=download&id=${targetId}`,
+        `https://www.googleapis.com/drive/v3/files/${targetId}?alt=media&supportsAllDrives=true`,
         `https://drive.usercontent.google.com/download?id=${targetId}&export=download`,
-        `https://www.googleapis.com/drive/v3/files/${targetId}?alt=media&supportsAllDrives=true`
+        `https://drive.google.com/uc?export=download&id=${targetId}`
       ];
 
       for (const url of urls) {
         try {
-          const driveRes = await fetch(url);
+          const driveRes = await fetch(url, Object.keys(headers).length > 0 ? { headers } : undefined);
           if (driveRes.ok) {
             const raw = await driveRes.json();
             const targetData = unwrapSchoolStatePayload(raw);
             if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || Array.isArray(targetData.examHalls) || Array.isArray(targetData.results))) {
               const publishedDate = raw.publishedDateFormatted || raw.data?.publishedDateFormatted || targetData.lastTeacherPublishedDate || targetData.lastPublishedAt;
               if (publishedDate) setLastTeacherPublishedDate(publishedDate);
-              if (targetId) setLiveMasterFileId(targetId);
+              setLiveMasterFileId(targetId);
               return {
                 success: true,
                 data: targetData,

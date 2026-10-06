@@ -1083,11 +1083,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-300 text-xs shadow-2xs">
                 <Shield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <div className="flex flex-col">
-                  <span className="text-[11px] font-bold leading-tight">
-                    Öğretmen Paneli (Salt Okunur)
+                  <span className="text-[11px] font-bold leading-tight flex items-center gap-1">
+                    <span>Öğretmen Paneli</span>
+                    <Lock className="w-3 h-3 text-emerald-600" title="Kilitli Google Drive Kütüğü" />
                   </span>
                   <span className="text-[9.5px] text-emerald-700 dark:text-emerald-400 font-mono">
-                    {teacherRefreshFeedback || (lastTeacherPublishedDate ? `Yayın: ${lastTeacherPublishedDate}` : 'Güncel Yayın')}
+                    {teacherRefreshFeedback || (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : (lastTeacherPublishedDate ? `Yayın: ${lastTeacherPublishedDate}` : '1g24DS...'))}
                   </span>
                 </div>
                 <button
@@ -1097,7 +1098,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     try {
                       const res = await fetchTeacherDataNow();
                       if (res.success) {
-                        setTeacherRefreshFeedback('✓ Güncellendi');
+                        setTeacherRefreshFeedback(`✓ ${res.data?.students?.length || state.students.length} Öğr.`);
                       } else {
                         setTeacherRefreshFeedback('⚠️ ' + (res.error || 'Hata'));
                       }
@@ -1110,7 +1111,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   }}
                   disabled={isTeacherRefreshing}
                   className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 disabled:opacity-50 ml-1"
-                  title="Yönetim tarafından yayınlanan son güncel kütüğü çek (0 Kota)"
+                  title="Google Drive üzerindeki kilitli kütükten (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) son verileri çek ve eşitle"
                 >
                   <RefreshCw className={cn("w-3 h-3", isTeacherRefreshing && "animate-spin")} />
                   <span>Yenile</span>
