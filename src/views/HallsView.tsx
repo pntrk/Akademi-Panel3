@@ -1298,10 +1298,10 @@ export const HallsView = () => {
               <span className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-brand-ink leading-none">%{summaryStats.occupancyRate}</span>
               <span className="text-[10px] sm:text-xs text-brand-ink/50 font-medium">doluluk</span>
             </div>
-            <div className="w-full bg-[#FAF9F6] h-1.5 rounded-full overflow-hidden border border-brand-border/40">
+            <div className="w-full bg-[#FAF9F6] h-2 rounded-full overflow-hidden border border-brand-border/50 p-0.5 shadow-2xs">
               <div 
-                className="h-full bg-amber-500 rounded-full transition-all duration-500" 
-                style={{ width: `${Math.min(100, summaryStats.occupancyRate)}%` }} 
+                className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full transition-all duration-500" 
+                style={{ width: `${Math.min(100, Math.max(summaryStats.occupancyRate > 0 ? 3 : 0, summaryStats.occupancyRate))}%` }} 
               />
             </div>
           </div>
@@ -1536,16 +1536,16 @@ export const HallsView = () => {
                     {usedCapacity} <span className="text-brand-ink/40 font-normal">/ {totalCapacity}</span>
                   </span>
                 </div>
-                <div className="w-full bg-[#FAF9F6] h-2 rounded-full overflow-hidden border border-brand-border/40">
+                <div className="w-full bg-[#FAF9F6] h-2.5 rounded-full overflow-hidden border border-brand-border/50 p-0.5 shadow-2xs">
                   <div 
-                    className="h-full rounded-full transition-all duration-300 ${
+                    className={`h-full rounded-full transition-all duration-500 ${
                       percentage >= 100 
-                        ? 'bg-emerald-600' 
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-600' 
                         : percentage > 0 
-                        ? 'bg-amber-500' 
-                        : 'bg-transparent'
-                    }" 
-                    style={{ width: `${Math.min(100, percentage)}%` }} 
+                        ? 'bg-gradient-to-r from-amber-500 to-indigo-600' 
+                        : 'bg-gray-200'
+                    }`} 
+                    style={{ width: `${Math.min(100, Math.max(usedCapacity > 0 ? 3 : 0, percentage))}%` }} 
                   />
                 </div>
                 
