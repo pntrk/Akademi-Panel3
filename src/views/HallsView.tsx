@@ -85,9 +85,24 @@ const getDeskNameFontClasses = (firstName: string, lastName: string): { fClass: 
 };
 
 export const HallsView = () => {
-  const { state, setExamHalls, userRole, currentUser } = useAppContext();
+  const { state, setExamHalls, userRole, currentUser, fetchTeacherDataNow } = useAppContext();
   // Adminler yönetici modunda tam yetkilidir, öğretmenler ise salt-okunur moddadır
   const isReadOnly = userRole !== 'admin';
+  const [isRefreshingDrive, setIsRefreshingDrive] = useState(false);
+
+  // Auto-fetch Google Drive live master on mount if teacher sees empty halls
+  useEffect(() => {
+    if (isReadOnly && (!state.examHalls || state.examHalls.length === 0)) {
+      setIsRefreshingDrive(true);
+      fetchTeacherDataNow()
+        .then((res) => {
+          if (res.success && res.data?.examHalls?.length) {
+            showToast(`✓ Google Drive'dan ${res.data.examHalls.length} sınav salonu ve ${res.data.students?.length || 0} öğrenci yüklendi`);
+          }
+        })
+        .finally(() => setIsRefreshingDrive(false));
+    }
+  }, [isReadOnly, state.examHalls?.length]);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHallId, setEditingHallId] = useState<string | null>(null);
@@ -1183,9 +1198,32 @@ export const HallsView = () => {
           )}
 
           {isReadOnly && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-indigo-100/70 text-indigo-900 border border-indigo-200/90 rounded-xl text-xs font-bold shrink-0 shadow-2xs">
-              <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span>Gözetmen Öğretmen Paneli</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-indigo-100/70 text-indigo-900 border border-indigo-200/90 rounded-xl text-xs font-bold shrink-0 shadow-2xs">
+                <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Gözetmen Öğretmen Paneli</span>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsRefreshingDrive(true);
+                  const res = await fetchTeacherDataNow();
+                  setIsRefreshingDrive(false);
+                  if (res.success && res.data?.examHalls?.length) {
+                    showToast(`✓ Google Drive'dan ${res.data.examHalls.length} salon ve ${res.data.students?.length || 0} öğrenci başarıyla eşitlendi!`);
+                  } else if (res.success) {
+                    showToast('✓ Google Drive kütüğü güncel');
+                  } else {
+                    showToast(res.error || 'Google Drive kütüğü indirilemedi', 'error');
+                  }
+                }}
+                disabled={isRefreshingDrive}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                title="Google Drive üzerindeki güncel kütükten salonları ve öğrencileri çek"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isRefreshingDrive ? 'animate-spin' : ''}`} />
+                <span>{isRefreshingDrive ? 'Eşitleniyor...' : 'Drive Kütüğünü Yenile'}</span>
+              </button>
             </div>
           )}
         </div>
@@ -1590,10 +1628,28 @@ export const HallsView = () => {
             </h4>
             <p className="text-xs text-brand-ink/60 max-w-sm mx-auto mb-4 leading-relaxed">
               {isReadOnly 
-                ? 'Yönetici tarafından henüz aktif bir sınav salonu tanımlanmamış.' 
+                ? 'Salon ve yerleşim verilerini Google Drive canlı kütüğünden anında çekmek için aşağıdaki butona tıklayabilirsiniz.' 
                 : 'Yukarıdaki "Yeni Salon Oluştur" butonuna tıklayarak salon ve otomatik kelebek oturma düzeni oluşturabilirsiniz.'}
             </p>
-            {!isReadOnly && (
+            {isReadOnly ? (
+              <button 
+                onClick={async () => {
+                  setIsRefreshingDrive(true);
+                  const res = await fetchTeacherDataNow();
+                  setIsRefreshingDrive(false);
+                  if (res.success && res.data?.examHalls?.length) {
+                    showToast(`✓ Google Drive'dan ${res.data.examHalls.length} sınav salonu ve ${res.data.students?.length || 0} öğrenci başarıyla yüklendi!`);
+                  } else {
+                    showToast(res.error || 'Google Drive kütüğü indirilemedi', 'error');
+                  }
+                }}
+                disabled={isRefreshingDrive}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 text-emerald-200 ${isRefreshingDrive ? 'animate-spin' : ''}`} />
+                <span>{isRefreshingDrive ? 'Google Drive Kütüğü İndiriliyor...' : 'Google Drive Kütüğünü Şimdi İndir / Eşitle'}</span>
+              </button>
+            ) : (
               <button 
                 onClick={openNewModal}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#151618] hover:bg-black text-white rounded-xl text-xs font-bold active:scale-95 shadow-xs transition-all cursor-pointer"
