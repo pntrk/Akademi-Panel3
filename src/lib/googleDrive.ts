@@ -1291,11 +1291,13 @@ export const fetchTeacherBroadcastData = async (
     // 1b. Fallback: Authenticated or direct proxy URLs
     try {
       const activeToken = getCachedAccessToken();
-      const headers: Record<string, string> = activeToken ? { Authorization: `Bearer ${activeToken}` } : {};
+      const isValidToken = activeToken && activeToken !== 'undefined' && activeToken !== 'null' && activeToken.length > 5;
+      const headers: Record<string, string> = isValidToken ? { Authorization: `Bearer ${activeToken}` } : {};
 
       const urls = [
         `/api/drive-proxy?fileId=${targetId}`,
         `/api/teacher-data?fileId=${targetId}`,
+        `/api/drive-proxy?fileId=${DEFAULT_CANONICAL_DRIVE_FILE_ID}`,
         `https://www.googleapis.com/drive/v3/files/${targetId}?alt=media&supportsAllDrives=true`,
         `https://drive.usercontent.google.com/download?id=${targetId}&export=download`,
         `https://drive.google.com/uc?export=download&id=${targetId}`
@@ -1305,18 +1307,22 @@ export const fetchTeacherBroadcastData = async (
         try {
           const driveRes = await fetch(url, Object.keys(headers).length > 0 ? { headers } : undefined);
           if (driveRes.ok) {
-            const raw = await driveRes.json();
-            const targetData = unwrapSchoolStatePayload(raw);
-            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || Array.isArray(targetData.examHalls) || Array.isArray(targetData.results))) {
-              const publishedDate = raw.publishedDateFormatted || raw.data?.publishedDateFormatted || targetData.lastTeacherPublishedDate || targetData.lastPublishedAt;
-              if (publishedDate) setLastTeacherPublishedDate(publishedDate);
-              setLiveMasterFileId(targetId);
-              return {
-                success: true,
-                data: targetData,
-                publishedDate,
-                source: 'drive'
-              };
+            const text = await driveRes.text();
+            let raw: any = null;
+            try { raw = JSON.parse(text); } catch {}
+            if (raw) {
+              const targetData = unwrapSchoolStatePayload(raw);
+              if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || Array.isArray(targetData.examHalls) || Array.isArray(targetData.results))) {
+                const publishedDate = raw.publishedDateFormatted || raw.data?.publishedDateFormatted || targetData.lastTeacherPublishedDate || targetData.lastPublishedAt || new Date().toLocaleDateString('tr-TR');
+                if (publishedDate) setLastTeacherPublishedDate(publishedDate);
+                setLiveMasterFileId(targetId);
+                return {
+                  success: true,
+                  data: targetData,
+                  publishedDate,
+                  source: 'drive'
+                };
+              }
             }
           }
         } catch {}

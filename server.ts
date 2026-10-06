@@ -35,6 +35,29 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Helper to unwrap nested school state
+function unwrapServerSchoolPayload(raw: any): any {
+  if (!raw || typeof raw !== 'object') return null;
+  let curr = raw;
+  if (curr.success && curr.data) curr = curr.data;
+  if (curr && curr.data && (Array.isArray(curr.data.students) || Array.isArray(curr.data.exams) || Array.isArray(curr.data.examHalls))) {
+    return curr.data;
+  }
+  if (curr && curr.appState && (Array.isArray(curr.appState.students) || Array.isArray(curr.appState.exams) || Array.isArray(curr.appState.examHalls))) {
+    return curr.appState;
+  }
+  if (Array.isArray(curr.students) || Array.isArray(curr.exams) || Array.isArray(curr.examHalls)) {
+    return curr;
+  }
+  if (curr && typeof curr === 'object' && curr.data && typeof curr.data === 'object') {
+    const deeper = curr.data;
+    if (deeper.data && (Array.isArray(deeper.data.students) || Array.isArray(deeper.data.exams) || Array.isArray(deeper.data.examHalls))) {
+      return deeper.data;
+    }
+  }
+  return curr.data || curr.appState || curr;
+}
+
 // Teacher broadcast read endpoint (0 Firebase Quota)
 app.get('/api/teacher-data', async (req, res) => {
   if (teacherBroadcastCache && teacherBroadcastCache.data) {
@@ -48,12 +71,13 @@ app.get('/api/teacher-data', async (req, res) => {
     });
   }
 
-  // If cache is empty in RAM, check query fileId or cached fileId to fetch directly from Google Drive (Server-side 0-quota fetch)
+  // If cache is empty in RAM, check query fileId or default canonical Drive file ID
   const fileId = (req.query.fileId as string) || teacherBroadcastCache?.data?.canonicalDriveFileId || DEFAULT_CANONICAL_DRIVE_FILE_ID;
   if (fileId) {
     try {
       const authHeader = req.headers.authorization;
-      const headers = authHeader ? { Authorization: authHeader } : undefined;
+      const isValidAuth = authHeader && !authHeader.includes('undefined') && !authHeader.includes('null') && authHeader.trim().length > 10;
+      const headers = isValidAuth ? { Authorization: authHeader } : undefined;
       const urls = [
         `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
         `https://drive.usercontent.google.com/download?id=${fileId}&export=download`,
@@ -63,20 +87,38 @@ app.get('/api/teacher-data', async (req, res) => {
         try {
           const driveRes = await fetch(url, headers ? { headers } : undefined);
           if (driveRes.ok) {
-            const raw = await driveRes.json();
-            const targetData = raw.data || raw.appState || raw;
-            if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams))) {
-              return res.json({
-                success: true,
-                publishedAt: raw.publishedAt || new Date().toISOString(),
-                publishedDateFormatted: raw.publishedDateFormatted || raw.lastTeacherPublishedDate || 'Güncel',
-                version: raw.version || 1,
-                summary: raw.summary || {
-                  studentCount: targetData.students?.length || 0,
-                  examCount: targetData.exams?.length || 0
-                },
-                data: targetData
-              });
+            const text = await driveRes.text();
+            let raw: any = null;
+            try { raw = JSON.parse(text); } catch {}
+            if (raw) {
+              const targetData = unwrapServerSchoolPayload(raw);
+              if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || Array.isArray(targetData.examHalls))) {
+                const now = new Date();
+                const fullFormatted = targetData.lastTeacherPublishedDate || raw.publishedDateFormatted || 'Güncel';
+                const payload = {
+                  appName: 'AkademiPanel',
+                  fileType: 'teacher_public_broadcast',
+                  version: raw.version || 1,
+                  publishedAt: raw.publishedAt || now.toISOString(),
+                  publishedDateFormatted: fullFormatted,
+                  summary: {
+                    studentCount: targetData.students?.length || 0,
+                    examCount: targetData.exams?.length || 0,
+                    hallCount: targetData.examHalls?.length || 0
+                  },
+                  data: targetData
+                };
+                teacherBroadcastCache = payload;
+                fs.writeFile(CACHE_FILE, JSON.stringify(payload, null, 2), () => {});
+                return res.json({
+                  success: true,
+                  publishedAt: payload.publishedAt,
+                  publishedDateFormatted: payload.publishedDateFormatted,
+                  version: payload.version,
+                  summary: payload.summary,
+                  data: targetData
+                });
+              }
             }
           }
         } catch {}
@@ -86,7 +128,6 @@ app.get('/api/teacher-data', async (req, res) => {
     }
   }
 
-  // If no broadcast cache is present yet, respond with empty payload
   return res.status(200).json({
     success: false,
     message: 'Henüz öğretmenler için yayınlanmış veri bulunmamaktadır.',
@@ -100,7 +141,8 @@ app.get('/api/drive-proxy', async (req, res) => {
 
   try {
     const authHeader = req.headers.authorization;
-    const headers = authHeader ? { Authorization: authHeader } : undefined;
+    const isValidAuth = authHeader && !authHeader.includes('undefined') && !authHeader.includes('null') && authHeader.trim().length > 10;
+    const headers = isValidAuth ? { Authorization: authHeader } : undefined;
     const urls = [
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
       `https://drive.usercontent.google.com/download?id=${fileId}&export=download`,
@@ -111,13 +153,30 @@ app.get('/api/drive-proxy', async (req, res) => {
       try {
         const driveRes = await fetch(url, headers ? { headers } : undefined);
         if (driveRes.ok) {
-          const json = await driveRes.json();
-          // Unwrap if nested
-          let cleanData = json;
-          if (json && json.data && (Array.isArray(json.data.students) || Array.isArray(json.data.exams) || Array.isArray(json.data.examHalls))) {
-            cleanData = json.data;
+          const text = await driveRes.text();
+          let json: any = null;
+          try { json = JSON.parse(text); } catch {}
+          if (json) {
+            const cleanData = unwrapServerSchoolPayload(json);
+            if (cleanData && (Array.isArray(cleanData.students) || Array.isArray(cleanData.exams) || Array.isArray(cleanData.examHalls))) {
+              // Update RAM cache
+              const payload = {
+                appName: 'AkademiPanel',
+                fileType: 'teacher_public_broadcast',
+                publishedAt: new Date().toISOString(),
+                publishedDateFormatted: cleanData.lastTeacherPublishedDate || 'Güncel',
+                summary: {
+                  studentCount: cleanData.students?.length || 0,
+                  examCount: cleanData.exams?.length || 0,
+                  hallCount: cleanData.examHalls?.length || 0
+                },
+                data: cleanData
+              };
+              teacherBroadcastCache = payload;
+              fs.writeFile(CACHE_FILE, JSON.stringify(payload, null, 2), () => {});
+              return res.json({ success: true, data: cleanData, raw: json });
+            }
           }
-          return res.json({ success: true, data: cleanData, raw: json });
         }
       } catch {}
     }

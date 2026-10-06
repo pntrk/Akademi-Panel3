@@ -15,7 +15,8 @@ import {
   Plus, Trash2, Download, LayoutTemplate, X, Users, RefreshCw, 
   AlertCircle, Building, MapPin, Search, ChevronDown, 
   ChevronRight, CheckCircle2, Eye, Printer, FileSpreadsheet, Sparkles, Check,
-  UserCheck, UserX, Clock, Calendar, BellRing, Send, AlertTriangle, ShieldCheck, Lock
+  UserCheck, UserX, Clock, Calendar, BellRing, Send, AlertTriangle, ShieldCheck, Lock,
+  ZoomIn, ZoomOut, RotateCcw
 } from 'lucide-react';
 
 // Renkli şube rozetleri için dinamik pastel renk eşleştirici (Kelebek dağıtımını görselleştirir)
@@ -89,6 +90,7 @@ export const HallsView = () => {
   // Adminler yönetici modunda tam yetkilidir, öğretmenler ise salt-okunur moddadır
   const isReadOnly = userRole !== 'admin';
   const [isRefreshingDrive, setIsRefreshingDrive] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   // Auto-fetch Google Drive live master on mount if teacher sees empty halls
   useEffect(() => {
@@ -2240,6 +2242,39 @@ export const HallsView = () => {
                           </span>
                         )}
 
+                        {/* Zoom Kontrolleri Mobil & Masaüstü */}
+                        <div className="flex items-center gap-1 bg-white border border-brand-border/70 rounded-lg px-1.5 py-0.5 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => setZoomLevel(prev => Math.max(50, prev - 15))}
+                            className="p-1 hover:bg-gray-100 rounded text-brand-ink active:scale-95 cursor-pointer touch-manipulation"
+                            title="Uzaklaştır (% -15)"
+                          >
+                            <ZoomOut className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="text-[10px] font-mono font-bold text-brand-ink/80 px-1 min-w-[32px] text-center">
+                            %{zoomLevel}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setZoomLevel(prev => Math.min(200, prev + 15))}
+                            className="p-1 hover:bg-gray-100 rounded text-brand-ink active:scale-95 cursor-pointer touch-manipulation"
+                            title="Yaklaştır (% +15)"
+                          >
+                            <ZoomIn className="w-3.5 h-3.5" />
+                          </button>
+                          {zoomLevel !== 100 && (
+                            <button
+                              type="button"
+                              onClick={() => setZoomLevel(100)}
+                              className="p-1 hover:bg-gray-100 rounded text-indigo-600 active:scale-95 cursor-pointer touch-manipulation"
+                              title="Yakınlaştırmayı Sıfırla (%100)"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+
                         {seatingPlan.length > 0 && (
                           <div className="flex items-center gap-1 shrink-0">
                             <button 
@@ -2267,9 +2302,17 @@ export const HallsView = () => {
 
                 {/* Oturma Düzeni & Yoklama Grid Konteyneri (Selector 3 & 5) */}
                 <div 
-                  className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-xl sm:rounded-2xl shadow-inner p-2 sm:p-3.5 md:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x overscroll-contain select-none min-h-[220px]" 
+                  className="flex-1 overflow-y-auto overflow-x-auto relative bg-[#fcfbf7]/60 border border-[#e6e2d3] rounded-xl sm:rounded-2xl shadow-inner p-2 sm:p-3.5 md:p-4 print:bg-white print:border-none print:shadow-none print:p-0 print:overflow-visible touch-pan-x touch-pan-y overscroll-contain select-none min-h-[220px]" 
                   id="seating-plan-printable"
                 >
+                  <div 
+                    style={{ 
+                      transform: `scale(${zoomLevel / 100})`, 
+                      transformOrigin: 'top left',
+                      width: zoomLevel > 100 ? `${(100 / zoomLevel) * 100}%` : '100%',
+                      transition: 'transform 0.15s ease-out'
+                    }}
+                  >
                   {showSaveToast && (
                     <div className="absolute top-3 right-3 z-50 bg-green-50 text-green-700 px-3 py-1.5 rounded-full shadow-sm border border-green-200 text-xs font-bold flex items-center print:hidden animate-in fade-in slide-in-from-top-2 duration-300">
                       <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
@@ -2434,6 +2477,7 @@ export const HallsView = () => {
                       </p>
                     </div>
                   )}
+                  </div>
                 </div>
               </div>
             </div>
