@@ -155,6 +155,22 @@ interface AppContextType {
   currentUser?: User | null;
 }
 
+export const DEFAULT_FIREBASE_VIEWER_TEACHERS: string[] = [
+  'celiksadik0@gmail.com',
+  'deryaertugrul35@gmail.com',
+  'emela544@gmail.com',
+  'kumcu3989@gmail.com',
+  'melekkaydogduu@gmail.com',
+  'nagihanyavas471@gmail.com',
+  'oznurknl@gmail.com',
+  'sebnemcivas@gmail.com',
+  'abdullaherbileses@gmail.com',
+  'gkumcu2@gmail.com',
+  'sibelpur39@gmail.com',
+  'selcenserdaroglu@gmail.com',
+  'yeliztunc79@gmail.com'
+];
+
 const defaultState: AppState = {
   students: HAZIRBULUNUSLUK_STUDENTS,
   exams: [{ ...initialExam, omrMap: generateExamOmrMap(initialExam) }],
@@ -164,8 +180,8 @@ const defaultState: AppState = {
   leagueMentors: {},
   leagueTeamPoints: {},
   approvedTransfers: [],
-  admins: ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
-  teachers: []
+  admins: ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com', 'athdsdta@gmail.com', 'haruntahtaci@gmail.com'],
+  teachers: DEFAULT_FIREBASE_VIEWER_TEACHERS
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -314,8 +330,8 @@ const loadInitialState = (): AppState => {
         leagueMentors: parsed.leagueMentors || {},
         leagueTeamPoints: parsed.leagueTeamPoints || {},
         approvedTransfers: parsed.approvedTransfers || [],
-        admins: parsed.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
-        teachers: parsed.teachers || [],
+        admins: Array.from(new Set<string>(['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com', 'athdsdta@gmail.com', 'haruntahtaci@gmail.com', ...(parsed.admins || [])])),
+        teachers: Array.from(new Set<string>([...DEFAULT_FIREBASE_VIEWER_TEACHERS, ...(parsed.teachers || [])])),
         version: Number(parsed.version) || 1,
         lastPublishedAt: parsed.lastPublishedAt,
         lastPublishedBy: parsed.lastPublishedBy,
@@ -377,13 +393,19 @@ export const evaluateUserRole = (
     return 'admin';
   }
   
-  const normAdmins = (adminsList || []).map(a => (a || '').trim().toLowerCase());
+  const normAdmins = Array.from(new Set<string>([
+    'kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com', 'athdsdta@gmail.com', 'haruntahtaci@gmail.com',
+    ...(adminsList || []).map(a => (a || '').trim().toLowerCase())
+  ]));
   if (normAdmins.includes(cleanEmail)) {
     setCachedAuthorizedRole(cleanEmail, 'admin');
     return 'admin';
   }
   
-  const normTeachers = (teachersList || []).map(t => (t || '').trim().toLowerCase());
+  const normTeachers = Array.from(new Set<string>([
+    ...DEFAULT_FIREBASE_VIEWER_TEACHERS,
+    ...(teachersList || []).map(t => (t || '').trim().toLowerCase())
+  ]));
   if (normTeachers.includes(cleanEmail)) {
     setCachedAuthorizedRole(cleanEmail, 'teacher');
     return 'teacher';
@@ -408,11 +430,12 @@ export const sanitizeSchoolState = (data: any): AppState => {
   }
 
   const cleanAdmins = Array.from(new Set<string>(
-    (data.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com']).map((a: any) => String(a || '').trim().toLowerCase())
+    (data.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com', 'athdsdta@gmail.com', 'haruntahtaci@gmail.com']).map((a: any) => String(a || '').trim().toLowerCase())
   ));
-  const cleanTeachers = Array.from(new Set<string>(
-    (data.teachers || []).map((t: any) => String(t || '').trim().toLowerCase())
-  ));
+  const cleanTeachers = Array.from(new Set<string>([
+    ...DEFAULT_FIREBASE_VIEWER_TEACHERS,
+    ...(data.teachers || []).map((t: any) => String(t || '').trim().toLowerCase())
+  ]));
 
   const safeExams = (data.exams || []).map((e: any) => {
     if (!e.omrMap || !e.omrMap.specs) {
