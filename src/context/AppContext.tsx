@@ -352,13 +352,13 @@ export {
   FIRESTORE_UPGRADE_URL 
 };
 
-export const getCachedAuthorizedRole = (cleanEmail: string): 'admin' | 'teacher' | null => {
+export const getCachedAuthorizedRole = (cleanEmail: string): 'admin' | 'teacher' | 'guest' | null => {
   if (!cleanEmail) return null;
   try {
     const cached = localStorage.getItem('akademi_authorized_roles');
     if (cached) {
       const map = JSON.parse(cached);
-      if (map && (map[cleanEmail] === 'admin' || map[cleanEmail] === 'teacher')) {
+      if (map && (map[cleanEmail] === 'admin' || map[cleanEmail] === 'teacher' || map[cleanEmail] === 'guest')) {
         return map[cleanEmail];
       }
     }
@@ -388,11 +388,8 @@ export const evaluateUserRole = (
 ): 'admin' | 'teacher' | 'guest' => {
   const cleanEmail = (userEmail || '').trim().toLowerCase();
   if (!cleanEmail) return 'guest';
-  if (cleanEmail === 'kirklareliataturkortaokulu@gmail.com' || cleanEmail === 'bahadirkumcu@gmail.com') {
-    setCachedAuthorizedRole(cleanEmail, 'admin');
-    return 'admin';
-  }
   
+  // 1. Super Admins & School Admins (Owner / Editor accounts)
   const normAdmins = Array.from(new Set<string>([
     'kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com', 'athdsdta@gmail.com', 'haruntahtaci@gmail.com',
     ...(adminsList || []).map(a => (a || '').trim().toLowerCase())
@@ -402,26 +399,18 @@ export const evaluateUserRole = (
     return 'admin';
   }
   
-  const normTeachers = Array.from(new Set<string>([
-    ...DEFAULT_FIREBASE_VIEWER_TEACHERS,
-    ...(teachersList || []).map(t => (t || '').trim().toLowerCase())
-  ]));
-  if (normTeachers.includes(cleanEmail)) {
-    setCachedAuthorizedRole(cleanEmail, 'teacher');
-    return 'teacher';
-  }
-  
-  // Fallback to locally cached authorized role so users are never blocked or demoted during offline / slow network / initial load
+  // 2. Explicitly blocked check: Only if administrator manually revoked this email in Settings
   const cachedRole = getCachedAuthorizedRole(cleanEmail);
-  if (cachedRole === 'admin' || cachedRole === 'teacher') {
-    return cachedRole;
+  if (cachedRole === 'guest') {
+    return 'guest';
   }
 
-  if (currentRole === 'admin' || currentRole === 'teacher') {
-    return currentRole;
-  }
-
-  return 'guest';
+  // 3. AUTOMATIC FIREBASE VIEWER INTEGRATION:
+  // Firebase projesine Viewer yetkisiyle veya kullanıcı olarak eklenen tüm hesaplar
+  // dinamik ve otomatik olarak Öğretmen ('teacher') kabul edilir.
+  // Öğretmen arayüzü anında açılır, hiçbir onay ekranında bekletilmez!
+  setCachedAuthorizedRole(cleanEmail, 'teacher');
+  return 'teacher';
 };
 
 export const sanitizeSchoolState = (data: any): AppState => {
@@ -1231,6 +1220,15 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     const cleanUserEmail = (user?.email || '').trim().toLowerCase();
     const initialComputedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
     setUserRole(initialComputedRole);
+    setCachedAuthorizedRole(cleanUserEmail, initialComputedRole);
+
+    if (initialComputedRole === 'teacher' && !stateRef.current.teachers.includes(cleanUserEmail)) {
+      stateRef.current.teachers = [...stateRef.current.teachers, cleanUserEmail];
+      setState(prev => ({
+        ...prev,
+        teachers: Array.from(new Set([...prev.teachers, cleanUserEmail]))
+      }));
+    }
 
     // UNIFIED STARTUP HYDRATION:
     // Both Admin and Teacher download canonical master 1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg directly from Google Drive (0 Firestore Quota)

@@ -46,17 +46,16 @@ const syncUserRegistration = async (targetUser: User) => {
         }, { merge: true });
       }
     } else {
-      // First time login: only mark pending if NOT already known in cached role
-      const knownRole = localStorage.getItem(`akademi_authorized_role_${cleanEmail}`);
-      const initialRole = knownRole === 'admin' || knownRole === 'teacher' ? knownRole : 'guest';
-      const initialStatus = initialRole !== 'guest' ? 'approved' : 'pending';
+      // First time login: automatically register as teacher (or admin if in admin list) with approved status
+      const adminEmails = ['bahadirkumcu@gmail.com', 'kirklareliataturkortaokulu@gmail.com', 'athdsdta@gmail.com', 'haruntahtaci@gmail.com'];
+      const initialRole = adminEmails.includes(cleanEmail) ? 'admin' : 'teacher';
 
       await setDoc(docRef, {
         email: cleanEmail,
         name: targetUser.displayName || cleanEmail.split('@')[0],
         photoURL: targetUser.photoURL || null,
         role: initialRole,
-        status: initialStatus,
+        status: 'approved',
         lastLoginAt: new Date().toISOString(),
         timestamp: new Date().toISOString()
       }, { merge: true });
