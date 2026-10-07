@@ -3,6 +3,9 @@ import {
   getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut, 
   onAuthStateChanged, 
   setPersistence,
@@ -360,6 +363,33 @@ export const loginWithGoogle = async () => {
       return null;
     }
     console.warn('Google Sign In notice:', err?.message || err);
+    throw err;
+  }
+};
+
+export const loginWithEmail = async (email: string, pass: string): Promise<User | null> => {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  try {
+    const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+    return cred.user;
+  } catch (err: any) {
+    console.warn('Email sign-in notice:', err?.code, err?.message);
+    throw err;
+  }
+};
+
+export const registerWithEmail = async (email: string, pass: string, displayName?: string): Promise<User | null> => {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+    if (cred.user && displayName) {
+      try {
+        await updateProfile(cred.user, { displayName });
+      } catch {}
+    }
+    return cred.user;
+  } catch (err: any) {
+    console.warn('Email registration notice:', err?.code, err?.message);
     throw err;
   }
 };

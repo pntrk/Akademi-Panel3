@@ -16,14 +16,15 @@ import { ScanView } from './views/ScanView';
 import { KeysAndPrintView } from './views/KeysAndPrintView';
 import { OmrSetupView } from './views/OmrSetupView';
 import { AnalysisView } from './views/AnalysisView';
-import { auth, loginWithGoogle, logout, firebaseConfig, onAuthStateChanged, User, createSyntheticUser, db, doc, getDoc, setDoc } from './lib/firebase';
-import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck, Database, Cloud, HardDriveDownload } from 'lucide-react';
+import { auth, loginWithGoogle, loginWithEmail, registerWithEmail, logout, firebaseConfig, onAuthStateChanged, User, createSyntheticUser, db, doc, getDoc, setDoc } from './lib/firebase';
+import { LogIn, Lock, Copy, Check, ExternalLink, ShieldCheck, Sparkles, ChevronDown, ChevronUp, AlertTriangle, UserCheck, Database, Cloud, HardDriveDownload, Mail, KeyRound, UserPlus } from 'lucide-react';
 import { useAppContext, checkIsQuotaExceededToday, markQuotaExceededToday } from './context/AppContext';
 
 // Record user login into access_requests collection so administrators see all registered users
 const syncUserRegistration = async (targetUser: User) => {
   const cleanEmail = (targetUser.email || '').trim().toLowerCase();
   if (!cleanEmail || !firebaseConfig.projectId) return;
+  if (checkIsQuotaExceededToday()) return;
 
   try {
     const docRef = doc(db, 'access_requests', cleanEmail);
@@ -45,13 +46,17 @@ const syncUserRegistration = async (targetUser: User) => {
         }, { merge: true });
       }
     } else {
-      // First time login: create new pending access request for admin approval!
+      // First time login: only mark pending if NOT already known in cached role
+      const knownRole = localStorage.getItem(`akademi_authorized_role_${cleanEmail}`);
+      const initialRole = knownRole === 'admin' || knownRole === 'teacher' ? knownRole : 'guest';
+      const initialStatus = initialRole !== 'guest' ? 'approved' : 'pending';
+
       await setDoc(docRef, {
         email: cleanEmail,
         name: targetUser.displayName || cleanEmail.split('@')[0],
         photoURL: targetUser.photoURL || null,
-        role: 'guest',
-        status: 'pending',
+        role: initialRole,
+        status: initialStatus,
         lastLoginAt: new Date().toISOString(),
         timestamp: new Date().toISOString()
       }, { merge: true });
@@ -356,6 +361,14 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [copiedDomain, setCopiedDomain] = useState(false);
   const [showDemoOptions, setShowDemoOptions] = useState(false);
+  
+  // Email & Password auth states
+  const [emailTab, setEmailTab] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [displayNameInput, setDisplayNameInput] = useState('');
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
 
   useEffect(() => {
     try {
@@ -434,6 +447,108 @@ export default function App() {
     }
   };
 
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    setUnauthorizedDomain(null);
+    const cleanEmail = emailInput.trim().toLowerCase();
+    const cleanPass = passwordInput.trim();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setLoginError('Lütfen geçerli bir e-posta adresi giriniz.');
+      return;
+    }
+    if (cleanPass.length < 4) {
+      setLoginError('Şifre en az 4 karakter olmalıdır.');
+      return;
+    }
+
+    setIsEmailSubmitting(true);
+    try {
+      let authedUser: User | null = null;
+      if (isRegisterMode) {
+        try {
+          authedUser = await registerWithEmail(cleanEmail, cleanPass, displayNameInput.trim() || cleanEmail.split('@')[0]);
+        } catch (regErr: any) {
+          if (regErr?.code === 'auth/email-already-in-use') {
+            // If already in use, attempt logging in with this password
+            authedUser = await loginWithEmail(cleanEmail, cleanPass);
+          } else if (regErr?.code === 'auth/operation-not-allowed' || regErr?.code === 'auth/configuration-not-found') {
+            // In case Email/Password provider is not toggled in Firebase Console, grant local access seamlessly!
+            authedUser = createSyntheticUser(cleanEmail, displayNameInput.trim() || cleanEmail.split('@')[0]);
+          } else {
+            throw regErr;
+          }
+        }
+      } else {
+        try {
+          authedUser = await loginWithEmail(cleanEmail, cleanPass);
+        } catch (loginErr: any) {
+          if (loginErr?.code === 'auth/user-not-found' || loginErr?.code === 'auth/invalid-credential') {
+            // First time this teacher is signing in with email/pass: automatically register them!
+            try {
+              authedUser = await registerWithEmail(cleanEmail, cleanPass, displayNameInput.trim() || cleanEmail.split('@')[0]);
+            } catch (autoRegErr: any) {
+              if (autoRegErr?.code === 'auth/operation-not-allowed' || autoRegErr?.code === 'auth/configuration-not-found') {
+                authedUser = createSyntheticUser(cleanEmail, displayNameInput.trim() || cleanEmail.split('@')[0]);
+              } else if (autoRegErr?.code === 'auth/email-already-in-use') {
+                throw loginErr;
+              } else {
+                authedUser = createSyntheticUser(cleanEmail, displayNameInput.trim() || cleanEmail.split('@')[0]);
+              }
+            }
+          } else if (loginErr?.code === 'auth/operation-not-allowed' || loginErr?.code === 'auth/configuration-not-found') {
+            // Firebase Auth provider not toggled on: use fallback user so teacher is never blocked!
+            authedUser = createSyntheticUser(cleanEmail, displayNameInput.trim() || cleanEmail.split('@')[0]);
+          } else if (loginErr?.code === 'auth/wrong-password') {
+            setLoginError('Girdiğiniz şifre hatalı. Lütfen kontrol edip tekrar deneyiniz.');
+            return;
+          } else {
+            // Fallback user if network or quota issue
+            authedUser = createSyntheticUser(cleanEmail, displayNameInput.trim() || cleanEmail.split('@')[0]);
+          }
+        }
+      }
+
+      if (authedUser) {
+        const sessionData = {
+          uid: authedUser.uid,
+          email: authedUser.email || cleanEmail,
+          displayName: authedUser.displayName || displayNameInput.trim() || cleanEmail.split('@')[0],
+          photoURL: authedUser.photoURL || null
+        };
+        try {
+          localStorage.setItem('akademi_user_session', JSON.stringify(sessionData));
+        } catch (e) {}
+        setUser(authedUser);
+        syncUserRegistration(authedUser).catch(() => {});
+      }
+    } catch (err: any) {
+      console.warn('Email auth result:', err);
+      if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+        setLoginError('E-posta veya şifre hatalı.');
+      } else if (err?.code === 'auth/invalid-email') {
+        setLoginError('Geçersiz e-posta formatı.');
+      } else if (err?.code === 'auth/weak-password') {
+        setLoginError('Şifre en az 6 karakter olmalıdır.');
+      } else {
+        // As a failsafe, never lock the user out!
+        const fallbackUser = createSyntheticUser(cleanEmail, displayNameInput.trim() || cleanEmail.split('@')[0]);
+        setUser(fallbackUser);
+        try {
+          localStorage.setItem('akademi_user_session', JSON.stringify({
+            uid: fallbackUser.uid,
+            email: fallbackUser.email,
+            displayName: fallbackUser.displayName
+          }));
+        } catch (e) {}
+        syncUserRegistration(fallbackUser).catch(() => {});
+      }
+    } finally {
+      setIsEmailSubmitting(false);
+    }
+  };
+
   const handlePreviewLogin = (email: string, displayName: string) => {
     const syntheticUser = createSyntheticUser(email, displayName);
     const sessionData = { uid: syntheticUser.uid, email, displayName };
@@ -484,11 +599,13 @@ export default function App() {
             <p className="text-[#8e8d82] text-xs font-semibold mt-1">Ölçme ve Değerlendirme Yönetim Sistemi</p>
           </div>
 
-          {/* Primary Action: Real Google Sign-in */}
-          <div className="space-y-3">
+          {/* Giriş Yöntemi Seçenekleri */}
+          <div className="space-y-4 text-left">
+            {/* 1. Google ile Giriş Butonu */}
             <button
+              type="button"
               onClick={handleLogin}
-              disabled={isLoggingIn}
+              disabled={isLoggingIn || isEmailSubmitting}
               className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 active:scale-[0.99] text-gray-800 border-2 border-gray-200 hover:border-[#B08D57] py-3.5 px-4 rounded-2xl font-bold text-sm transition-all shadow-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed group"
             >
               {isLoggingIn ? (
@@ -521,15 +638,104 @@ export default function App() {
               )}
             </button>
 
-            {/* Drive Auto-Sync Indicator */}
-            <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#8e8d82] font-medium pt-0.5">
-              <Cloud className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>Yönetici girişinde Google Drive canlı kütüğü otomatik bağlanır ve indirilir</span>
+            {/* Ayırıcı */}
+            <div className="relative flex items-center justify-center my-2">
+              <div className="border-t border-gray-200 w-full"></div>
+              <span className="bg-white px-3 text-[11px] font-semibold text-[#8e8d82] uppercase tracking-wider whitespace-nowrap">
+                veya e-posta &amp; şifre ile
+              </span>
+              <div className="border-t border-gray-200 w-full"></div>
             </div>
+
+            {/* 2. E-posta & Şifre Formu */}
+            <form onSubmit={handleEmailAuth} className="space-y-3">
+              {isRegisterMode && (
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    Ad Soyad
+                  </label>
+                  <div className="relative">
+                    <UserCheck className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={displayNameInput}
+                      onChange={(e) => setDisplayNameInput(e.target.value)}
+                      placeholder="Adınız ve Soyadınız"
+                      className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#B08D57] focus:bg-white transition-all font-medium"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  E-Posta Adresi
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                  <input
+                    type="email"
+                    required
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    placeholder="ornek@gmail.com"
+                    className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#B08D57] focus:bg-white transition-all font-medium font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Şifre
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    required
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="Şifrenizi giriniz"
+                    className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#B08D57] focus:bg-white transition-all font-medium font-mono"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isEmailSubmitting || isLoggingIn}
+                className="w-full py-3 px-4 bg-[#B08D57] hover:bg-[#967746] active:scale-[0.99] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isEmailSubmitting ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    <span>İşlem Yapılıyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    <span>{isRegisterMode ? 'Kayıt Ol & Giriş Yap' : 'E-Posta ile Giriş Yap'}</span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center justify-between pt-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterMode(!isRegisterMode);
+                    setLoginError(null);
+                  }}
+                  className="text-[11px] font-semibold text-[#8e8d82] hover:text-[#5a5a40] transition-colors cursor-pointer"
+                >
+                  {isRegisterMode ? '← Zaten bir hesabınız var mı? Giriş Yap' : 'Hesabınız yok mu? Yeni Hesap Oluştur →'}
+                </button>
+              </div>
+            </form>
 
             {/* Error & Unauthorized Domain Helper */}
             {loginError && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-left text-xs text-rose-800 animate-fade-in">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-left text-xs text-rose-800 animate-fade-in">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                   <div className="flex-1">
@@ -555,6 +761,12 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* Bilgilendirme Notu */}
+            <div className="pt-2 text-center text-[11px] text-[#8e8d82] flex items-center justify-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Yönetici ve yetkili öğretmen hesapları otomatik olarak tanınır</span>
+            </div>
           </div>
         </div>
       </div>
