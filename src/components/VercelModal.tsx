@@ -7,8 +7,13 @@ interface VercelModalProps {
 }
 
 export const VercelModal: React.FC<VercelModalProps> = ({ isOpen, onClose }) => {
+  const DEFAULT_VERCEL_URL = 'https://akademipanel3.vercel.app/';
   const [vercelUrl, setVercelUrl] = useState<string>(() => {
-    return localStorage.getItem('akademiVercelUrl') || 'https://akademipanel.vercel.app';
+    const saved = localStorage.getItem('akademiVercelUrl');
+    if (!saved || saved.includes('akademi-panel2-nop7') || saved === 'https://akademipanel.vercel.app') {
+      return DEFAULT_VERCEL_URL;
+    }
+    return saved;
   });
   const [isEditing, setIsEditing] = useState(false);
   const [inputUrl, setInputUrl] = useState(vercelUrl);
@@ -22,7 +27,7 @@ export const VercelModal: React.FC<VercelModalProps> = ({ isOpen, onClose }) => 
   if (!isOpen) return null;
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(vercelUrl);
+    navigator.clipboard.writeText(vercelUrl || DEFAULT_VERCEL_URL);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -42,7 +47,7 @@ export const VercelModal: React.FC<VercelModalProps> = ({ isOpen, onClose }) => 
   };
 
   const openVercelLink = () => {
-    window.open(vercelUrl, '_blank', 'noopener,noreferrer');
+    window.open(vercelUrl || DEFAULT_VERCEL_URL, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -106,7 +111,7 @@ export const VercelModal: React.FC<VercelModalProps> = ({ isOpen, onClose }) => 
                   type="text" 
                   value={inputUrl}
                   onChange={(e) => setInputUrl(e.target.value)}
-                  placeholder="https://projeniz.vercel.app"
+                  placeholder="https://akademipanel3.vercel.app/"
                   className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
                 />
                 <button 

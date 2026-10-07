@@ -3,10 +3,12 @@ import { useAppContext } from '../context/AppContext';
 import { ExamHall, SeatingPlanItem, Exam, AbsentStudentInfo, HallAttendance } from '../types';
 import { generateId, exportToExcel, formatDateLong, parseDateObj } from '../lib/utils';
 import { auth } from '../lib/firebase';
+import { AttendanceReportModal } from '../components/AttendanceReportModal';
 import { 
   findTodayExamForHall, 
   submitHallAttendance, 
   fetchAllAttendances, 
+  subscribeToAttendances,
   getLocalAttendances,
   isExamDateMatches,
   getActiveTeacherIdentity
@@ -175,6 +177,7 @@ export const HallsView = () => {
   const [absentStudentIds, setAbsentStudentIds] = useState<string[]>([]);
   const [isSendingNotification, setIsSendingNotification] = useState(false);
   const [simulationDateStr, setSimulationDateStr] = useState<string>(''); // Test simülasyonu için
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const capacity = columns.reduce((acc, col) => acc + (col.deskCount * col.seatsPerDesk), 0);
 
@@ -229,7 +232,7 @@ export const HallsView = () => {
     return '';
   };
 
-  // Yoklama verilerini başlangıçta yükle ve sekmeler/ekranlar arası otomatik senkronize et
+  // Yoklama verilerini başlangıçta yükle, sekmeler ve Firestore canlı dinleyicisi ile tüm öğretmenlere anında yayınla
   useEffect(() => {
     const syncAttendances = () => {
       const cached = getLocalAttendances();
@@ -240,12 +243,14 @@ export const HallsView = () => {
 
     syncAttendances();
 
-    fetchAllAttendances('main').then(remote => {
-      if (remote && Object.keys(remote).length > 0) {
-        setAttendances(prev => ({ ...prev, ...remote }));
+    // 1. Canlı Firestore Dinleyicisi (Öğretmen A yoklama aldığında Öğretmen B'nin ekranı anında yenilenir)
+    const unsubscribeFirestore = subscribeToAttendances('main', (remoteData) => {
+      if (remoteData && Object.keys(remoteData).length > 0) {
+        setAttendances(prev => ({ ...prev, ...remoteData }));
       }
     });
 
+    // 2. Pencere içi CustomEvent dinleyicisi
     const handleCustomEvent = (e: any) => {
       const updated = e.detail as HallAttendance;
       if (updated?.id) {
@@ -258,6 +263,7 @@ export const HallsView = () => {
       }
     };
 
+    // 3. Tarayıcı sekmeleri arası StorageEvent dinleyicisi
     const handleStorageEvent = (e: StorageEvent) => {
       if (e.key === 'akademi_hall_attendances_cache') {
         syncAttendances();
@@ -268,6 +274,7 @@ export const HallsView = () => {
     window.addEventListener('storage', handleStorageEvent);
 
     return () => {
+      unsubscribeFirestore();
       window.removeEventListener('akademi_attendance_updated', handleCustomEvent);
       window.removeEventListener('storage', handleStorageEvent);
     };
@@ -1179,36 +1186,36 @@ export const HallsView = () => {
       )}
 
       {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-2.5 border-b border-brand-border/60">
+      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3 pb-2.5 border-b border-brand-border/60">
         <div>
-          <h2 className="text-xl sm:text-2xl font-serif text-brand-ink font-bold tracking-tight">
+          <h2 className="text-lg sm:text-xl font-serif text-brand-ink font-bold tracking-tight">
             Salonlar & Oturma Planı
           </h2>
-          <p className="text-xs sm:text-sm text-brand-ink/60 mt-0.5">
+          <p className="text-[11px] sm:text-xs text-brand-ink/60 mt-0.5">
             {isReadOnly 
               ? 'Sınav salonları, günün sınav takvimi ve pratik öğrenci yoklama kontrolü' 
               : 'Sınav salonu yapılandırması, otomatik kelebek dağıtım ve gözetmenlik yönetimi'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end shrink-0 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full lg:w-auto justify-between lg:justify-end shrink-0 flex-wrap sm:flex-nowrap">
           {/* Yalnızca Yönetici / Admin Panelinde Manuel Takvim Değiştirme Görüntüsü */}
           {!isReadOnly && (
-            <div className="flex items-center justify-between gap-1.5 bg-white border border-brand-border/80 px-3 py-2 sm:px-2.5 sm:py-1.5 rounded-xl shadow-2xs text-xs w-full sm:w-auto">
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                <span className="text-[11px] font-bold text-brand-ink/70">
-                  {simulationDateStr ? 'Test Tarihi:' : 'Takvim Tarihi:'}
+            <div className="flex items-center justify-between gap-1.5 bg-[#F8F7F4] border border-[#E2DDD5] px-2.5 py-1.5 rounded-xl shadow-2xs text-xs shrink-0 max-w-full sm:max-w-xs transition-colors hover:border-[#B08D57]/50">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Calendar className="w-3.5 h-3.5 text-[#B08D57] shrink-0" />
+                <span className="text-[10.5px] font-bold text-brand-ink/80 whitespace-nowrap">
+                  {simulationDateStr ? 'Test:' : 'Takvim:'}
                 </span>
               </div>
               <select
                 value={simulationDateStr}
                 onChange={(e) => setSimulationDateStr(e.target.value)}
-                className="bg-transparent text-xs font-bold text-brand-ink focus:outline-none cursor-pointer"
+                className="bg-transparent text-[11px] sm:text-xs font-bold text-brand-ink focus:outline-hidden cursor-pointer max-w-[135px] sm:max-w-[165px] truncate"
               >
-                <option value="">Bugün ({new Date().toLocaleDateString('tr-TR')})</option>
+                <option value="" className="bg-[#F8F7F4] text-brand-ink">Bugün ({new Date().toLocaleDateString('tr-TR')})</option>
                 {state.exams.map(ex => (
-                  <option key={ex.id} value={ex.date}>
+                  <option key={ex.id} value={ex.date} className="bg-[#F8F7F4] text-brand-ink">
                     {ex.name} ({ex.date || 'Tarih Yok'})
                   </option>
                 ))}
@@ -1217,7 +1224,7 @@ export const HallsView = () => {
                 <button
                   type="button"
                   onClick={() => setSimulationDateStr('')}
-                  className="text-[10px] text-rose-600 hover:underline font-bold ml-1 cursor-pointer"
+                  className="text-[10px] text-rose-600 hover:text-rose-700 hover:underline font-bold ml-0.5 cursor-pointer shrink-0"
                   title="Bugüne Dön"
                 >
                   Sıfırla
@@ -1227,20 +1234,41 @@ export const HallsView = () => {
           )}
 
           {!isReadOnly && (
-            <button 
-              onClick={openNewModal} 
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#151618] hover:bg-black text-white rounded-xl text-xs font-bold active:scale-95 shadow-xs transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-amber-400" />
-              <span>Yeni Salon Oluştur</span>
-            </button>
+            <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end shrink-0">
+              <button 
+                type="button"
+                onClick={() => setIsReportModalOpen(true)} 
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-[11px] sm:text-xs font-bold shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+                title="Tüm salonlardan gelen yoklamaları birleştirip rapor ve devamsızlık listesi oluştur"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
+                <span>Yoklama Raporu</span>
+              </button>
+              <button 
+                type="button"
+                onClick={openNewModal} 
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 bg-[#151618] hover:bg-black text-white rounded-xl text-[11px] sm:text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Yeni Salon</span>
+              </button>
+            </div>
           )}
 
           {isReadOnly && (
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-indigo-50 to-indigo-100/70 text-indigo-950 border border-indigo-200/90 rounded-xl text-[11px] sm:text-xs font-bold shrink-0 shadow-2xs">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end shrink-0 flex-wrap sm:flex-nowrap">
+              <button
+                type="button"
+                onClick={() => setIsReportModalOpen(true)}
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/90 rounded-xl text-[11px] sm:text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer touch-manipulation whitespace-nowrap"
+                title="Sınav Yoklama Raporunu Görüntüle"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>Yoklama Raporu</span>
+              </button>
+              <div className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-indigo-50 to-indigo-100/70 text-indigo-950 border border-indigo-200/90 rounded-xl text-[11px] sm:text-xs font-bold shrink-0 shadow-2xs whitespace-nowrap">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                <span className="truncate">Gözetmen Paneli</span>
+                <span>Gözetmen</span>
               </div>
               <button
                 type="button"
@@ -1257,11 +1285,11 @@ export const HallsView = () => {
                   }
                 }}
                 disabled={isRefreshingDrive}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[11px] sm:text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer disabled:opacity-50 touch-manipulation"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[11px] sm:text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer disabled:opacity-50 touch-manipulation whitespace-nowrap"
                 title="Google Drive üzerindeki güncel kütükten salonları ve öğrencileri çek"
               >
                 <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isRefreshingDrive ? 'animate-spin' : ''}`} />
-                <span className="truncate">{isRefreshingDrive ? 'Eşitleniyor...' : 'Kütüğü Yenile'}</span>
+                <span>{isRefreshingDrive ? 'Eşitleniyor...' : 'Kütüğü Yenile'}</span>
               </button>
             </div>
           )}
@@ -1499,48 +1527,95 @@ export const HallsView = () => {
                       )}
                     </div>
 
-                    <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-bold text-brand-ink truncate">
-                          {todayExam.name}
-                        </h4>
-                        <p className="text-[10px] text-brand-ink/60 truncate mt-0.5 flex items-center gap-1.5 flex-wrap">
-                          <span>📅 {todayExam.date || 'Bugün'}</span>
-                          <span>•</span>
-                          <span>{todayExam.institution || 'Kurumsal Deneme'}</span>
-                          {hallAttendance && (() => {
-                            const teacherEmail = getResolvedTeacherEmail(hallAttendance);
-                            const rawTakenBy = (hallAttendance.takenBy || '').trim();
-                            const cleanTakenBy = (rawTakenBy && !rawTakenBy.toLowerCase().includes('abdullaherbileses') && !rawTakenBy.includes('Gözetmen')) ? rawTakenBy : '';
-                            const teacherDisplay = teacherEmail || cleanTakenBy || 'Gözetmen Öğretmen';
-                            return (
-                              <>
-                                <span>•</span>
-                                <span className="text-emerald-800 font-semibold truncate" title={`Yoklamayı Gönderen Öğretmen: ${teacherEmail || teacherDisplay}`}>
-                                  👤 {teacherEmail || teacherDisplay}
-                                </span>
-                              </>
-                            );
-                          })()}
-                        </p>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-bold text-brand-ink truncate">
+                            {todayExam.name}
+                          </h4>
+                          <p className="text-[10px] text-brand-ink/60 truncate mt-0.5 flex items-center gap-1.5 flex-wrap">
+                            <span>📅 {todayExam.date || 'Bugün'}</span>
+                            <span>•</span>
+                            <span>{todayExam.institution || 'Kurumsal Deneme'}</span>
+                            {hallAttendance && (() => {
+                              const teacherEmail = getResolvedTeacherEmail(hallAttendance);
+                              const rawTakenBy = (hallAttendance.takenBy || '').trim();
+                              const cleanTakenBy = (rawTakenBy && !rawTakenBy.toLowerCase().includes('abdullaherbileses') && !rawTakenBy.includes('Gözetmen')) ? rawTakenBy : '';
+                              const teacherDisplay = teacherEmail || cleanTakenBy || 'Gözetmen Öğretmen';
+                              return (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-emerald-800 font-semibold truncate flex items-center gap-1" title={`Yoklamayı Gönderen Öğretmen: ${teacherEmail || teacherDisplay}`}>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                                    <span>👤 {teacherEmail || teacherDisplay}</span>
+                                  </span>
+                                </>
+                              );
+                            })()}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAttendanceModal(hall, todayExam);
+                          }}
+                          className={`w-full xs:w-auto px-3 py-1.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 transition-all active:scale-95 shadow-xs cursor-pointer touch-manipulation ${
+                            hallAttendance
+                              ? 'bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300'
+                              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
+                          }`}
+                          title="Bu Salon İçin Yoklama Al / Güncelle"
+                        >
+                          <UserCheck className="w-3.5 h-3.5" />
+                          <span>{hallAttendance ? 'Yoklamayı Güncelle' : 'Yoklama Al'}</span>
+                        </button>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openAttendanceModal(hall, todayExam);
-                        }}
-                        className={`w-full xs:w-auto px-3 py-1.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 transition-all active:scale-95 shadow-xs cursor-pointer touch-manipulation ${
-                          hallAttendance
-                            ? 'bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
-                        }`}
-                        title="Bu Salon İçin Yoklama Al / Güncelle"
-                      >
-                        <UserCheck className="w-3.5 h-3.5" />
-                        <span>{hallAttendance ? 'Yoklamayı Güncelle' : 'Yoklama Al'}</span>
-                      </button>
+                      {/* Anlık Canlı Yoklama Detayı: Tüm öğretmenlerin kimlerin salonda olup olmadığını görmesi */}
+                      {hallAttendance && (
+                        <div className="pt-2 border-t border-brand-border/40 space-y-1 text-[10.5px]">
+                          <div className="flex items-center justify-between text-slate-700 font-medium">
+                            <span className="flex items-center gap-1 font-bold text-[10px] text-slate-800">
+                              <Users className="w-3 h-3 text-indigo-600" />
+                              <span>Mevcut: {hallAttendance.presentCount} / {hallAttendance.totalAssigned}</span>
+                            </span>
+                            {hallAttendance.takenAt && (
+                              <span className="text-[9.5px] text-slate-500 font-mono">
+                                Saat: {new Date(hallAttendance.takenAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
+
+                          {hallAttendance.absentStudents && hallAttendance.absentStudents.length > 0 ? (
+                            <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                              <span className="text-[9.5px] font-extrabold text-rose-700 uppercase tracking-tight">
+                                Devamsız ({hallAttendance.absentStudents.length}):
+                              </span>
+                              {hallAttendance.absentStudents.slice(0, 4).map(s => (
+                                <span 
+                                  key={`${s.studentNo}_${s.studentName}`} 
+                                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-800 border border-rose-200"
+                                  title={`${s.studentNo} - ${s.studentName} (${s.studentClass || 'Sınıf'}) - Sıra No: ${s.deskNumber || '-'}`}
+                                >
+                                  {s.studentNo} - {s.studentName} ({s.studentClass || 'Sınıf'})
+                                </span>
+                              ))}
+                              {hallAttendance.absentStudents.length > 4 && (
+                                <span className="text-[9px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded-md border border-rose-200">
+                                  +{hallAttendance.absentStudents.length - 4} diğer
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-[9.5px] text-emerald-700 font-bold flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span>Tüm öğrenciler salonda eksiksiz mevcuttur.</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -2361,7 +2436,13 @@ export const HallsView = () => {
                                   )
                                 );
 
-                                const isAbsent = Boolean(modalMode === 'attendance' && student && studentId && absentStudentIds.includes(studentId));
+                                const isAbsent = Boolean(
+                                  student && studentId && (
+                                    modalMode === 'attendance'
+                                      ? absentStudentIds.includes(studentId)
+                                      : savedAbsentStudentIds.includes(studentId)
+                                  )
+                                );
                                 
                                 return (
                                   <div 
@@ -2382,10 +2463,10 @@ export const HallsView = () => {
                                     onDrop={(e) => !isReadOnly && handleDrop(e, seatNum)}
                                     className={`flex flex-col items-center justify-between p-1 sm:p-1.5 md:p-2 rounded-xl relative min-h-[5.2rem] xs:min-h-[5.5rem] sm:min-h-[5.85rem] flex-1 min-w-0 print:h-24 print:w-32 transition-all select-none touch-manipulation cursor-pointer ${
                                       student 
-                                        ? modalMode === 'attendance'
-                                          ? isAbsent
-                                            ? "bg-rose-50/95 border-2 border-rose-600 shadow-md ring-2 ring-rose-400/50 z-10 hover:border-rose-700 hover:bg-rose-100/90 active:scale-95"
-                                            : "bg-emerald-50/90 border-2 border-emerald-500 shadow-sm ring-2 ring-emerald-300/40 z-10 hover:border-emerald-600 hover:bg-emerald-100/80 active:scale-95"
+                                        ? isAbsent
+                                          ? "bg-rose-50/95 border-2 border-rose-600 shadow-md ring-2 ring-rose-400/50 z-10 hover:border-rose-700 hover:bg-rose-100/90 active:scale-95"
+                                          : modalMode === 'attendance'
+                                          ? "bg-emerald-50/90 border-2 border-emerald-500 shadow-sm ring-2 ring-emerald-300/40 z-10 hover:border-emerald-600 hover:bg-emerald-100/80 active:scale-95"
                                           : "bg-white border border-brand-border/80 shadow-2xs hover:border-brand-accent/60 hover:shadow-xs hover:scale-[1.01] text-brand-ink print:border-black"
                                         : "bg-[#FAF9F6] border-2 border-dashed border-brand-border/70 print:border-gray-300 cursor-default"
                                     } ${
@@ -2396,10 +2477,10 @@ export const HallsView = () => {
                                   >
                                     <div className="w-full flex items-center justify-between">
                                       <span className={`text-[8.5px] sm:text-[10px] font-bold ${
-                                        modalMode === 'attendance'
-                                          ? isAbsent 
-                                            ? "text-rose-700 font-black" 
-                                            : "text-emerald-800 font-black"
+                                        isAbsent 
+                                          ? "text-rose-700 font-black" 
+                                          : modalMode === 'attendance'
+                                          ? "text-emerald-800 font-black"
                                           : "text-brand-ink/50"
                                       }`}>
                                         {seatNum}
@@ -2421,10 +2502,10 @@ export const HallsView = () => {
                                                 }
                                               }}
                                               className={`w-full max-w-full flex flex-col items-center justify-center text-center transition-all active:scale-95 cursor-pointer select-none overflow-hidden ${
-                                                modalMode === 'attendance'
-                                                  ? isAbsent 
-                                                    ? "text-rose-950 font-black line-through decoration-rose-600 decoration-2 hover:text-rose-800" 
-                                                    : "text-emerald-950 font-bold hover:text-emerald-800"
+                                                isAbsent 
+                                                  ? "text-rose-950 font-black line-through decoration-rose-600 decoration-2 hover:text-rose-800" 
+                                                  : modalMode === 'attendance'
+                                                  ? "text-emerald-950 font-bold hover:text-emerald-800"
                                                   : "text-brand-ink hover:text-brand-accent"
                                               }`}
                                               title={modalMode === 'attendance' ? "Öğrenci yoklama durumunu değiştirmek için dokunun" : student.studentName}
@@ -2445,19 +2526,19 @@ export const HallsView = () => {
                                           </div>
                                           <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1 w-full flex-wrap">
                                             <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-semibold border truncate max-w-full ${
-                                              modalMode === 'attendance'
-                                                ? isAbsent 
-                                                  ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
-                                                  : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                              isAbsent 
+                                                ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
+                                                : modalMode === 'attendance'
+                                                ? "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
                                                 : "bg-[#FAF9F6] text-brand-ink/70 border-brand-border/70"
                                             }`}>
                                               No: {student.studentNo}
                                             </span>
                                             <span className={`text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded font-bold border truncate max-w-full ${
-                                              modalMode === 'attendance'
-                                                ? isAbsent 
-                                                  ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
-                                                  : "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
+                                              isAbsent 
+                                                ? "bg-rose-100 text-rose-900 border-rose-300 font-bold" 
+                                                : modalMode === 'attendance'
+                                                ? "bg-emerald-100/90 text-emerald-900 border-emerald-300 font-bold"
                                                 : getClassBadgeColor(student.studentClass)
                                             }`}>
                                               {student.studentClass}
@@ -2641,6 +2722,24 @@ export const HallsView = () => {
           </div>
         </div>
       )}
+
+      {/* Birleştirilmiş Sınav Yoklama Raporu Modalı */}
+      <AttendanceReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        exams={state.exams}
+        examHalls={state.examHalls}
+        students={state.students}
+        attendances={attendances}
+        initialExamId={examsOnSelectedDate[0]?.id || state.exams[0]?.id}
+        onRefreshAttendances={async () => {
+          const fresh = await fetchAllAttendances('main', true);
+          if (fresh && Object.keys(fresh).length > 0) {
+            setAttendances(prev => ({ ...prev, ...fresh }));
+            showToast('✓ Sınav yoklamaları buluttan güncellendi');
+          }
+        }}
+      />
     </div>
   );
 };

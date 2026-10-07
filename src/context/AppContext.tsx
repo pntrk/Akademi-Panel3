@@ -1237,10 +1237,29 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           setSyncErrorMessage(null);
         });
     } else {
-      // No token yet: show single-click Drive connection screen
-      setIsWaitingForDriveAuth(true);
-      setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
-      setLoading(false);
+      setDriveStartupStatusText('Google Drive üzerindeki canlı kütük (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) taranıyor...');
+      fetchTeacherDataNow()
+        .then((res) => {
+          if (res && res.success) {
+            isInitialCloudHydrationDoneRef.current = true;
+            setIsInitialHydrating(false);
+            setLoading(false);
+            const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+            setUserRole(resolvedRole);
+            setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
+            setSyncStatus('synced');
+            setSyncErrorMessage(null);
+          } else {
+            setIsWaitingForDriveAuth(true);
+            setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
+            setLoading(false);
+          }
+        })
+        .catch(() => {
+          setIsWaitingForDriveAuth(true);
+          setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
+          setLoading(false);
+        });
     }
 
     // Register or check user profile in access_requests on login without performing unneeded writes

@@ -1,63 +1,89 @@
 import { useEffect, useState } from 'react';
 
-interface BeforeInstallPromptEvent extends Event {
+export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
+// Module-level persistent prompt holder so late-mounting modals never miss the event
+let globalDeferredPrompt: BeforeInstallPromptEvent | null = null;
+const promptListeners = new Set<(p: BeforeInstallPromptEvent | null) => void>();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    globalDeferredPrompt = e as BeforeInstallPromptEvent;
+    promptListeners.forEach(fn => fn(globalDeferredPrompt));
+  });
+
+  window.addEventListener('appinstalled', () => {
+    globalDeferredPrompt = null;
+    promptListeners.forEach(fn => fn(null));
+  });
+}
+
 export function usePWAInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(() => globalDeferredPrompt);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
 
   useEffect(() => {
-    // Detect standalone mode (already installed)
+    // Detect standalone mode (already installed on phone or desktop)
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+      document.referrer.includes('android-app://');
     setIsInstalled(isStandalone);
 
-    // Detect iOS devices
+    // Detect mobile device types
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
+    const isAndroidDevice = /android/.test(userAgent);
+
     setIsIOS(isIOSDevice);
+    setIsAndroid(isAndroidDevice);
 
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    const handlePromptUpdate = (prompt: BeforeInstallPromptEvent | null) => {
+      setDeferredPrompt(prompt);
     };
 
-    const handleAppInstalled = () => {
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
+    promptListeners.add(handlePromptUpdate);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
+      promptListeners.delete(handlePromptUpdate);
     };
   }, []);
 
-  const installPWA = async () => {
-    if (!deferredPrompt) return false;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-      return true;
+  const installPWA = async (): Promise<boolean> => {
+    if (!deferredPrompt && !globalDeferredPrompt) {
+      return false;
     }
-    return false;
+    const target = deferredPrompt || globalDeferredPrompt;
+    if (!target) return false;
+
+    try {
+      await target.prompt();
+      const { outcome } = await target.userChoice;
+      if (outcome === 'accepted') {
+        setIsInstalled(true);
+        setDeferredPrompt(null);
+        globalDeferredPrompt = null;
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('PWA install prompt error:', err);
+      return false;
+    }
   };
 
   return {
-    isInstallable: !!deferredPrompt || isIOS,
+    isInstallable: !!deferredPrompt || !!globalDeferredPrompt || isIOS,
     isInstalled,
     isIOS,
+    isAndroid,
     installPWA,
-    canPromptDirectly: !!deferredPrompt,
+    canPromptDirectly: !!deferredPrompt || !!globalDeferredPrompt,
   };
 }

@@ -1,4 +1,4 @@
-import { db, auth, doc, setDoc, getDocs, collection, checkIsQuotaExceededToday } from './firebase';
+import { db, auth, doc, setDoc, getDocs, onSnapshot, collection, checkIsQuotaExceededToday } from './firebase';
 import { HallAttendance, ExamHall, Exam } from '../types';
 import { publishCloudNotification, playNotificationChime } from './notifications';
 import { parseDateObj } from './utils';
@@ -390,4 +390,53 @@ export const fetchAllAttendances = async (
   }
 
   return local;
+};
+
+/**
+ * Real-time live Firestore listener for all teacher and admin users.
+ * Whenever any teacher saves or updates hall attendance, all other teachers instantly
+ * receive the changes in real-time across their screens without needing a manual refresh.
+ */
+export const subscribeToAttendances = (
+  schoolId = 'main',
+  onUpdate: (attendances: Record<string, HallAttendance>) => void
+): (() => void) => {
+  if (checkIsQuotaExceededToday()) {
+    onUpdate(getLocalAttendances());
+    return () => {};
+  }
+
+  try {
+    const colRef = collection(db, 'schools', schoolId, 'attendances');
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const local = getLocalAttendances();
+      snapshot.docChanges().forEach((change) => {
+        const data = change.doc.data() as HallAttendance;
+        if (data) {
+          if (data.takenByEmail && data.takenByEmail.toLowerCase().includes('abdullaherbileses')) {
+            data.takenByEmail = '';
+          }
+          if (data.takenBy && data.takenBy.toLowerCase().includes('abdullaherbileses')) {
+            data.takenBy = data.takenByEmail || 'Gözetmen Öğretmen';
+          }
+          if (change.type === 'removed') {
+            delete local[data.id];
+          } else {
+            local[data.id] = data;
+          }
+        }
+      });
+      localStorage.setItem(LOCAL_ATTENDANCE_KEY, JSON.stringify(local));
+      onUpdate({ ...local });
+    }, (error) => {
+      console.warn('Canlı yoklama dinleyicisi hatası (yerel mod devrede):', error);
+      onUpdate(getLocalAttendances());
+    });
+
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Yoklama dinleyicisi başlatılamadı:', err);
+    onUpdate(getLocalAttendances());
+    return () => {};
+  }
 };

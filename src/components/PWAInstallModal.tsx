@@ -83,10 +83,40 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
             </div>
           ) : isIOS ? (
             <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 text-xs text-slate-300">
-              <h4 className="font-bold text-amber-400 flex items-center gap-2 text-sm">
-                <Smartphone className="w-4 h-4" /> iOS (iPhone & iPad) Kurulum Adımları
+              <h4 className="font-bold text-amber-400 flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4" /> iOS (iPhone & iPad) Kurulumu
+                </span>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-semibold">
+                  Safari
+                </span>
               </h4>
-              <ol className="space-y-2 list-decimal list-inside text-slate-300">
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const shareUrl = localStorage.getItem('akademiVercelUrl') || 'https://akademipanel3.vercel.app/';
+                  if (typeof navigator !== 'undefined' && navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: 'AkademiPanel',
+                        text: 'AkademiPanel • Sınav & Ölçme Değerlendirme Sistemi',
+                        url: shareUrl
+                      });
+                    } catch {
+                      // ignore cancel
+                    }
+                  } else {
+                    await navigator.clipboard.writeText(shareUrl);
+                  }
+                }}
+                className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 active:scale-[0.99] text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer touch-manipulation"
+              >
+                <Share className="w-4 h-4" />
+                <span>iPhone Paylaşım Menüsünü Aç</span>
+              </button>
+
+              <ol className="space-y-2 list-decimal list-inside text-slate-300 pt-1">
                 <li className="leading-relaxed">
                   Safari alt menüsündeki <span className="inline-flex items-center gap-1 font-bold text-white bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700"><Share className="w-3.5 h-3.5 text-sky-400 inline" /> Paylaş</span> butonuna dokunun.
                 </li>

@@ -1,132 +1,122 @@
-# "Öğretmene Yayınla" Tabanlı Google Drive & Sunucu Yayın Mimarisi
+# Birleştirilmiş Sınav Yoklama ve Devamsızlık Raporu Modülü
 
-Adminin "Öğretmene Yayınla" butonuyla Google Drive'daki en son öğrenci kütük yedeğini öğretmenlerin okuma erişimine açtığı ve öğretmenlerin giriş anında bu güncel yedeği otomatik çektiği hibrit mimari.
+Tüm salonlardan öğretmenler tarafından anlık olarak gönderilen sınav yoklama verilerini tek bir merkezde birleştiren, hem görsel interaktif tablo hem Excel (.xlsx) dışa aktarımı hem de resmi sınav devamsızlık tutanağı formatında yazdırma (Print) desteği sunan konsolide raporlama modülü.
+
+### User Review & Critical Decisions
 
 > [!IMPORTANT]
-> **Kullanıcı Talebi Doğrultusunda Netleşen Akış**:
-> 1. **"Öğretmene Yayınla" Butonu**: Admin panelinde yer alan tek tık butonudur. Tıklandığında:
->    - Google Drive üzerindeki kilitli kütük yedeğinin en son sürümü (`AkademiPanel_Canli_Kutuk.json`) hazırlanır.
->    - Google Drive Permissions API çağrılarak dosyanın öğretmenler için salt okunur yetkisi garantilenir.
->    - Eşzamanlı olarak Express sunucu önbelleği bu güncel yedekle mühürlenir ve son yayın tarihi (örn. `06.10.2026 19:45`) güncellenir.
-> 2. **Öğretmen Kullanıcı Girişi**:
->    - Öğretmen Firebase Google Girişi ile giriş yaptığında, arka planda yayınlanmış son güncel kütük yedeği otomatik olarak çekilir.
->    - Öğretmen arayüzü yalnızca 3 ana menüyü (**Sınav Salonları**, **Sınav Sonuçları**, **Lig & Arena**) salt okunur açar.
-> 3. **Firebase Etkileşim Kanalı**:
->    - **Yoklamalar**: Öğretmen sınav salonunda yoklamayı işaretleyip "Admine Gönder" dediğinde Firebase üzerinden admine ulaşır.
->    - **Bildirimler**: Okul bildirimleri Firebase üzerinden anlık iletilmeye devam eder.
+> Kullanıcı ile yapılan netleştirme aşamasında teyit edilen tercihler ve mimari kararlar aşağıda özetlenmiştir:
+
+- **Confirmed Decision 1 (Sunum & İndirme Formatı)**: Kullanıcı tercihine uygun olarak, rapor hem ekranda canlı filtrelenebilir görsel tablo olarak sunulacak hem de tek tıkla Excel tablosu (.xlsx) ve resmi A4 sınav yoklama tutanağı formatında yazdırılabilir / PDF olarak kaydedilebilir olacak.
+- **Confirmed Decision 2 (Gruplama & Görünüm Yapısı)**: Devamsız öğrenciler hem **Salona Göre** (hangi salonda hangi masada kim gelmedi, gözetmen kimdi) hem de **Sınıf / Şubeye Göre** (8-A'dan kimler yok, 8-B'den kimler yok - e-Okul veya okul yoklama defterine 1 dakikada işlemek için) iki ayrı sekmede gruplanmış olarak sunulacak.
+- **Confirmed Decision 3 (Erişim & Yetkilendirme)**: Buton ve modül Salonlar & Oturma Düzeni ekranında üst barında "📊 Birleştirilmiş Yoklama Raporu" olarak yöneticiler (admin) için her zaman görünür olacak; sınav seçimi yapılarak geçmiş sınavların veya bugünkü canlı sınavın raporu anında alınabilecek.
 
 ---
 
-## 1. Genel Bakış ve Mimarinin Amacı
+### 1. Overview & Core Concept
 
-Firebase Spark kotalarını sıfırda tutarken adminin veri yayın kontrolünü elinde tutmasını sağlamak:
-- Admin sınavları hazırlar, salonları oluşturur, öğrenci puanlarını düzenler.
-- Admin hazır olduğunda **"📢 Öğretmene Yayınla"** butonuna tıklar.
-- Google Drive kütüğü mühürlenir ve yayınlanır.
-- Öğretmenler uygulamaya girdiklerinde hiçbir ek işlem yapmadan adminin yayınladığı son güncel paketi görürler.
+- **What It Does**: Sınav günü veya sonrasında, öğretmenlerin salonlarda aldıkları yoklamaları (`attendances`) tek merkezde birleştirir. Kaç öğrencinin katıldığı, kaç öğrencinin gelmediği, salon bazlı katılım oranları ve gelmeyen öğrencilerin numarası, adı, sınıfı, salon adı, sıra numarası ve gözetmen bilgileri anlık olarak toplanıp raporlanır.
+- **Target Audience / Persona**: Okul idarecileri, sınav koordinatörleri ve müdür yardımcıları. Sınav esnasında veya sınav biter bitmez devamsızlıkları okul bilgi sistemine (e-Okul / kütük) işlemek ve basılı sınav evrakı arşivi oluşturmak isteyen yöneticiler.
+- **Key Value**: Yöneticilerin onlarca salonu tek tek gezip kağıt yoklama toplaması veya her salonun içine tek tek tıklayıp kim gelmedi diye not alması ihtiyacını tamamen ortadan kaldırır; tek tıkla tüm okulun sınav devamsızlık listesini hazır hale getirir.
 
 ---
 
-## 2. Kullanıcı Deneyimi ve Arayüz Akışı (UX & Visual Design)
+### 2. User Experience & Visual Design
 
-### Admin Rolü Akışı
-- **Üst Çubukta "Öğretmene Yayınla" Butonu**:
-  - `Header` ve `CloudBackupModal` üzerinde belirgin, yeşil/zümrüt tonlarında, roket veya yayın simgeli buton:
-    - `[ 📢 Öğretmene Yayınla ]`
-  - Tıklandığında anlık olarak Google Drive kütüğünü eşitler, yetkiyi açar, sunucu önbelleğini günceller ve bildirim verir:
-    - *"✓ Son kütük yedeği başarıyla yayınlandı! Öğretmenler artık bu güncel sürümü (v{sürüm} - {tarih}) görecek."*
-- **Yayın Durumu Rozeti**: Üst barda son yayınlanma tarihi ve saati (örn. `Son Yayın: 06.10.2026 19:40`) sürekli görünür.
+- **Key User Flows**:
+  1. *Açılış & Sınav Seçimi*: Yönetici "Salonlar & Oturma Düzeni" ekranında üst eylem çubuğundaki **"📊 Sınav Yoklama Raporu"** butonuna tıklar.
+  2. *Görsel Rapor Modalı / Sayfası*: Açılan modal veya raporda ilgili sınav (varsayılan olarak bugünkü sınav, açılır listeden istenen başka bir deneme sınavı) seçilir.
+  3. *Özet Kartları & İstatistikler*: En üstte 4 net gösterge yer alır:
+     - Toplam Kayıtlı / Oturan Öğrenci Sayısı
+     - Sınava Katılanlar (Mevcut) ve Katılım Yüzdesi
+     - Devamsız Öğrenci Sayısı ve Devamsızlık Oranı
+     - Yoklaması Tamamlanan Salon / Toplam Salon Oranı (örn: 12 / 12 Salon Teslim Edildi)
+  4. *İki Sekmeli Gruplanmış İnceleme*:
+     - **Sekme A - Salona Göre Dağılım**: Her salon bir bölüm olarak listelenir; gözetmen öğretmen, teslim saati, toplam/gelen/gelmeyen sayıları ve o salondaki devamsızlar (sıra no, öğrenci no, ad soyad, sınıf).
+     - **Sekme B - Sınıf / Şubeye Göre Devamsızlar (e-Okul Uyumlu)**: 8-A, 8-B, 8-C vb. şubelere göre ayrılmış liste; idareci e-Okul'a sınıf yoklaması girerken doğrudan şube bazında gelmeyenleri tek bakışta görür.
+  5. *Dışa Aktarma Eylemleri*:
+     - **Excel İndir**: Detaylı, renkli başlıklı, salon ve şube sayfalarını veya birleşik listesini içeren `.xlsx` dosyası üretir.
+     - **Yazdır / PDF**: Resmi antetli "T.C. MEB / Okul Sınav Yoklama ve Devamsızlık Teslim Tutanağı" formatında, imza yerleri bulunan A4 yazdırma şablonunu tetikler.
 
-### Öğretmen Rolü Akışı
-- **Firebase Google Girişi**: Öğretmen e-postası ile oturum açılır.
-- **Açılışta Otomatik Veri Yükleme**:
-  - Açılış animasyonunda: *"Yayınlanmış son güncel kütük yedeği yükleniyor..."* mesajı görünür.
-  - Express sunucusu `/api/teacher-data` üzerinden yayınlanmış son kütüğü sıfır gecikmeyle döner.
-- **Sol Menü (Yalnızca 3 Yetkili Menü)**:
-  1. 🏢 **Sınav Salonları**: Salon oturma düzeni, gözetmenler, öğrenci sıraları.
-  2. 📊 **Sınav Sonuçları**: Deneme sınav sonuçları, netler, karne görünümleri.
-  3. 🏆 **Lig & Arena**: Sınıf ve bireysel lig puanları, dereceler ve mentorlar.
-- **Sınav Salonu Yoklama Düğmesi**:
-  - Sınav salonu ekranında gözetmen öğretmen için `[ 📋 Salon Yoklamasını Tamamla & Admine İlet ]` butonu.
-  - Bu veri Firebase Firestore üzerinden admine 1 saniyede ulaşır.
-- **Yazma Koruması**:
-  - Öğretmen Google Drive kütüğüne asla yazamaz. Düzenleme, silme veya öğrenci ekleme araçları arayüzde yer almaz.
+- **Visual Identity & Theme**:
+  - *Stil*: Temiz, kurumsal SaaS yönetim konsolu (Slate & Indigo/Emerald vurguları).
+  - *Tipografi*: Başlıklar ve metinler için `Plus Jakarta Sans`, sayısal veriler, yüzdeler ve öğrenci numaraları için `font-mono tabular-nums`.
+  - *Kart & Liste Mimarisi*: Kart içinde kart yok; tek seviye gölgesiz hairline border (`border-slate-200 dark:border-slate-800`), ferah boşluklar ve net sütun hizalamaları.
+  - *Durum Renkleri*: Katılanlar için sessiz zümrüt yeşili (`text-emerald-700 bg-emerald-50`), devamsızlar için dikkat çeken ama göz yormayan mercan kırmızısı (`text-rose-700 bg-rose-50`), bekleyen salonlar için kehribar (`text-amber-700 bg-amber-50`).
+
+- **Interactive Feedback & Motion**:
+  - Sınav seçiminde anlık tepki süresi ($\le 50\text{ms}$).
+  - Yoklama verileri anlık olarak yerel önbellek ve Firestore üzerinden senkronize olduğundan, öğretmen yeni bir yoklama gönderdiğinde rapordaki sayaçlar anında canlı güncellenir.
+  - Excel üretimi ve yazdırma esnasında butonlarda spinner veya başarı simgesi bildirimi.
 
 ---
 
-## 3. Veri Akışı ve Yetkilendirme Modeli
+### 3. Key Product Decisions & Trade-Offs
+
+- **Decision 1: Raporun Konumu & Erişilebilirliği**
+  - *Chosen Approach*: `HallsView.tsx` içerisine hem üst bar hızlı eylem butonu hem de zengin, tam ekran açılabilen "AttendanceReportModal" bileşeni entegre edilir.
+  - *Why*: Yoklama alma işlevi zaten Salonlar menüsünde yer aldığından idarecinin bağlamdan kopmadan aynı yerde rapor alması en doğal kullanıcı deneyimidir.
+  - *Alternatives Considered*: Ayrı bir üst menü sekmesi eklemek; ancak üst menüyü kalabalıklaştırmamak ve sadece sınav günleri ihtiyaç duyulan bu raporu salonlar ekranında tutmak daha derli topludur.
+
+- **Decision 2: Veri Kaynağı & Çevrimdışı / Canlı Bütünlük**
+  - *Chosen Approach*: Raporda veri toplanırken, hem `state.examHalls` ve `seatingPlan` hem de `attendances` (yerel önbellek + Firestore `schools/main/attendances`) birleştirilir. Henüz yoklama alınmamış salonlar "Yoklama Bekleniyor" durumunda gösterilir.
+  - *Why*: Eğer bir öğretmen henüz bildirim butonuna basmadıysa idareci hangi salonun geciktiğini hemen tespit edip müdahale edebilir.
+
+- **Decision 3: Sınıf Bazlı Gruplama Algoritması**
+  - *Chosen Approach*: Devamsız öğrenci listesi, öğrencilerin `studentClass` veya `classStr + sectionStr` alanlarına göre otomatik olarak ayrıştırılır ve şube adına göre (8-A, 8-B, 8-C...) alfabetik dizilir.
+  - *Why*: e-Okul sisteminde devamsızlık girişi şube şube yapılır. Salona göre liste e-Okul girişinde zorluk yaratırken, şubeye göre liste idarecinin işini 5 kat hızlandırır.
+
+---
+
+### 4. Technical Architecture & Data Strategy
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           ADMIN KULLANICI                               │
-│  - Öğrenci, sınav, salon ve lig verilerini düzenler                     │
-│  - "Öğretmene Yayınla" Butonuna Basar ───┐                             │
-└──────────────────────────────────────────┼──────────────────────────────┘
-                                           │
-                    ┌──────────────────────┴──────────────────────┐
-                    │                                             │
-                    ▼                                             ▼
-┌───────────────────────────────────────┐     ┌───────────────────────────────────┐
-│     GOOGLE DRIVE CANLI KÜTÜĞÜ         │     │    EXPRESS SUNUCU RAM ÖNBELLEĞİ   │
-│  - Son sürüm JSON kaydedilir          │     │  - `/api/teacher-data` güncellenir│
-│  - Öğretmen okuma izni mühürlenir     │     │  - Son yayın tarihi kaydedilir    │
-└───────────────────────────────────────┘     └─────────────────┬─────────────────┘
-                                                                │
-                                                                │ (Girişte Otomatik İndirme)
-                                                                ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         ÖĞRETMEN KULLANICILAR                                   │
-│  - Firebase Google Girişi ile oturum açar                                       │
-│  - Açılışta yayınlanmış son yedeği otomatik çeker (<50ms)                      │
-│  - Sadece 3 Menü: 1. Salonlar  2. Sonuçlar  3. Lig & Arena                      │
-│  - Yoklamaları Firebase ile Admine İletir                                       │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                        HallsView (Salonlar & Oturma)                   │
+│                                                                        │
+│   [+ Yeni Salon]  [Dışa Aktar]  [📊 Sınav Yoklama Raporu (YENİ)]       │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Tıklandığında
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                  AttendanceReportModal Component                       │
+│                                                                        │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ Üst Bar: [Sınav Seçimi ▼]   [📥 Excel İndir]   [🖨️ Yazdır / PDF] │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ 4 Özet Metrik:                                                   │  │
+│  │ [Toplam Öğrenci] [Gelenler %] [Gelmeyenler %] [Salon Teslimatı]   │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ Sekmeler: [🏢 Salona Göre Dağılım]  [🎓 Sınıfa Göre Devamsızlar] │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ Veri Tablosu:                                                    │  │
+│  │ - Salon Adı / Gözetmen / Devamsız Listesi (No, Ad, Sınıf, Sıra)  │  │
+│  │ - VEYA Sınıf Adı / Devamsız Öğrenciler / Bulunduğu Salon         │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+- **Data Model & Helper Mapping**:
+  - `HallAttendanceReportItem`:
+    - `examId`: string
+    - `examName`: string
+    - `hallId`: string
+    - `hallName`: string
+    - `takenBy`: string (gözetmen adı & e-postası)
+    - `takenAt`: string
+    - `status`: 'submitted' | 'pending'
+    - `totalAssigned`: number
+    - `presentCount`: number
+    - `absentCount`: number
+    - `absentStudents`: `AbsentStudentInfo[]`
+  - `ClassAbsentSummary`:
+    - `className`: string
+    - `totalAbsent`: number
+    - `students`: Array<{ studentNo: number; studentName: string; hallName: string; deskNumber: number }>
 
-## 4. Teknik Entegrasyon Ayrıntıları
-
-### 1. "Öğretmene Yayınla" Butonunun Mantığı (`src/lib/googleDrive.ts` & `src/context/AppContext.tsx`)
-```typescript
-// Admin "Öğretmene Yayınla"ya bastığında:
-1. syncLiveMasterToGoogleDrive(state, userEmail) // Sabit Drive kütüğünü günceller
-2. makeFilePubliclyReadable(canonicalFileId, driveToken) // Drive permissions API: reader role
-3. fetch('/api/teacher-broadcast/update', { method: 'POST', body: JSON.stringify(safePayload) }) // Sunucu önbelleğini yeniler
-4. setLastTeacherPublishedDate(new Date().toISOString()) // Yerel ve sunucu durumuna kaydeder
-```
-
-### 2. Öğretmen Girişinde Otomatik Kütük Çekme (`src/context/AppContext.tsx`)
-```typescript
-// Öğretmen giriş yaptığında:
-if (userRole === 'teacher') {
-  // 1. Firestore büyük koleksiyon dinleyicilerini kapat (0 Firestore okuması)
-  // 2. Sunucudan yayınlanmış en son güncel yedeği al:
-  const res = await fetch('/api/teacher-data');
-  const publishedBackup = await res.json();
-  setState(sanitizeSchoolState(publishedBackup.data));
-  // 3. Yalnızca bildirim ve salon yoklaması için Firebase'i dinle
-}
-```
-
-### 3. Yoklama Akışı (Firebase Firestore)
-- Öğretmen salonda yoklamayı girdiğinde `exam_attendance` koleksiyonuna belge yazar (`setDoc`).
-- Admin ekranında `onSnapshot(collection(db, 'exam_attendance'))` dinler ve gelen yoklamaları anında görür.
-
----
-
-## 5. Uygulama ve Doğrulama Adımları
-
-1. **Sunucu Uç Noktaları (`server.ts`)**:
-   - `/api/teacher-data` (GET): Yayınlanmış son yedeği döndürür.
-   - `/api/teacher-broadcast/update` (POST): Adminin yayınladığı son yedeği sunucu RAM'ine alır.
-2. **"Öğretmene Yayınla" Butonu & Mantığı**:
-   - `Header.tsx` ve `CloudBackupModal.tsx` üzerine "Öğretmene Yayınla" butonu ve son yayın tarihi göstergesi.
-   - Fonksiyonun Google Drive okuma iznini (`reader`) garanti altına alması.
-3. **Öğretmen Açılış Akışı & Menü Kısıtlamaları**:
-   - `AppContext.tsx`: Öğretmen oturum açtığında yayınlanan son yedeğin sıfır Firestore kotasıyla çekilmesi.
-   - `Layout.tsx`: Öğretmen için sadece Sınav Salonları, Sınav Sonuçları ve Lig & Arena sekmelerinin sunulması, tüm yazma aksiyonlarının gizlenmesi.
-4. **Yoklama Modülü Entegrasyonu**:
-   - Öğretmenin sınav salonunda yoklamayı Firebase üzerinden admine tek tıkla iletmesi.
-5. **Derleme ve Test**:
-   - Admin tarafından yayınlama -> Öğretmen girişi -> Anında güncel kütük görünümü testleri.
+- **Excel & Print Formatları**:
+  - `Excel`: Başlık bilgileri (Sınav Adı, Tarih, Okul), Salon Özeti sayfası ve Sınıf Devamsızlık Listesi sayfası (veya tek düzenli sayfa) formatında temiz sütunlarla dışa aktarılır.
+  - `Print / PDF`: Yazıcı dostu `@media print` CSS kuralları ile sayfa başı resmi sınav başlığı, salon gözetmenleri çizelgesi ve müdür/komisyon imza onay kutusu içerir.
