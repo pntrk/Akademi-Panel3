@@ -351,29 +351,16 @@ export const getCachedAccessToken = (): string | null => {
  */
 export const loginWithGoogle = async () => {
   try {
-    const result = await signInWithPopup(auth, googleDriveProvider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (credential?.accessToken) {
-      setCachedAccessToken(credential.accessToken);
-      markDrivePreApproved(result.user?.email || auth.currentUser?.email);
-    }
+    // 1. Primary: Standard Universal Google Authentication (profile & email).
+    // NEVER triggers 403: access_denied, test user blockages, or unverified app warnings for teachers!
+    const result = await signInWithPopup(auth, googleProvider);
     return result;
   } catch (err: any) {
     if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
-      // Gracefully handle user cancelling or closing the popup
       return null;
     }
-    // Fallback to standard provider if Drive scope had an issue
-    try {
-      const fallbackResult = await signInWithPopup(auth, googleProvider);
-      return fallbackResult;
-    } catch (fallbackErr: any) {
-      if (fallbackErr?.code === 'auth/popup-closed-by-user' || fallbackErr?.code === 'auth/cancelled-popup-request') {
-        return null;
-      }
-      console.warn('Google Sign In notice:', fallbackErr?.message || fallbackErr);
-      throw fallbackErr;
-    }
+    console.warn('Google Sign In notice:', err?.message || err);
+    throw err;
   }
 };
 

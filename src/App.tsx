@@ -161,7 +161,99 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   }, [userRole, activeTab]);
 
-  // 1. GUEST USER: Immediately show "Erişim İsteğiniz Alındı - Yönetici Onayı Bekleniyor" screen!
+  // 1. ADMIN / TEACHER HYDRATION: Açılışta canlı kütük yüklenirken yükleme ekranı (Önce kütük indirilir, öğretmen listesi taranır)
+  if (appLoading || isInitialHydrating) {
+    if (isWaitingForDriveAuth && userRole === 'admin') {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF9F5] dark:bg-[#121316] p-4 sm:p-6 text-center font-sans">
+          <div className="bg-white dark:bg-[#1A1D24] p-6 sm:p-8 rounded-3xl shadow-xl border border-[#B08D57]/40 dark:border-slate-800 max-w-md w-full flex flex-col items-center animate-fade-in relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-500 via-[#B08D57] to-emerald-600"></div>
+
+            <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-600 flex items-center justify-center mb-4 mt-2 shadow-sm">
+              <HardDriveDownload className="w-8 h-8 animate-pulse" />
+            </div>
+
+            <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-white mb-1.5 font-serif">
+              Google Drive Canlı Kütük İndirme
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-5">
+              Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) doğrudan cihazınıza eksiksiz indirmek için yetkilendirmeyi onaylayın.
+            </p>
+
+            <div className="w-full space-y-2.5">
+              <button
+                onClick={() => connectDriveAndHydrateOnStartup()}
+                disabled={isConnectingDriveStartup}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                <HardDriveDownload className="w-4 h-4 shrink-0" />
+                <span className="leading-snug">
+                  {isConnectingDriveStartup 
+                    ? 'Drive Bağlanıyor & İndiriliyor...' 
+                    : `Google Drive'a Bağlan & Canlı Kütüğü İndir (${driveDateText})`}
+                </span>
+              </button>
+
+              <button
+                onClick={() => skipDriveAndUseCloudStorage()}
+                disabled={isConnectingDriveStartup}
+                className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                <Cloud className="w-3.5 h-3.5 text-gray-500" />
+                <span>Bulut (Firebase) Yedeği ile Devam Et</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400 mt-4 leading-normal">
+              💡 Yönetici hesabınızla Google Drive üzerindeki ortak kütüğe bağlanarak en güncel öğrenci listesini ve sınav sonuçlarını alırsınız.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF9F5] dark:bg-[#121316] p-4 sm:p-6 text-center font-sans">
+        <div className="bg-white dark:bg-[#1A1D24] p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-200/90 dark:border-slate-800 max-w-md w-full flex flex-col items-center animate-fade-in relative overflow-hidden">
+          {/* Top Amber Accent Bar */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-[#B08D57] to-amber-500"></div>
+
+          <div className="relative mb-4 mt-2">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-400/30 flex items-center justify-center shadow-md">
+              <Database className="w-8 h-8 text-amber-500 animate-pulse" />
+            </div>
+            <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+            </span>
+          </div>
+
+          <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-white mb-1.5">
+            {userRole === 'admin' ? 'Canlı Okul Kütüğü Yükleniyor...' : 'Öğretmen Paneli Yükleniyor...'}
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4">
+            {driveStartupStatusText || (userRole === 'admin' ? 'En güncel okul kütüğü ve sınav verileri alınıyor.' : 'Sınav sonuçları ve değerlendirme verileri alınıyor.')}
+          </p>
+
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-1.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/40 mb-3">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            <span>Veriler güvenle senkronize ediliyor...</span>
+          </div>
+
+          {userRole === 'admin' && (
+            <button
+              onClick={() => skipDriveAndUseCloudStorage()}
+              className="text-[11px] text-[#8e8d82] hover:text-[#5a5a40] dark:text-slate-400 dark:hover:text-slate-200 underline transition-colors cursor-pointer pt-1"
+            >
+              Beklemeden yerel / bulut verileriyle devam et
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 2. GUEST USER: Hydration tamamlandıktan sonra öğretmen/yönetici listesinde yoksa "Yönetici Onayı Bekleniyor" gösterilir
   if (userRole === 'guest') {
     const handleCheckStatus = async () => {
       setIsCheckingRole(true);
@@ -234,98 +326,6 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
               Farklı Bir Hesapla Giriş Yap / Çıkış
             </button>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 2. ADMIN / TEACHER HYDRATION: Açılışta canlı kütük yüklenirken veya Drive izni beklenirken yükleme ekranı
-  if (appLoading || isInitialHydrating) {
-    if (isWaitingForDriveAuth) {
-      return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF9F5] dark:bg-[#121316] p-4 sm:p-6 text-center font-sans">
-          <div className="bg-white dark:bg-[#1A1D24] p-6 sm:p-8 rounded-3xl shadow-xl border border-[#B08D57]/40 dark:border-slate-800 max-w-md w-full flex flex-col items-center animate-fade-in relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-500 via-[#B08D57] to-emerald-600"></div>
-
-            <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-600 flex items-center justify-center mb-4 mt-2 shadow-sm">
-              <HardDriveDownload className="w-8 h-8 animate-pulse" />
-            </div>
-
-            <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-white mb-1.5 font-serif">
-              Google Drive Canlı Kütük İndirme
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-5">
-              Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) doğrudan cihazınıza eksiksiz indirmek için yetkilendirmeyi onaylayın.
-            </p>
-
-            <div className="w-full space-y-2.5">
-              <button
-                onClick={() => connectDriveAndHydrateOnStartup()}
-                disabled={isConnectingDriveStartup}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-              >
-                <HardDriveDownload className="w-4 h-4 shrink-0" />
-                <span className="leading-snug">
-                  {isConnectingDriveStartup 
-                    ? 'Drive Bağlanıyor & İndiriliyor...' 
-                    : `Google Drive'a Bağlan & Canlı Kütüğü İndir (${driveDateText})`}
-                </span>
-              </button>
-
-              <button
-                onClick={() => skipDriveAndUseCloudStorage()}
-                disabled={isConnectingDriveStartup}
-                className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
-              >
-                <Cloud className="w-3.5 h-3.5 text-gray-500" />
-                <span>Bulut (Firebase) Yedeği ile Devam Et</span>
-              </button>
-            </div>
-
-            <p className="text-[11px] text-slate-400 mt-4 leading-normal">
-              💡 Yönetici veya Öğretmen hesabınızla Google Drive üzerindeki ortak kütüğe bağlanarak en güncel öğrenci listesini ve sınav sonuçlarını alırsınız.
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF9F5] dark:bg-[#121316] p-4 sm:p-6 text-center font-sans">
-        <div className="bg-white dark:bg-[#1A1D24] p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-200/90 dark:border-slate-800 max-w-md w-full flex flex-col items-center animate-fade-in relative overflow-hidden">
-          {/* Top Amber Accent Bar */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-[#B08D57] to-amber-500"></div>
-
-          <div className="relative mb-4 mt-2">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-400/30 flex items-center justify-center shadow-md">
-              <Database className="w-8 h-8 text-amber-500 animate-pulse" />
-            </div>
-            <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
-            </span>
-          </div>
-
-          <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-white mb-1.5">
-            {userRole === 'admin' ? 'Canlı Okul Kütüğü Yükleniyor...' : 'Öğretmen Paneli Yükleniyor...'}
-          </h3>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4">
-            {driveStartupStatusText || (userRole === 'admin' ? 'En güncel okul kütüğü ve sınav verileri alınıyor.' : 'Sınav sonuçları ve değerlendirme verileri alınıyor.')}
-          </p>
-
-          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-1.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/40 mb-3">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-            <span>Veriler güvenle senkronize ediliyor...</span>
-          </div>
-
-          {userRole === 'admin' && (
-            <button
-              onClick={() => skipDriveAndUseCloudStorage()}
-              className="text-[11px] text-[#8e8d82] hover:text-[#5a5a40] dark:text-slate-400 dark:hover:text-slate-200 underline transition-colors cursor-pointer pt-1"
-            >
-              Beklemeden yerel / bulut verileriyle devam et
-            </button>
-          )}
         </div>
       </div>
     );

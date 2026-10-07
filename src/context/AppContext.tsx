@@ -1250,15 +1250,27 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             setSyncStatus('synced');
             setSyncErrorMessage(null);
           } else {
-            setIsWaitingForDriveAuth(true);
-            setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
+            isInitialCloudHydrationDoneRef.current = true;
+            setIsInitialHydrating(false);
             setLoading(false);
+            if (initialComputedRole === 'admin') {
+              setIsWaitingForDriveAuth(true);
+              setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
+            } else {
+              setIsWaitingForDriveAuth(false);
+            }
           }
         })
         .catch(() => {
-          setIsWaitingForDriveAuth(true);
-          setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
+          isInitialCloudHydrationDoneRef.current = true;
+          setIsInitialHydrating(false);
           setLoading(false);
+          if (initialComputedRole === 'admin') {
+            setIsWaitingForDriveAuth(true);
+            setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
+          } else {
+            setIsWaitingForDriveAuth(false);
+          }
         });
     }
 
