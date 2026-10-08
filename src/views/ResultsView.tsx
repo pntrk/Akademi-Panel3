@@ -571,6 +571,9 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
   };
 
   const handleBookletChange = (newBooklet: string) => {
+    // Yayın denemelerinde optik anahtar eşleştirmesi olmadığından kitapçık değiştirilemez
+    if (exam.examType !== 'internal') return;
+
     const newKey = exam.keys?.[newBooklet] || exam.keys?.["A"] || [];
     const newScores = calculateScore(
       currentStudent.answers || [],
@@ -783,8 +786,14 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
               {userRole === 'admin' ? (
                 <select
                   value={currentStudent.booklet || 'A'}
+                  disabled={exam.examType !== 'internal'}
                   onChange={(e) => handleBookletChange(e.target.value)}
-                  className="font-bold text-indigo-700 text-xs sm:text-sm bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-indigo-100 transition-colors w-full"
+                  title={exam.examType !== 'internal' ? 'Yayın denemelerinde kitapçık türü değiştirilemez' : 'Kitapçık türünü değiştir'}
+                  className={`font-bold text-xs sm:text-sm rounded-lg px-2 py-0.5 outline-none transition-colors w-full ${
+                    exam.examType !== 'internal'
+                      ? 'bg-slate-100 border border-slate-200 text-slate-500 cursor-not-allowed opacity-80'
+                      : 'text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 cursor-pointer'
+                  }`}
                 >
                   <option value="A">A Kitapçığı</option>
                   <option value="B">B Kitapçığı</option>
@@ -1264,8 +1273,14 @@ export function EditResultModal({ student, exam, onClose, onSave }: EditResultMo
               <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Kitapçık</label>
               <select
                 value={formData.booklet}
+                disabled={exam.examType !== 'internal'}
                 onChange={e => setFormData({ ...formData, booklet: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold cursor-pointer outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
+                title={exam.examType !== 'internal' ? 'Yayın denemelerinde kitapçık türü değiştirilemez' : 'Kitapçık türünü seçin'}
+                className={`w-full border rounded-xl px-3 py-2 text-xs sm:text-sm font-bold outline-none transition-colors ${
+                  exam.examType !== 'internal'
+                    ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed opacity-80'
+                    : 'bg-slate-50 border-slate-200 cursor-pointer focus:bg-white focus:ring-2 focus:ring-blue-500'
+                }`}
               >
                 <option value="A">A Kitapçığı</option>
                 <option value="B">B Kitapçığı</option>
