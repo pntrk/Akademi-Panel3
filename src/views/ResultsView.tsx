@@ -15,6 +15,7 @@ import {
   OPTS_5, 
   calculateScore, 
   formatClassSec, 
+  normalizeTurkish,
   handleDownloadTemplate, 
   isLgsExam, 
   isTytExam, 
@@ -984,6 +985,129 @@ export function EditResultModal({ student, exam, onClose, onSave }: EditResultMo
   );
 }
 
+/**
+ * Veritabanı ve arayüzdeki sınıfları tutarlı ve resmi formatta (örn. 8-A) gösterir.
+ */
+export const formatDisplayClass = (record: any): string => {
+  if (!record) return '-';
+  const { cls, sec } = formatClassSec(
+    record.className || record.studentClass || record.classStr,
+    record.sectionStr
+  );
+  if (cls && sec) return `${cls}-${sec}`;
+  if (record.className && record.className !== '-') return record.className;
+  if (record.studentClass && record.studentClass !== '-') return record.studentClass;
+  if (cls) return `${cls}. Sınıf`;
+  return '-';
+};
+
+/**
+ * Bir öğrencinin veya sınav sonucunun seçilen sınıf filtresine uyup uymadığını kontrol eder.
+ * Veritabanındaki '8A', '8-A', '8/A' varyasyonlarını akıllıca eşit kabul eder.
+ */
+export const isStudentInClass = (record: any, targetClass: string): boolean => {
+  if (!targetClass || targetClass === 'ALL') return true;
+  if (!record) return false;
+
+  const targetParsed = formatClassSec(targetClass);
+  const recordParsed = formatClassSec(
+    record.className || record.studentClass || record.classStr,
+    record.sectionStr
+  );
+
+  if (targetParsed.cls && targetParsed.sec && recordParsed.cls && recordParsed.sec) {
+    return targetParsed.cls === recordParsed.cls && targetParsed.sec === recordParsed.sec;
+  }
+
+  const rCls = String(record.className || record.studentClass || record.classStr || '').replace(/[\s\-_/.]/g, '').toUpperCase();
+  const tCls = String(targetClass).replace(/[\s\-_/.]/g, '').toUpperCase();
+  return rCls === tCls || rCls.startsWith(tCls) || tCls.startsWith(rCls);
+};
+
+/**
+ * Excel'den okunan ham satırı veritabanımızdaki (masterStudents) resmi öğrenci kaydıyla eşleştirir.
+ */
+export function findDatabaseStudent(
+  rawNo: any,
+  rawName: string,
+  rawClass: string,
+  studentsList: Student[]
+): Student | null {
+  if (!studentsList || studentsList.length === 0) return null;
+
+  const numNo = parseInt(String(rawNo || '').replace(/[^\d]/g, ''), 10);
+  const cleanName = (rawName || '').trim();
+  const normName = normalizeTurkish(cleanName).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const { cls: exGrade, sec: exSec } = formatClassSec(rawClass);
+
+  // 1. ADIM: Numaraya göre arama (En yüksek güvenilirlik)
+  if (numNo > 0) {
+    const byNo = studentsList.filter(s => Number(s.no) === numNo);
+    if (byNo.length === 1) {
+      const cand = byNo[0];
+      const candCls = formatClassSec(cand.classStr || cand.className, cand.sectionStr);
+      // Eğer kademe belirtilmemişse veya aynı kademedeyse (örn. 8. sınıf)
+      if (!exGrade || !candCls.cls || exGrade === candCls.cls) {
+        return cand;
+      }
+    } else if (byNo.length > 1) {
+      // Okulda aynı numaraya sahip farklı kademe/şubeler varsa:
+      // A) Hem kademe hem şube eşleşmesi (örn. 8A <-> 8-A)
+      const exactClass = byNo.find(s => {
+        const c = formatClassSec(s.classStr || s.className, s.sectionStr);
+        return exGrade && exSec && c.cls === exGrade && c.sec === exSec;
+      });
+      if (exactClass) return exactClass;
+
+      // B) Kademe eşleşmesi (örn. 8. sınıf)
+      const exactGrade = byNo.find(s => {
+        const c = formatClassSec(s.classStr || s.className, s.sectionStr);
+        return exGrade && c.cls === exGrade;
+      });
+      if (exactGrade) return exactGrade;
+
+      // C) İsim benzerliği
+      const nameMatch = byNo.find(s => {
+        const sNorm = normalizeTurkish(s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return sNorm && (sNorm.includes(normName) || normName.includes(sNorm));
+      });
+      if (nameMatch) return nameMatch;
+
+      return byNo[0];
+    }
+  }
+
+  // 2. ADIM: İsim ve Sınıf/Şube eşleşmesi (Excel'de numara eksik/farklıysa)
+  if (normName.length >= 3) {
+    const byName = studentsList.filter(s => {
+      const sNorm = normalizeTurkish(s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return sNorm === normName ||
+        (sNorm.includes(normName) && normName.length >= 5) ||
+        (normName.includes(sNorm) && sNorm.length >= 5);
+    });
+
+    if (byName.length === 1) {
+      return byName[0];
+    } else if (byName.length > 1) {
+      const exactClass = byName.find(s => {
+        const c = formatClassSec(s.classStr || s.className, s.sectionStr);
+        return exGrade && exSec && c.cls === exGrade && c.sec === exSec;
+      });
+      if (exactClass) return exactClass;
+
+      const exactGrade = byName.find(s => {
+        const c = formatClassSec(s.classStr || s.className, s.sectionStr);
+        return exGrade && c.cls === exGrade;
+      });
+      if (exactGrade) return exactGrade;
+
+      return byName[0];
+    }
+  }
+
+  return null;
+}
+
 /* =========================================================================
    3. MAIN RESULTS VIEW (3'lü Sekme: Sonuçlar | Devamsızlar | Öğrenci Kayıtları)
    ========================================================================= */
@@ -1134,10 +1258,7 @@ export function ResultsView() {
       if (scannedNosSet.has(sNo)) return false;
 
       if (selectedClassFilter !== "ALL") {
-        const c = (s.classStr || s.className || "").trim();
-        const sec = (s.sectionStr || "").trim().toUpperCase();
-        const full = (c && sec) ? `${c}/${sec}` : (c ? `${c}. Sınıf` : '');
-        if (full !== selectedClassFilter) return false;
+        if (!isStudentInClass(s, selectedClassFilter)) return false;
       }
 
       if (searchQuery.trim()) {
@@ -1154,12 +1275,7 @@ export function ResultsView() {
     let filtered = currentExamResults;
 
     if (selectedClassFilter !== "ALL") {
-      filtered = filtered.filter(r => {
-        const c = r.classStr && r.classStr !== "-" ? r.classStr : (r.studentClass ? r.studentClass.split('/')[0] : "");
-        const s = r.sectionStr && r.sectionStr !== "-" ? r.sectionStr : (r.studentClass && r.studentClass.includes('/') ? r.studentClass.split('/')[1] : "");
-        const val = (c && s) ? `${c}/${s}` : (c || s || "");
-        return val === selectedClassFilter;
-      });
+      filtered = filtered.filter(r => isStudentInClass(r, selectedClassFilter));
     }
 
     if (searchQuery.trim()) {
@@ -1171,6 +1287,22 @@ export function ResultsView() {
     }
 
     return filtered.map(res => {
+      // Veritabanımızdaki kayıtlı öğrenci bilgisiyle otomatik eşle
+      const dbStudent = findDatabaseStudent(
+        res.no || res.studentNo,
+        res.name || res.studentName,
+        res.studentClass || res.classStr,
+        masterStudents
+      );
+
+      const effectiveNo = dbStudent ? dbStudent.no : (res.no || res.studentNo);
+      const effectiveName = dbStudent ? dbStudent.name : (res.name || res.studentName);
+      const effectiveCls = dbStudent?.classStr || formatClassSec(dbStudent?.className).cls || res.classStr;
+      const effectiveSec = dbStudent?.sectionStr || formatClassSec(dbStudent?.className).sec || res.sectionStr;
+      const effectiveClass = dbStudent 
+        ? (dbStudent.className || formatDisplayClass(dbStudent))
+        : (res.studentClass || formatDisplayClass(res));
+
       const hasAnswers = res.answers && res.answers.length > 0;
       const hasKeys = exam.keys && Object.keys(exam.keys).length > 0;
 
@@ -1188,6 +1320,13 @@ export function ResultsView() {
         );
         return { 
           ...res, 
+          no: effectiveNo,
+          studentNo: effectiveNo,
+          name: effectiveName,
+          studentName: effectiveName,
+          classStr: effectiveCls,
+          sectionStr: effectiveSec,
+          studentClass: effectiveClass,
           evaluatedScore: score,
           scores: score as any 
         };
@@ -1196,6 +1335,13 @@ export function ResultsView() {
       if (res.evaluatedScore && typeof res.evaluatedScore === 'object' && res.evaluatedScore.total) {
         return {
           ...res,
+          no: effectiveNo,
+          studentNo: effectiveNo,
+          name: effectiveName,
+          studentName: effectiveName,
+          classStr: effectiveCls,
+          sectionStr: effectiveSec,
+          studentClass: effectiveClass,
           evaluatedScore: res.evaluatedScore,
           scores: res.scores || (res.evaluatedScore as any)
         };
@@ -1222,6 +1368,13 @@ export function ResultsView() {
 
       return { 
         ...res, 
+        no: effectiveNo,
+        studentNo: effectiveNo,
+        name: effectiveName,
+        studentName: effectiveName,
+        classStr: effectiveCls,
+        sectionStr: effectiveSec,
+        studentClass: effectiveClass,
         evaluatedScore: fallbackScore,
         scores: res.scores || (fallbackScore as any) 
       };
@@ -1329,12 +1482,7 @@ export function ResultsView() {
 
     const relevantMasterCount = selectedClassFilter === "ALL" 
       ? totalMaster 
-      : masterStudents.filter(s => {
-          const c = (s.classStr || s.className || "").trim();
-          const sec = (s.sectionStr || "").trim().toUpperCase();
-          const full = (c && sec) ? `${c}/${sec}` : (c ? `${c}. Sınıf` : '');
-          return full === selectedClassFilter;
-        }).length;
+      : masterStudents.filter(s => isStudentInClass(s, selectedClassFilter)).length;
 
     const participationRate = relevantMasterCount > 0 
       ? Math.min(100, Math.round((evaluatedResults.length / relevantMasterCount) * 100))
@@ -1367,8 +1515,8 @@ export function ResultsView() {
         "Sıra": idx + 1,
         "Okul No": r.no || r.studentNo || "-",
         "Öğrenci Adı Soyadı": r.name || r.studentName || "İsimsiz",
-        "Sınıf": r.classStr || "-",
-        "Şube": r.sectionStr || "-",
+        "Sınıf": formatDisplayClass(r),
+        "Şube": r.sectionStr || (formatClassSec(r.studentClass).sec) || "-",
         "Kitapçık": r.booklet || "A",
       };
 
@@ -1402,12 +1550,7 @@ export function ResultsView() {
   const handleDownloadBatchPdf = async () => {
     let targetStudents = evaluatedResultsWithRank;
     if (batchPdfScope === 'class' && batchPdfSelectedClass !== 'ALL') {
-      targetStudents = targetStudents.filter(r => {
-        const c = r.classStr && r.classStr !== "-" ? r.classStr : (r.studentClass ? r.studentClass.split('/')[0] : "");
-        const s = r.sectionStr && r.sectionStr !== "-" ? r.sectionStr : (r.studentClass && r.studentClass.includes('/') ? r.studentClass.split('/')[1] : "");
-        const val = (c && s) ? `${c}/${s}` : (c || s || "");
-        return val === batchPdfSelectedClass;
-      });
+      targetStudents = targetStudents.filter(r => isStudentInClass(r, batchPdfSelectedClass));
     }
 
     if (targetStudents.length === 0) {
@@ -1445,36 +1588,64 @@ export function ResultsView() {
     }
   };
 
-  // Available classes for filtering
+  // Available classes for filtering - Always reflects Database Classes
   const availableClasses = useMemo(() => {
-    const set = new Set<string>();
-    currentExamResults.forEach(r => {
-      const c = r.classStr && r.classStr !== "-" ? r.classStr.trim() : (r.studentClass ? r.studentClass.split('/')[0].trim() : "");
-      const s = r.sectionStr && r.sectionStr !== "-" ? r.sectionStr.trim().toUpperCase() : (r.studentClass && r.studentClass.includes('/') ? r.studentClass.split('/')[1].trim().toUpperCase() : "");
-      if (c && s) set.add(`${c}/${s}`);
-      else if (c) set.add(`${c}. Sınıf`);
-    });
+    const classMap = new Map<string, string>(); // canonicalKey -> displayClass (örn. "8-A")
+
+    // 1. Veritabanımızdaki öğrencilerin sınıflarını al
     masterStudents.forEach(s => {
-      const c = (s.classStr || s.className || "").trim();
-      const sec = (s.sectionStr || "").trim().toUpperCase();
-      if (c && sec) set.add(`${c}/${sec}`);
-      else if (c) set.add(`${c}. Sınıf`);
+      const { cls, sec } = formatClassSec(s.classStr || s.className, s.sectionStr);
+      if (cls && sec) {
+        classMap.set(`${cls}-${sec}`, `${cls}-${sec}`);
+      } else if (s.className && s.className.trim() && s.className !== '-') {
+        classMap.set(s.className.trim(), s.className.trim());
+      }
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
-  }, [currentExamResults, masterStudents]);
+
+    // 2. Sınav sonuçlarındaki sınıfları da dahil et
+    currentExamResults.forEach(r => {
+      const { cls, sec } = formatClassSec(r.studentClass || r.classStr, r.sectionStr);
+      if (cls && sec) {
+        classMap.set(`${cls}-${sec}`, `${cls}-${sec}`);
+      } else if (r.studentClass && r.studentClass.trim() && r.studentClass !== '-') {
+        classMap.set(r.studentClass.trim(), r.studentClass.trim());
+      }
+    });
+
+    // 3. Veritabanında sınıf yoksa standart 8. sınıf şubelerini ekle
+    if (classMap.size === 0) {
+      ['8-A', '8-B', '8-C', '8-D'].forEach(c => classMap.set(c, c));
+    }
+
+    const allSorted = Array.from(classMap.values()).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
+
+    // Aktif sınav LGS veya 8. sınıf sınavıysa 8. sınıf şubelerini öne al
+    const isExamLgs = isLgs || (exam.name && /8|lgs/i.test(exam.name));
+    if (isExamLgs) {
+      const g8 = allSorted.filter(c => c.startsWith('8'));
+      const others = allSorted.filter(c => !c.startsWith('8'));
+      return [...g8, ...others];
+    }
+
+    return allSorted;
+  }, [masterStudents, currentExamResults, isLgs, exam.name]);
 
   const classCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    currentExamResults.forEach(r => {
-      const c = r.classStr && r.classStr !== "-" ? r.classStr : (r.studentClass ? r.studentClass.split('/')[0] : "");
-      const s = r.sectionStr && r.sectionStr !== "-" ? r.sectionStr : (r.studentClass && r.studentClass.includes('/') ? r.studentClass.split('/')[1] : "");
-      const val = (c && s) ? `${c}/${s}` : (c || s || "");
-      if (val) {
-        counts[val] = (counts[val] || 0) + 1;
-      }
+    availableClasses.forEach(cls => {
+      counts[cls] = currentExamResults.filter(r => isStudentInClass(r, cls)).length;
     });
     return counts;
-  }, [currentExamResults]);
+  }, [availableClasses, currentExamResults]);
+
+  // Veritabanı kütüğündeki sınıf mevcudu sayıları
+  const classDbCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    availableClasses.forEach(cls => {
+      counts[cls] = masterStudents.filter(s => isStudentInClass(s, cls)).length;
+    });
+    return counts;
+  }, [availableClasses, masterStudents]);
 
   const safeConfirm = (msg: string): boolean => {
     try {
@@ -1751,19 +1922,69 @@ export function ResultsView() {
         10.11, 7.39, 7.64,
         47.07, 30.46, 36.92,
         313.47, null, null, null, null, null
-      ],
-      // Gerçekçi Örnek Öğrenci Satırları (Kullanıcının yüklediği örnekten)
-      [8, "ALP KARA", "8-A", 19, 1, 18.67, 9, 1, 8.67, 9, 1, 8.67, 9, 1, 8.67, 19, 1, 18.67, 20, 0, 20.00, 85, 5, 83.33, 481.58, 1, 1, 3, 3, 516],
-      [89, "SERKAN ALTUN", "8-A", 19, 1, 18.67, 9, 1, 8.67, 8, 2, 7.33, 7, 3, 6.00, 18, 2, 17.33, 20, 0, 20.00, 81, 9, 78.00, 468.89, 2, 2, 6, 6, 1491],
-      [45, "EMİR MEYDAN", "8-B", 15, 5, 13.33, 7, 3, 6.00, 9, 1, 8.67, 10, 0, 10.00, 20, 0, 20.00, 20, 0, 20.00, 81, 9, 78.00, 463.27, 1, 3, 9, 9, 2006],
-      [60, "MELİS ÖZTÜRK", "8-A", 16, 4, 14.67, 7, 3, 6.00, 9, 1, 8.67, 7, 3, 6.00, 18, 2, 17.33, 20, 0, 20.00, 77, 13, 72.67, 450.28, 3, 4, 14, 14, 3392],
-      [70, "MİNEL DARCANLI", "8-B", 14, 5, 12.33, 7, 2, 6.33, 10, 0, 10.00, 10, 0, 10.00, 15, 3, 14.00, 19, 1, 18.67, 75, 11, 71.33, 429.19, 2, 5, 28, 28, 5849],
-      [129, "CEYLİN SU GÖK", "8-B", 17, 3, 16.00, 7, 3, 6.00, 9, 1, 8.67, 8, 2, 7.33, 12, 8, 9.33, 20, 0, 20.00, 73, 17, 67.33, 420.73, 3, 6, 32, 32, 6900],
-      [542, "YİĞİT TUĞRUL IŞIKLAR", "8-A", 17, 3, 16.00, 7, 3, 6.00, 7, 3, 6.00, 9, 1, 8.67, 15, 2, 14.33, 16, 4, 14.67, 71, 16, 65.67, 420.34, 4, 7, 33, 33, 6955],
-      [122, "BERK POLATOĞLU", "8-B", 14, 6, 12.00, 10, 0, 10.00, 9, 1, 8.67, 9, 1, 8.67, 15, 4, 13.67, 17, 3, 16.00, 74, 15, 69.00, 417.78, 4, 8, 34, 34, 7258],
-      [123, "CEMRE SÖZENER", "8-B", 14, 6, 12.00, 4, 6, 2.00, 9, 1, 8.67, 9, 1, 8.67, 17, 2, 16.33, 17, 3, 16.00, 70, 19, 63.67, 416.30, 5, 9, 35, 35, 7446],
-      [20, "BADE UMAN", "8-A", 15, 2, 14.33, 8, 1, 7.67, 9, 1, 8.67, 6, 2, 5.33, 14, 1, 13.67, 16, 2, 15.33, 68, 9, 65.00, 415.63, 5, 10, 36, 36, 7532]
+      ]
     ];
+
+    // Okul kütüğünde kayıtlı gerçek öğrenciler varsa, şablona onların numara, isim ve sınıflarını öncelikli yerleştir
+    let sampleStudentRows: any[][] = [];
+    if (masterStudents && masterStudents.length > 0) {
+      sampleStudentRows = masterStudents.slice(0, 15).map((s, idx) => {
+        const clsStr = formatDisplayClass(s);
+        const turD = Math.max(0, 18 - (idx % 4));
+        const turY = idx % 3;
+        const turN = +(turD - turY / 3).toFixed(2);
+        const tarD = Math.max(0, 9 - (idx % 3));
+        const tarY = idx % 2;
+        const tarN = +(tarD - tarY / 3).toFixed(2);
+        const dinD = Math.max(0, 9 - (idx % 2));
+        const dinY = (idx + 1) % 2;
+        const dinN = +(dinD - dinY / 3).toFixed(2);
+        const ingD = Math.max(0, 8 - (idx % 3));
+        const ingY = idx % 2;
+        const ingN = +(ingD - ingY / 3).toFixed(2);
+        const matD = Math.max(0, 17 - (idx % 5));
+        const matY = idx % 4;
+        const matN = +(matD - matY / 3).toFixed(2);
+        const fenD = Math.max(0, 19 - (idx % 3));
+        const fenY = idx % 2;
+        const fenN = +(fenD - fenY / 3).toFixed(2);
+        const totD = turD + tarD + dinD + ingD + matD + fenD;
+        const totY = turY + tarY + dinY + ingY + matY + fenY;
+        const totN = +(turN + tarN + dinN + ingN + matN + fenN).toFixed(2);
+        const puan = +(250 + totN * 2.7).toFixed(2);
+        return [
+          s.no,
+          s.name,
+          clsStr,
+          turD, turY, turN,
+          tarD, tarY, tarN,
+          dinD, dinY, dinN,
+          ingD, ingY, ingN,
+          matD, matY, matN,
+          fenD, fenY, fenN,
+          totD, totY, totN,
+          puan,
+          idx + 1, idx + 1, idx + 2, idx + 2, 100 + idx * 50
+        ];
+      });
+    }
+
+    if (sampleStudentRows.length === 0) {
+      sampleStudentRows = [
+        [8, "ALP KARA", "8-A", 19, 1, 18.67, 9, 1, 8.67, 9, 1, 8.67, 9, 1, 8.67, 19, 1, 18.67, 20, 0, 20.00, 85, 5, 83.33, 481.58, 1, 1, 3, 3, 516],
+        [89, "SERKAN ALTUN", "8-A", 19, 1, 18.67, 9, 1, 8.67, 8, 2, 7.33, 7, 3, 6.00, 18, 2, 17.33, 20, 0, 20.00, 81, 9, 78.00, 468.89, 2, 2, 6, 6, 1491],
+        [45, "EMİR MEYDAN", "8-B", 15, 5, 13.33, 7, 3, 6.00, 9, 1, 8.67, 10, 0, 10.00, 20, 0, 20.00, 20, 0, 20.00, 81, 9, 78.00, 463.27, 1, 3, 9, 9, 2006],
+        [60, "MELİS ÖZTÜRK", "8-A", 16, 4, 14.67, 7, 3, 6.00, 9, 1, 8.67, 7, 3, 6.00, 18, 2, 17.33, 20, 0, 20.00, 77, 13, 72.67, 450.28, 3, 4, 14, 14, 3392],
+        [70, "MİNEL DARCANLI", "8-B", 14, 5, 12.33, 7, 2, 6.33, 10, 0, 10.00, 10, 0, 10.00, 15, 3, 14.00, 19, 1, 18.67, 75, 11, 71.33, 429.19, 2, 5, 28, 28, 5849],
+        [129, "CEYLİN SU GÖK", "8-B", 17, 3, 16.00, 7, 3, 6.00, 9, 1, 8.67, 8, 2, 7.33, 12, 8, 9.33, 20, 0, 20.00, 73, 17, 67.33, 420.73, 3, 6, 32, 32, 6900],
+        [542, "YİĞİT TUĞRUL IŞIKLAR", "8-A", 17, 3, 16.00, 7, 3, 6.00, 7, 3, 6.00, 9, 1, 8.67, 15, 2, 14.33, 16, 4, 14.67, 71, 16, 65.67, 420.34, 4, 7, 33, 33, 6955],
+        [122, "BERK POLATOĞLU", "8-B", 14, 6, 12.00, 10, 0, 10.00, 9, 1, 8.67, 9, 1, 8.67, 15, 4, 13.67, 17, 3, 16.00, 74, 15, 69.00, 417.78, 4, 8, 34, 34, 7258],
+        [123, "CEMRE SÖZENER", "8-B", 14, 6, 12.00, 4, 6, 2.00, 9, 1, 8.67, 9, 1, 8.67, 17, 2, 16.33, 17, 3, 16.00, 70, 19, 63.67, 416.30, 5, 9, 35, 35, 7446],
+        [20, "BADE UMAN", "8-A", 15, 2, 14.33, 8, 1, 7.67, 9, 1, 8.67, 6, 2, 5.33, 14, 1, 13.67, 16, 2, 15.33, 68, 9, 65.00, 415.63, 5, 10, 36, 36, 7532]
+      ];
+    }
+
+    aoa.push(...sampleStudentRows);
 
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
@@ -1821,6 +2042,7 @@ export function ResultsView() {
 
         const newResults: ExamResult[] = [];
         const newStudentsToAdd: Student[] = [];
+        let matchedWithDbCount = 0;
 
         // 1. ÖNCE: Kurum Net Listesi (Çok satırlı başlık içeren resmi yayıncı formatı) Denemesi
         let processedWithKurumNetListesi = false;
@@ -1942,18 +2164,28 @@ export function ResultsView() {
                   }
                 }
 
-                const foundStudent = masterStudents.find(s => String(s.no).trim() === String(studentNo).trim());
+                // Uygulama veritabanındaki öğrenci ve sınıf bilgileriyle akıllı eşleştir
+                const foundStudent = findDatabaseStudent(studentNo, studentName, rawClass, masterStudents);
                 if (foundStudent) {
-                  if (!classStr) classStr = foundStudent.classStr || foundStudent.className || '';
-                  if (!sectionStr) sectionStr = foundStudent.sectionStr || '';
-                } else if (studentNo > 0 && studentName) {
+                  matchedWithDbCount++;
+                }
+
+                const finalNo = foundStudent ? foundStudent.no : studentNo;
+                const finalName = foundStudent ? foundStudent.name : studentName;
+                const finalClassStr = foundStudent ? (foundStudent.classStr || formatClassSec(foundStudent.className).cls || classStr) : classStr;
+                const finalSectionStr = foundStudent ? (foundStudent.sectionStr || formatClassSec(foundStudent.className).sec || sectionStr) : sectionStr;
+                const finalDisplayClass = foundStudent 
+                  ? (foundStudent.className || (finalSectionStr ? `${finalClassStr}-${finalSectionStr}` : finalClassStr)) 
+                  : (sectionStr ? `${classStr}-${sectionStr}` : classStr);
+
+                if (!foundStudent && studentNo > 0 && studentName) {
                   newStudentsToAdd.push({
                     id: generateId(),
                     no: studentNo,
                     name: studentName,
-                    className: sectionStr ? `${classStr}/${sectionStr}` : classStr,
-                    classStr,
-                    sectionStr
+                    className: finalDisplayClass,
+                    classStr: finalClassStr,
+                    sectionStr: finalSectionStr
                   });
                 }
 
@@ -1980,12 +2212,31 @@ export function ResultsView() {
                   else if (nl.includes('mat')) stdName = 'Matematik';
                   else if (nl.includes('fen')) stdName = 'Fen Bilimleri';
 
-                  subjectScores[stdName] = {
+                  const subScoreObj = {
                     correct: cleanD,
                     wrong: cleanY,
                     empty: 0,
                     net: cleanN
                   };
+
+                  subjectScores[stdName] = subScoreObj;
+
+                  const matchingExamSub = exam.subjects?.find(es => {
+                    const esl = es.name.toLowerCase();
+                    const nll = stdName.toLowerCase();
+                    return esl === nll ||
+                      (nll.includes('türk') && esl.includes('türk')) ||
+                      (nll.includes('tarih') && (esl.includes('tarih') || esl.includes('ink'))) ||
+                      (nll.includes('din') && esl.includes('din')) ||
+                      (nll.includes('ing') && esl.includes('ing')) ||
+                      (nll.includes('mat') && esl.includes('mat')) ||
+                      (nll.includes('fen') && esl.includes('fen'));
+                  });
+                  if (matchingExamSub) {
+                    subjectScores[String(matchingExamSub.id)] = subScoreObj;
+                    subjectScores[matchingExamSub.name] = subScoreObj;
+                  }
+
                   sumNets += cleanN;
                   sumCorrect += cleanD;
                   sumWrong += cleanY;
@@ -2013,13 +2264,13 @@ export function ResultsView() {
 
                 newResults.push({
                   id: generateId(),
-                  studentNo,
-                  studentName,
-                  studentClass: sectionStr ? `${classStr}/${sectionStr}` : classStr,
-                  no: studentNo,
-                  name: studentName,
-                  classStr,
-                  sectionStr,
+                  studentNo: finalNo,
+                  studentName: finalName,
+                  studentClass: finalDisplayClass,
+                  no: finalNo,
+                  name: finalName,
+                  classStr: finalClassStr,
+                  sectionStr: finalSectionStr,
                   booklet: 'A',
                   scores: {
                     [String(exam.id)]: parsedTotalNet,
@@ -2071,18 +2322,27 @@ export function ResultsView() {
             const cls = String(normalizedRow["sınıf"] || normalizedRow["sinif"] || '').trim();
             const sec = String(normalizedRow["şube"] || normalizedRow["sube"] || '').trim().toUpperCase();
 
-            const foundStudent = masterStudents.find(s => String(s.no).trim() === String(studentNo).trim());
-            const classStr = foundStudent?.classStr || foundStudent?.className || cls || '';
-            const sectionStr = foundStudent?.sectionStr || sec || '';
+            const foundStudent = findDatabaseStudent(studentNo, studentName, cls, masterStudents);
+            if (foundStudent) {
+              matchedWithDbCount++;
+            }
+
+            const finalNo = foundStudent ? foundStudent.no : studentNo;
+            const finalName = foundStudent ? foundStudent.name : studentName;
+            const finalClassStr = foundStudent ? (foundStudent.classStr || formatClassSec(foundStudent.className).cls || cls) : cls;
+            const finalSectionStr = foundStudent ? (foundStudent.sectionStr || formatClassSec(foundStudent.className).sec || sec) : sec;
+            const finalClassName = foundStudent 
+              ? (foundStudent.className || (finalSectionStr ? `${finalClassStr}-${finalSectionStr}` : finalClassStr)) 
+              : (sec ? `${cls}-${sec}` : cls);
 
             if (!foundStudent && studentNo > 0 && studentName) {
               newStudentsToAdd.push({
                 id: generateId(),
                 no: studentNo,
                 name: studentName,
-                className: sectionStr ? `${classStr}/${sectionStr}` : classStr,
-                classStr: classStr,
-                sectionStr: sectionStr
+                className: finalClassName,
+                classStr: finalClassStr,
+                sectionStr: finalSectionStr
               });
             }
 
@@ -2111,12 +2371,30 @@ export function ResultsView() {
                   else if (lKey.includes("mat")) stdName = "Matematik";
                   else if (lKey.includes("fen")) stdName = "Fen Bilimleri";
 
-                  subjectScores[stdName] = {
+                  const subScoreObj = {
                     correct: Math.round(val),
                     wrong: 0,
                     empty: 0,
                     net: val
                   };
+
+                  subjectScores[stdName] = subScoreObj;
+
+                  const matchingExamSub = exam.subjects?.find(es => {
+                    const esl = es.name.toLowerCase();
+                    const nll = stdName.toLowerCase();
+                    return esl === nll ||
+                      (nll.includes('türk') && esl.includes('türk')) ||
+                      (nll.includes('tarih') && (esl.includes('tarih') || esl.includes('ink'))) ||
+                      (nll.includes('din') && esl.includes('din')) ||
+                      (nll.includes('ing') && esl.includes('ing')) ||
+                      (nll.includes('mat') && esl.includes('mat')) ||
+                      (nll.includes('fen') && esl.includes('fen'));
+                  });
+                  if (matchingExamSub) {
+                    subjectScores[String(matchingExamSub.id)] = subScoreObj;
+                    subjectScores[matchingExamSub.name] = subScoreObj;
+                  }
                 }
               }
             });
@@ -2140,13 +2418,13 @@ export function ResultsView() {
 
             newResults.push({
               id: generateId(),
-              studentNo,
-              studentName,
-              studentClass: sectionStr ? `${classStr}/${sectionStr}` : classStr,
-              no: studentNo,
-              name: studentName,
-              classStr,
-              sectionStr,
+              studentNo: finalNo,
+              studentName: finalName,
+              studentClass: finalClassName,
+              no: finalNo,
+              name: finalName,
+              classStr: finalClassStr,
+              sectionStr: finalSectionStr,
               booklet: 'A',
               scores: {
                 [String(exam.id)]: parsedTotalNet,
@@ -2192,7 +2470,8 @@ export function ResultsView() {
           setStudents([...masterStudents, ...newStudentsToAdd]);
         }
 
-        showAlert(`✓ ${newResults.length} öğrencinin sınav sonuçları ve ders netleri başarıyla aktarıldı.`);
+        const matchMsg = matchedWithDbCount > 0 ? ` (${matchedWithDbCount} öğrenci okul kütüğüyle eşleştirildi)` : '';
+        showAlert(`✓ ${newResults.length} öğrencinin sınav sonuçları ve ders netleri başarıyla aktarıldı${matchMsg}.`);
       });
     } catch (err: any) {
       console.error(err);
@@ -3221,10 +3500,16 @@ export function ResultsView() {
                       className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs w-full appearance-none truncate"
                       aria-label="Sınıf Filtresi"
                     >
-                      <option value="ALL">Tüm Sınıflar ({currentExamResults.length})</option>
-                      {availableClasses.map(cls => (
-                        <option key={cls} value={cls}>{cls} ({classCounts[cls] || 0})</option>
-                      ))}
+                      <option value="ALL">Tüm Sınıflar ({currentExamResults.length}{masterStudents.length > 0 ? ` / ${masterStudents.length} Kütük` : ''})</option>
+                      {availableClasses.map(cls => {
+                        const examCount = classCounts[cls] || 0;
+                        const dbCount = classDbCounts[cls] || 0;
+                        return (
+                          <option key={cls} value={cls}>
+                            {cls} ({examCount}{dbCount > 0 ? ` / ${dbCount} Öğrenci` : ''})
+                          </option>
+                        );
+                      })}
                     </select>
                     <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
@@ -3412,8 +3697,10 @@ export function ResultsView() {
                               <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500" />
                             </button>
                           </td>
-                          <td className="p-3 text-center text-slate-600 font-semibold font-mono tabular-nums">
-                            {student.classStr || '-'}/{student.sectionStr || '-'}
+                          <td className="p-3 text-center text-slate-700 font-bold font-mono tabular-nums">
+                            <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/80 text-[11px] text-slate-800">
+                              {formatDisplayClass(student)}
+                            </span>
                           </td>
                           <td className="p-3 text-center font-bold font-mono text-slate-500">
                             {student.booklet || 'A'}
@@ -3421,7 +3708,10 @@ export function ResultsView() {
 
                           {/* Subject Breakdown Columns */}
                           {showSubjectColumns && exam.subjects && exam.subjects.map(sub => {
-                            const ss = student.evaluatedScore?.subjectScores?.[sub.id] || { correct: 0, wrong: 0, net: 0 };
+                            const ss = student.evaluatedScore?.subjectScores?.[sub.id] || 
+                                       student.evaluatedScore?.subjectScores?.[String(sub.id)] ||
+                                       student.evaluatedScore?.subjectScores?.[sub.name] || 
+                                       { correct: 0, wrong: 0, net: 0 };
                             return (
                               <td key={sub.id} className="p-3 text-center border-l border-slate-100 font-mono tabular-nums">
                                 <span className="text-emerald-700 font-semibold">{ss.correct}</span>

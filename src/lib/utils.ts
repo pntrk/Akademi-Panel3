@@ -60,12 +60,31 @@ export function importFromExcel(file: File, callback: (data: any[], rawRows?: an
       let workbook: XLSX.WorkBook;
       const fileName = file.name.toLowerCase();
 
-      if (fileName.endsWith('.xml')) {
-        const textDecoder = new TextDecoder('utf-8');
-        const text = textDecoder.decode(buffer);
+      // Check if file is XML (either by extension or <?xml / <Workbook header)
+      const u8 = new Uint8Array(buffer);
+      const isXml = fileName.endsWith('.xml') ||
+        (u8[0] === 0x3C && u8[1] === 0x3F) || // <?xml
+        (u8[0] === 0x3C && (u8[1] === 0x57 || u8[1] === 0x77)); // <Workbook
+
+      if (isXml) {
+        let text = '';
+        try {
+          text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+        } catch {
+          try {
+            text = new TextDecoder('windows-1254').decode(buffer);
+          } catch {
+            text = new TextDecoder('iso-8859-9').decode(buffer);
+          }
+        }
         workbook = XLSX.read(text, { type: "string" });
       } else {
-        workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
+        try {
+          workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
+        } catch {
+          const text = new TextDecoder('utf-8').decode(buffer);
+          workbook = XLSX.read(text, { type: "string" });
+        }
       }
 
       const sheetName = workbook.SheetNames[0];
