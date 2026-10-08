@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useRe
 import { Student, Exam, ExamResult, BudgetData, ExamHall, SeatingPlanItem, CloudBackupRecord, FullBackupData, FullBackupSummary, AppNotification, ExamKeys } from '../types';
 import { generateId, recalculateLeagueForStudents } from '../lib/utils';
 import { generateExamOmrMap, initialExam, HAZIRBULUNUSLUK_STUDENTS, HAZIRBULUNUSLUK_ANSWER_KEYS_A, normalizeTurkish } from '../lib/omrEngine';
-import { createOptimizedBackupPayload } from '../lib/backupOptimizer';
+import { createOptimizedBackupPayload, hydrateExamResult } from '../lib/backupOptimizer';
 import { 
   db, 
   firebaseConfig, 
@@ -136,7 +136,7 @@ interface AppContextType {
   approveTransfer: (studentNo: number, examName: string, toTeam: string) => void;
   updateExamKeys: (examId: string, keys: ExamKeys) => Promise<void>;
   updateExamOmr: (examId: string, omrData: Partial<Exam>) => Promise<void>;
-  saveOmrExamResults: (examId: string, newResults: ExamResult[]) => Promise<void>;
+  saveOmrExamResults: (examId: string, newResults: ExamResult[], newStudentsToAdd?: Student[]) => Promise<void>;
   deleteOmrExamResult: (examId: string, studentIdentifier: string | number) => Promise<void>;
   deleteAllOmrExamResults: (examId: string) => Promise<void>;
   overwriteState: (newState: AppState) => void;
@@ -1939,18 +1939,28 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     });
     
     const newBudget = syncFinancials(students, s.exams, s.budget);
-    updateFirebase({ ...s, students, examHalls: updatedHalls, budget: newBudget });
+    const updatedStudents = recalculateLeagueForStudents(students, s.results, s.exams, s.approvedTransfers || []);
+    updateFirebase({ ...s, students: updatedStudents, examHalls: updatedHalls, budget: newBudget });
   };
 
   const setExams = (exams: Exam[]) => { if (userRole !== 'admin') return; _setExams(exams); };
   const _setExams = (exams: Exam[]) => {
     const s = stateRef.current;
     
-    // Her sınav için omrMap haritasının eksiksiz olduğundan emin ol
+    // Sadece kurum içi optik sınavlar için omrMap haritasının eksiksiz olduğundan emin ol (Yayıncı denemelerine 80KB harita basılmaz)
     const ensuredExams = exams.map(e => {
-      if (!e.omrMap || !e.omrMap.specs) {
-        const omrMap = generateExamOmrMap(e);
-        return { ...e, omrMap };
+      const isInternal = e.examType === 'internal' || (Boolean(e.keys) && Object.keys(e.keys).length > 0 && e.examType !== 'publisher');
+      if (isInternal) {
+        if (!e.omrMap || !e.omrMap.specs) {
+          const omrMap = generateExamOmrMap(e);
+          return { ...e, omrMap };
+        }
+        return e;
+      }
+      // Yayıncı / Excel denemelerinde optik harita tutulmaz
+      if (e.omrMap) {
+        const { omrMap: _removed, ...rest } = e;
+        return rest as Exam;
       }
       return e;
     });
@@ -2138,7 +2148,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     updateFirebase(nextState, 4000);
   };
 
-  const saveOmrExamResults = async (examId: string, newResults: ExamResult[]) => {
+  const saveOmrExamResults = async (examId: string, newResults: ExamResult[], newStudentsToAdd?: Student[]) => {
     if (userRole !== 'admin' && userRole !== 'teacher') return;
     const s = stateRef.current;
     const targetExam = s.exams.find(e => String(e.id) === String(examId));
@@ -2199,7 +2209,19 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     };
 
     const updatedExams = s.exams.map(e => String(e.id) === String(examId) ? updatedExam : e);
-    const updatedStudents = recalculateLeagueForStudents(s.students, existingResults, updatedExams, s.approvedTransfers || []);
+
+    let baseStudentsList = [...s.students];
+    if (newStudentsToAdd && newStudentsToAdd.length > 0) {
+      newStudentsToAdd.forEach(ns => {
+        const normNs = ns.name ? normalizeTurkish(ns.name).trim().toLowerCase() : '';
+        const exists = baseStudentsList.some(bs => (ns.no > 0 && bs.no === ns.no) || (normNs && bs.name && normalizeTurkish(bs.name).trim().toLowerCase() === normNs));
+        if (!exists) {
+          baseStudentsList.push(ns);
+        }
+      });
+    }
+
+    const updatedStudents = recalculateLeagueForStudents(baseStudentsList, existingResults, updatedExams, s.approvedTransfers || []);
 
     const nextState: AppState = {
       ...s,
@@ -2376,7 +2398,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             resolvedExamType = 'publisher';
           } else if (e.publisher && (String(e.publisher).trim().toLowerCase() === 'kurum içi' || String(e.publisher).trim().toLowerCase() === 'okul içi')) {
             resolvedExamType = 'internal';
+          } else if (e.keys && Object.keys(e.keys).length > 0) {
+            resolvedExamType = 'internal';
           }
+
+          const isInternal = resolvedExamType === 'internal';
+          const omrMap = isInternal 
+            ? (e.omrMap && typeof e.omrMap === 'object' ? e.omrMap : generateExamOmrMap(e))
+            : undefined;
+
+          const examResults = Array.isArray(e.results) ? e.results.map(hydrateExamResult) : undefined;
 
           return {
             id: String(e.id || generateId()),
@@ -2400,8 +2431,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             optionsCount: e.optionsCount !== undefined ? Number(e.optionsCount) : undefined,
             penalty: e.penalty !== undefined ? Number(e.penalty) : undefined,
             keys: e.keys && typeof e.keys === 'object' ? e.keys : undefined,
-            omrMap: e.omrMap && typeof e.omrMap === 'object' ? e.omrMap : generateExamOmrMap(e),
-            results: Array.isArray(e.results) ? e.results : undefined
+            omrMap,
+            results: examResults
           };
         })
       : (stateRef.current.exams || []);
@@ -2413,26 +2444,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     cleanExams.forEach(e => {
       if (Array.isArray(e.results)) {
         e.results.forEach((r: any) => {
-          const key = r.id || `${e.id}_${r.studentNo || r.no}`;
-          combinedResultsMap.set(key, {
-            id: String(r.id || generateId()),
-            studentId: r.studentId ? String(r.studentId) : undefined,
-            studentNo: r.studentNo !== undefined ? Number(r.studentNo) : (r.no !== undefined ? Number(r.no) : 0),
-            studentName: String(r.studentName || r.name || '').trim(),
-            studentClass: String(r.studentClass || r.classStr || '').trim(),
-            scores: r.scores && typeof r.scores === 'object' ? r.scores : {},
-            average: Number(r.average) || 0,
-            details: r.details && typeof r.details === 'object' ? r.details : undefined,
-            earnedLP: r.earnedLP !== undefined ? Number(r.earnedLP) : undefined,
-            earnedBadges: Array.isArray(r.earnedBadges) ? r.earnedBadges : undefined,
-            name: r.name ? String(r.name) : undefined,
-            no: r.no !== undefined ? r.no : undefined,
-            classStr: r.classStr ? String(r.classStr) : undefined,
-            sectionStr: r.sectionStr ? String(r.sectionStr) : undefined,
-            booklet: r.booklet ? String(r.booklet) : undefined,
-            answers: Array.isArray(r.answers) ? r.answers : undefined,
-            evaluatedScore: r.evaluatedScore && typeof r.evaluatedScore === 'object' ? r.evaluatedScore : undefined
-          });
+          const hydrated = hydrateExamResult(r);
+          const key = hydrated.id || `${e.id}_${hydrated.studentNo || hydrated.no}`;
+          combinedResultsMap.set(key, hydrated);
         });
       }
     });
@@ -2440,27 +2454,10 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     // B) Populate from rawResults if any exist (legacy backups or unattached results)
     if (Array.isArray(rawResults)) {
       rawResults.forEach((r: any) => {
-        const key = r.id || `${r.studentNo || r.no}`;
+        const hydrated = hydrateExamResult(r);
+        const key = hydrated.id || `${hydrated.studentNo || hydrated.no}`;
         if (!combinedResultsMap.has(key)) {
-          combinedResultsMap.set(key, {
-            id: String(r.id || generateId()),
-            studentId: r.studentId ? String(r.studentId) : undefined,
-            studentNo: r.studentNo !== undefined ? Number(r.studentNo) : (r.no !== undefined ? Number(r.no) : 0),
-            studentName: String(r.studentName || r.name || '').trim(),
-            studentClass: String(r.studentClass || r.classStr || '').trim(),
-            scores: r.scores && typeof r.scores === 'object' ? r.scores : {},
-            average: Number(r.average) || 0,
-            details: r.details && typeof r.details === 'object' ? r.details : undefined,
-            earnedLP: r.earnedLP !== undefined ? Number(r.earnedLP) : undefined,
-            earnedBadges: Array.isArray(r.earnedBadges) ? r.earnedBadges : undefined,
-            name: r.name ? String(r.name) : undefined,
-            no: r.no !== undefined ? r.no : undefined,
-            classStr: r.classStr ? String(r.classStr) : undefined,
-            sectionStr: r.sectionStr ? String(r.sectionStr) : undefined,
-            booklet: r.booklet ? String(r.booklet) : undefined,
-            answers: Array.isArray(r.answers) ? r.answers : undefined,
-            evaluatedScore: r.evaluatedScore && typeof r.evaluatedScore === 'object' ? r.evaluatedScore : undefined
-          });
+          combinedResultsMap.set(key, hydrated);
         }
       });
     }
@@ -2476,7 +2473,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           r.scores && (r.scores[String(e.id)] !== undefined || r.scores[e.name] !== undefined)
         );
         if (matching.length > 0) {
-          e.results = matching;
+          e.results = matching.map(hydrateExamResult);
         }
       }
     });

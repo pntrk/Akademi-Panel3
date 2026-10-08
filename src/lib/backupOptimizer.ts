@@ -68,68 +68,106 @@ export function optimizeSubjectScores(
 }
 
 /**
- * Optimizes a single ExamResult object:
- * - Cleans subject aliases
- * - Prunes undefined / empty fields
+ * Optimizes a single ExamResult object into a lean, single-source-of-truth schema:
+ * - Eliminates duplicate name/studentName, no/studentNo, average/net/total.net copies
+ * - Stores canonical curriculum subject scores without alias bloat
+ * - Prunes undefined / redundant flat scores dictionaries
  */
 export function optimizeExamResult(res: any): ExamResult {
   if (!res || typeof res !== 'object') return res;
 
   const optSubjectScores = optimizeSubjectScores(res.evaluatedScore?.subjectScores);
+  const total = res.evaluatedScore?.total || {};
 
-  let evaluatedScore: any = undefined;
-  if (res.evaluatedScore && typeof res.evaluatedScore === 'object') {
-    const total = res.evaluatedScore.total || {};
-    evaluatedScore = {
-      total: {
-        correct: Number(total.correct) || 0,
-        wrong: Number(total.wrong) || 0,
-        empty: Number(total.empty) || 0,
-        net: typeof total.net === 'number' ? Number(total.net.toFixed(2)) : (parseFloat(String(total.net || 0)) || 0),
-        ...(total.lgsScore !== undefined ? { lgsScore: Number(total.lgsScore) } : {}),
-        ...(total.tytScore !== undefined ? { tytScore: Number(total.tytScore) } : {})
-      },
-      ...(optSubjectScores ? { subjectScores: optSubjectScores } : {})
-    };
-  }
+  const cleanNo = res.no !== undefined ? Number(res.no) : (res.studentNo !== undefined ? Number(res.studentNo) : undefined);
+  const cleanName = (res.name || res.studentName || '').trim();
+  const cleanNet = total.net !== undefined ? Number(total.net) : (res.net !== undefined ? Number(res.net) : (res.average !== undefined ? Number(res.average) : 0));
+  const lgsScore = total.lgsScore !== undefined ? Number(total.lgsScore) : (res.lgsScore !== undefined ? Number(res.lgsScore) : undefined);
 
-  // Prune redundant alias entries from scores dictionary
-  let compactScores: Record<string, any> | undefined = undefined;
-  if (res.scores && typeof res.scores === 'object') {
-    compactScores = {};
-    for (const [k, v] of Object.entries(res.scores)) {
-      const kLower = k.trim().toLowerCase();
-      // Skip redundant duplicate alias keys in scores
-      if (kLower === 'ing' || kLower === 'sb' || kLower === 'inkılap tarihi' || kLower === 'sosyal bilgiler' || kLower === 'tarih') {
-        continue;
-      }
-      compactScores[k] = v;
-    }
-  }
-
-  const cleanNo = res.studentNo !== undefined ? Number(res.studentNo) : (res.no !== undefined ? Number(res.no) : undefined);
-  const cleanName = (res.studentName || res.name || '').trim();
+  const evaluatedScore: any = {
+    total: {
+      correct: total.correct !== undefined ? Number(total.correct) : (Number(res.totalCorrect) || 0),
+      wrong: total.wrong !== undefined ? Number(total.wrong) : (Number(res.totalWrong) || 0),
+      empty: total.empty !== undefined ? Number(total.empty) : (Number(res.totalEmpty) || 0),
+      net: typeof cleanNet === 'number' ? Number(cleanNet.toFixed(2)) : 0,
+      ...(lgsScore !== undefined && lgsScore > 0 ? { lgsScore: Number(lgsScore.toFixed(2)) } : {}),
+      ...(total.tytScore !== undefined && total.tytScore > 0 ? { tytScore: Number(total.tytScore.toFixed(2)) } : {})
+    },
+    ...(optSubjectScores ? { subjectScores: optSubjectScores } : {})
+  };
 
   return {
     id: String(res.id || ''),
-    ...(cleanNo !== undefined ? { studentNo: cleanNo, no: cleanNo } : {}),
-    ...(cleanName ? { studentName: cleanName, name: cleanName } : {}),
+    ...(cleanNo !== undefined ? { no: cleanNo } : {}),
+    ...(cleanName ? { name: cleanName } : {}),
     ...(res.studentId ? { studentId: String(res.studentId) } : {}),
-    ...(res.studentClass || res.classStr ? { studentClass: res.studentClass || res.classStr } : {}),
     ...(res.classStr ? { classStr: String(res.classStr) } : {}),
     ...(res.sectionStr ? { sectionStr: String(res.sectionStr) } : {}),
     ...(res.booklet ? { booklet: String(res.booklet) } : {}),
     ...(res.answers && Array.isArray(res.answers) && res.answers.length > 0 ? { answers: res.answers } : {}),
-    ...(compactScores ? { scores: compactScores } : {}),
-    ...(res.average !== undefined ? { average: Number(res.average) } : {}),
-    ...(res.net !== undefined ? { net: Number(res.net) } : {}),
-    ...(res.totalCorrect !== undefined ? { totalCorrect: Number(res.totalCorrect) } : {}),
-    ...(res.totalWrong !== undefined ? { totalWrong: Number(res.totalWrong) } : {}),
-    ...(res.totalEmpty !== undefined ? { totalEmpty: Number(res.totalEmpty) } : {}),
-    ...(res.lgsScore !== undefined ? { lgsScore: Number(res.lgsScore) } : {}),
     ...(res.earnedLP !== undefined && res.earnedLP > 0 ? { earnedLP: Number(res.earnedLP) } : {}),
     ...(res.earnedBadges && Array.isArray(res.earnedBadges) && res.earnedBadges.length > 0 ? { earnedBadges: res.earnedBadges } : {}),
-    ...(evaluatedScore ? { evaluatedScore } : {})
+    evaluatedScore
+  };
+}
+
+/**
+ * Hydrates a lean or legacy ExamResult object with full virtual properties:
+ * Guarantees 100% backward compatibility for all components expecting studentNo, studentName,
+ * average, net, scores dictionary, totalCorrect, etc.
+ */
+export function hydrateExamResult(r: any): ExamResult {
+  if (!r || typeof r !== 'object') return r;
+
+  const cleanNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
+  const cleanName = String(r.name || r.studentName || '').trim();
+  const cleanCls = r.classStr || r.studentClass || '';
+  const cleanSec = r.sectionStr || '';
+  const total = r.evaluatedScore?.total || {};
+  const totalNet = total.net !== undefined ? total.net : (r.net !== undefined ? r.net : (r.average || 0));
+  const totalCorrect = total.correct !== undefined ? total.correct : (r.totalCorrect || 0);
+  const totalWrong = total.wrong !== undefined ? total.wrong : (r.totalWrong || 0);
+  const totalEmpty = total.empty !== undefined ? total.empty : (r.totalEmpty || 0);
+  const lgsScore = total.lgsScore !== undefined ? total.lgsScore : r.lgsScore;
+
+  // Build subjectScores map
+  const subScores = r.evaluatedScore?.subjectScores || {};
+
+  // Synthesize flat scores dictionary so any component reading r.scores[subName] gets exact net
+  const flatScores: Record<string, any> = { ...(r.scores || {}) };
+  Object.entries(subScores).forEach(([k, v]: [string, any]) => {
+    if (v && v.net !== undefined && flatScores[k] === undefined) {
+      flatScores[k] = v.net;
+    }
+  });
+
+  return {
+    ...r,
+    id: String(r.id || ''),
+    no: cleanNo,
+    studentNo: cleanNo,
+    name: cleanName,
+    studentName: cleanName,
+    classStr: cleanCls,
+    sectionStr: cleanSec,
+    studentClass: r.studentClass || (cleanSec ? `${cleanCls}-${cleanSec}` : cleanCls),
+    net: totalNet,
+    average: totalNet,
+    totalCorrect,
+    totalWrong,
+    totalEmpty,
+    lgsScore,
+    scores: flatScores,
+    evaluatedScore: r.evaluatedScore || {
+      total: {
+        correct: totalCorrect,
+        wrong: totalWrong,
+        empty: totalEmpty,
+        net: totalNet,
+        lgsScore
+      },
+      subjectScores: subScores
+    }
   };
 }
 
@@ -210,18 +248,33 @@ export function createOptimizedBackupPayload(source: AppState): any {
   const capturedResultIds = new Set<string>();
 
   const exams = (source.exams || []).map((exam: Exam) => {
-    const rawResults = exam.results || [];
+    let rawResults = exam.results || [];
+    // If exam.results is empty, find any results in source.results that belong to this exam
+    if (rawResults.length === 0 && Array.isArray(source.results)) {
+      rawResults = source.results.filter(r => 
+        r.scores && (r.scores[String(exam.id)] !== undefined || r.scores[exam.name] !== undefined)
+      );
+    }
+
     const optimizedResults = rawResults.map(r => {
       const opt = optimizeExamResult(r);
       if (opt.id) capturedResultIds.add(String(opt.id));
-      if (opt.studentNo) capturedResultIds.add(`${exam.id}_${opt.studentNo}`);
+      if (r.id) capturedResultIds.add(String(r.id));
+      const sNum = opt.no !== undefined ? opt.no : (r.studentNo || r.no);
+      if (sNum !== undefined) {
+        capturedResultIds.add(`${exam.id}_${sNum}`);
+        capturedResultIds.add(`${exam.name}_${sNum}`);
+      }
       return opt;
     });
 
+    const isInternal = exam.examType === 'internal' || (Boolean(exam.keys) && Object.keys(exam.keys).length > 0 && exam.examType !== 'publisher');
     return {
       ...exam,
       participantCount: Math.max(exam.participantCount || 0, optimizedResults.length),
-      results: optimizedResults.length > 0 ? optimizedResults : undefined
+      results: optimizedResults.length > 0 ? optimizedResults : undefined,
+      // Retain full coordinates for internal optical exams; omit from publisher Excel exams to save 80KB each
+      omrMap: isInternal && exam.omrMap ? exam.omrMap : undefined
     };
   });
 
@@ -230,8 +283,14 @@ export function createOptimizedBackupPayload(source: AppState): any {
   const unattachedResults: ExamResult[] = [];
   (source.results || []).forEach(r => {
     const rId = String(r.id || '');
-    const rKey = r.scores ? Object.keys(r.scores)[0] + '_' + (r.studentNo || r.no) : '';
-    if (!capturedResultIds.has(rId) && (!rKey || !capturedResultIds.has(rKey))) {
+    const num = r.no !== undefined ? r.no : r.studentNo;
+    const isCaptured = (rId && capturedResultIds.has(rId)) ||
+      (num !== undefined && (
+        exams.some(e => capturedResultIds.has(`${e.id}_${num}`) || capturedResultIds.has(`${e.name}_${num}`)) ||
+        (r.scores && Object.keys(r.scores).some(k => capturedResultIds.has(`${k}_${num}`)))
+      ));
+
+    if (!isCaptured) {
       unattachedResults.push(optimizeExamResult(r));
     }
   });

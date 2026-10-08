@@ -2258,7 +2258,7 @@ export const StudentsView = () => {
                                 });
 
                                 const isExpanded = expandedExamId === reg.examId;
-                                const studentResult = state.results.find(r => (r.studentNo === student.no || r.studentNo === Number(student.no)));
+                                const studentResult = exam?.results?.find((r: any) => Number(r.studentNo || r.no) === Number(student.no)) || state.results.find(r => (r.studentNo === student.no || r.studentNo === Number(student.no)));
                                 const examDetail = studentResult?.details?.[examName];
                                 
                                 return (
@@ -2470,7 +2470,7 @@ export const StudentsView = () => {
                             });
 
                             const isExpanded = expandedExamId === reg.examId;
-                            const studentResult = state.results.find(r => (r.studentNo === student.no || r.studentNo === Number(student.no)));
+                            const studentResult = exam?.results?.find((r: any) => Number(r.studentNo || r.no) === Number(student.no)) || state.results.find(r => (r.studentNo === student.no || r.studentNo === Number(student.no)));
                             const examDetail = studentResult?.details?.[examName];
 
                             return (

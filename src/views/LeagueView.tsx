@@ -6,7 +6,7 @@ import {
   Award, Medal, Users, Calendar, CheckCircle2, ChevronRight, UserCheck,
   ChevronLeft, Printer, RefreshCw, Star, Layers, ArrowRight
 } from 'lucide-react';
-import { determineLeagueTeam, calculateAtaLigPoints, parseDate } from '../lib/utils';
+import { determineLeagueTeam, calculateAtaLigPoints, parseDate, normalizeTurkish } from '../lib/utils';
 import RulesView from './RulesView';
 
 export const LeagueView = () => {
@@ -15,6 +15,7 @@ export const LeagueView = () => {
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [showTactics, setShowTactics] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [modalShowAllExams, setModalShowAllExams] = useState(false);
   
   // Current month key (YYYY-MM format based on local calendar)
   const currentMonthKey = useMemo(() => {
@@ -48,6 +49,11 @@ export const LeagueView = () => {
     }
   }, [selectedMonth]);
 
+  // Reset modal exam toggle when opening a student modal
+  useEffect(() => {
+    setModalShowAllExams(false);
+  }, [selectedStudent]);
+
   const mentors = state.leagueMentors || {};
   const bonusPoints = state.leagueTeamPoints || {};
 
@@ -62,13 +68,22 @@ export const LeagueView = () => {
 
   const uniqueClasses = useMemo(() => {
     const classes = new Set<string>();
-    state.results.forEach(r => {
+    (state.students || []).forEach(s => {
+      if (s.className) classes.add(s.className.trim());
+    });
+    (state.exams || []).forEach(e => {
+      (e.results || []).forEach((r: any) => {
+        if (r.studentClass) classes.add(r.studentClass.trim());
+        if (r.classStr && r.sectionStr) classes.add(`${r.classStr}-${r.sectionStr}`.trim());
+      });
+    });
+    (state.results || []).forEach(r => {
       const matchedStudent = state.students.find(s => s.no === r.studentNo);
       const displayClass = matchedStudent ? matchedStudent.className : r.studentClass;
       if (displayClass) classes.add(displayClass.trim());
     });
     return Array.from(classes).sort();
-  }, [state.results, state.students]);
+  }, [state.results, state.students, state.exams]);
 
   const allAcademicMonths = useMemo(() => {
     const monthMap = new Map<string, { key: string; label: string; shortLabel: string; hasData: boolean; examCount: number; timestamp: number }>();
@@ -156,10 +171,19 @@ export const LeagueView = () => {
     return allAcademicMonths.map(m => m.key);
   }, [allAcademicMonths]);
 
-  // Safety fallback if selectedMonth is not present in available exam months
+  // Safety fallback if selectedMonth has no data or is not present in available exam months
   useEffect(() => {
-    if (selectedMonth !== 'all' && allAcademicMonths.length > 0 && !allAcademicMonths.some(m => m.key === selectedMonth)) {
-      setSelectedMonth('all');
+    if (selectedMonth !== 'all' && allAcademicMonths.length > 0) {
+      const currentSelected = allAcademicMonths.find(m => m.key === selectedMonth);
+      if (!currentSelected || currentSelected.examCount === 0) {
+        const monthsWithExams = allAcademicMonths.filter(m => m.hasData && m.examCount > 0);
+        if (monthsWithExams.length > 0) {
+          // Otomatik olarak sınavı olan en güncel aya konumlan
+          setSelectedMonth(monthsWithExams[monthsWithExams.length - 1].key);
+        } else if (!currentSelected) {
+          setSelectedMonth('all');
+        }
+      }
     }
   }, [allAcademicMonths, selectedMonth]);
 
@@ -183,9 +207,34 @@ export const LeagueView = () => {
   // Base list of students filtered by grade and monthly calculation
   const baseStudents = useMemo(() => {
     return state.students.filter(s => {
-      const hasExams = state.results.some(
-        r => r.studentNo === s.no && s.no !== 0 && Object.keys(r.scores || {}).length > 0 && Object.values(r.scores || {}).some(score => (score as number) > 0)
+      const sNo = Number(s.no) || 0;
+      const sNameNorm = s.name ? normalizeTurkish(s.name).trim().toLowerCase() : '';
+
+      // 1. Sınavların kendi results dizisinde arama (Birincil kaynak)
+      const hasExamInExamObj = (state.exams || []).some(e => 
+        (e.results || []).some((r: any) => {
+          const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
+          if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
+          if (s.id && r.studentId && s.id === r.studentId) return true;
+          const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
+          return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
+        })
       );
+
+      // 2. Global sonuç listesinde arama (İkincil kaynak)
+      const hasExamInGlobal = (state.results || []).some((r: any) => {
+        const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
+        const matchesStudent = (sNo > 0 && rNo > 0 && rNo === sNo) ||
+          (s.id && r.studentId && s.id === r.studentId) ||
+          (sNameNorm && (r.name || r.studentName) && normalizeTurkish(r.name || r.studentName).trim().toLowerCase() === sNameNorm);
+        if (!matchesStudent) return false;
+        const hasScores = r.scores && Object.values(r.scores).some((val: any) => typeof val === 'number' && val > 0);
+        return Boolean(hasScores || (r.net && r.net > 0) || (r.lgsScore && r.lgsScore > 0));
+      });
+
+      const hasLeaguePoints = Boolean((s.leaguePoints && s.leaguePoints > 0) || (s as any).monthlyLeagueData);
+      const hasExams = hasExamInExamObj || hasExamInGlobal || hasLeaguePoints;
+
       let matchesGrade = true;
       if (selectedGrade !== 'all') {
         const lvl = getGradeLevel(s.className);
@@ -197,28 +246,175 @@ export const LeagueView = () => {
       }
       return matchesGrade && hasExams;
     }).map(s => {
-      let displayPoints = s.leaguePoints || 0;
-      let displayBadges = s.badges || {};
+      const sNo = Number(s.no) || 0;
+      const sNameNorm = s.name ? normalizeTurkish(s.name).trim().toLowerCase() : '';
+
+      // Öğrencinin katıldığı tüm sınavları eksiksiz tespit et
+      const studentExams = (state.exams || []).map(exam => {
+        const examRes = (exam.results || []).find((r: any) => {
+          const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
+          if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
+          if (s.id && r.studentId && s.id === r.studentId) return true;
+          const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
+          return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
+        });
+
+        const globalRes = (state.results || []).find((r: any) => {
+          const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
+          if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
+          if (s.id && r.studentId && s.id === r.studentId) return true;
+          const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
+          return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
+        });
+
+        const scoreInGlobal = globalRes?.scores 
+          ? (globalRes.scores[String(exam.id)] ?? globalRes.scores[exam.name]) 
+          : undefined;
+
+        const participated = Boolean(examRes) || (scoreInGlobal !== undefined && scoreInGlobal > 0);
+        if (!participated) return null;
+
+        const score = Number(
+          examRes?.evaluatedScore?.total?.lgsScore ?? 
+          examRes?.lgsScore ?? 
+          examRes?.evaluatedScore?.total?.net ?? 
+          examRes?.net ?? 
+          examRes?.average ?? 
+          scoreInGlobal ?? 
+          0
+        );
+
+        const details = examRes?.evaluatedScore?.subjectScores || 
+          examRes?.scores || 
+          globalRes?.details?.[exam.name]?.lessons || 
+          globalRes?.details?.lessons || 
+          globalRes?.evaluatedScore?.subjectScores;
+
+        return {
+          examId: exam.id,
+          name: exam.name,
+          date: exam.date,
+          score,
+          details,
+          examRes
+        };
+      }).filter(Boolean) as { examId: string; name: string; date: string; score: number; details: any; examRes: any }[];
+
+      studentExams.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+
+      // Kütükteki mevcut rozetleri başlangıç olarak al
+      const allStudentBadges: Record<string, number> = { ...(s.badges || {}) };
+      let calculatedTotalLP = 0;
+      const monthlyLPAccum: Record<string, number> = {};
+      const monthlyBadgesAccum: Record<string, Record<string, number>> = {};
+
+      studentExams.forEach((h, i) => {
+        const pastExams = studentExams.slice(0, i);
+        const prevAverage = pastExams.length > 0 ? (pastExams.reduce((sum, p) => sum + p.score, 0) / pastExams.length) : 0;
+        let pastTeam = pastExams.length > 0 ? determineLeagueTeam(prevAverage) : (s.leagueTeam || 'Taktik Avcıları');
+        if (pastTeam === 'Atanmadı') pastTeam = 'Taktik Avcıları';
+
+        const { earnedLP: calculatedLP, badgeCounts } = calculateAtaLigPoints(h.score, prevAverage, h.details, pastExams, pastTeam);
+
+        // Sınavda saklanmış earnedBadges varsa eksiksiz ekle
+        if (Array.isArray(h.examRes?.earnedBadges)) {
+          h.examRes.earnedBadges.forEach((bName: string) => {
+            const norm = normalizeTurkish(bName).toLowerCase().replace(/[\s\.]+/g, '');
+            if (norm.includes('tamisabet')) badgeCounts.tamIsabet = Math.max(badgeCounts.tamIsabet || 0, 1);
+            else if (norm.includes('kalkan')) badgeCounts.kalkan = Math.max(badgeCounts.kalkan || 0, 1);
+            else if (norm.includes('zirvebekcisi')) badgeCounts.zirveBekcisi = Math.max(badgeCounts.zirveBekcisi || 0, 1);
+            else if (norm.includes('zirve')) badgeCounts.zirve = Math.max(badgeCounts.zirve || 0, 1);
+            else if (norm.includes('ivmesampiyonu')) badgeCounts.ivmeSampiyonu = Math.max(badgeCounts.ivmeSampiyonu || 0, 1);
+            else if (norm.includes('ivme')) badgeCounts.ivme = Math.max(badgeCounts.ivme || 0, 1);
+            else if (norm.includes('lgsfatih')) badgeCounts.lgsFatihi = Math.max(badgeCounts.lgsFatihi || 0, 1);
+            else if (norm.includes('ankakus')) badgeCounts.ankaKusu = Math.max(badgeCounts.ankaKusu || 0, 1);
+            else if (norm.includes('kirmizikart')) badgeCounts.kirmiziKart = Math.max(badgeCounts.kirmiziKart || 0, 1);
+            else if (norm.includes('barajyikici')) badgeCounts.barajYikici = Math.max(badgeCounts.barajYikici || 0, 1);
+            else if (norm.includes('stratejimuhendisi')) badgeCounts.stratejiMuhendisi = Math.max(badgeCounts.stratejiMuhendisi || 0, 1);
+            else if (norm.includes('istikrarelcisi')) badgeCounts.istikrarElcisi = Math.max(badgeCounts.istikrarElcisi || 0, 1);
+            else if (norm.includes('sozelsovalye')) badgeCounts.sozelSovalyesi = Math.max(badgeCounts.sozelSovalyesi || 0, 1);
+            else if (norm.includes('sayisalkale')) badgeCounts.sayisalKalesi = Math.max(badgeCounts.sayisalKalesi || 0, 1);
+            else if (norm.includes('matematikuyanis') || norm.includes('matuyanis')) badgeCounts.matematikUyanisi = Math.max(badgeCounts.matematikUyanisi || 0, 1);
+            else if (norm.includes('dengecambaz')) badgeCounts.dengeCambazi = Math.max(badgeCounts.dengeCambazi || 0, 1);
+            else if (norm.includes('keskinnisan')) badgeCounts.keskinNisanci = Math.max(badgeCounts.keskinNisanci || 0, 1);
+            else if (norm.includes('temelatici')) badgeCounts.temelAtici = Math.max(badgeCounts.temelAtici || 0, 1);
+            else if (norm.includes('filozof')) badgeCounts.filozof = Math.max(badgeCounts.filozof || 0, 1);
+            else if (norm.includes('newton')) badgeCounts.newton = Math.max(badgeCounts.newton || 0, 1);
+            else if (norm.includes('pisagor')) badgeCounts.pisagor = Math.max(badgeCounts.pisagor || 0, 1);
+            else if (norm.includes('uyuyandev')) badgeCounts.uyuyanDev = Math.max(badgeCounts.uyuyanDev || 0, 1);
+            else if (norm.includes('sabirtasi')) badgeCounts.sabirTasi = Math.max(badgeCounts.sabirTasi || 0, 1);
+            else if (norm.includes('yinyang')) badgeCounts.yinYang = Math.max(badgeCounts.yinYang || 0, 1);
+          });
+        }
+
+        const finalLP = typeof h.examRes?.earnedLP === 'number' && h.examRes.earnedLP > 0 ? h.examRes.earnedLP : calculatedLP;
+        calculatedTotalLP += finalLP;
+
+        // Toplam rozet havuzuna ekle
+        Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
+          if (typeof count === 'number' && count > 0) {
+            allStudentBadges[k] = (allStudentBadges[k] || 0) + count;
+          }
+        });
+
+        // Aylık biriktir
+        if (h.date) {
+          const dObj = parseDate(h.date);
+          const mKey = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}`;
+          monthlyLPAccum[mKey] = (monthlyLPAccum[mKey] || 0) + finalLP;
+          if (!monthlyBadgesAccum[mKey]) monthlyBadgesAccum[mKey] = {};
+          Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
+            if (typeof count === 'number' && count > 0) {
+              monthlyBadgesAccum[mKey][k] = (monthlyBadgesAccum[mKey][k] || 0) + count;
+            }
+          });
+        }
+      });
+
+      // Transfer geçmişinden Anka Kuşu kontrolü
+      if (s.transferHistory && Array.isArray(s.transferHistory)) {
+        s.transferHistory.forEach((th: any) => {
+          if (th.from === 'Taktik Avcıları' && (th.to === 'Sıçrama Ustaları' || th.to === 'Kutup Yıldızları')) {
+            allStudentBadges.ankaKusu = (allStudentBadges.ankaKusu || 0) + 1;
+          }
+        });
+      }
+
+      let displayPoints = (s.leaguePoints !== undefined && s.leaguePoints > 0) ? s.leaguePoints : calculatedTotalLP;
+      let displayBadges = allStudentBadges;
+
       if (selectedMonth !== 'all') {
         const partitionData = state.arenaMonthlyData?.[selectedMonth];
         const studentPartition = partitionData?.studentsSummary?.find((ps: any) => ps.studentNo === s.no);
         if (studentPartition) {
-          displayPoints = studentPartition.monthlyLP || 0;
-          displayBadges = studentPartition.badges || {};
+          displayPoints = studentPartition.monthlyLP !== undefined ? studentPartition.monthlyLP : (monthlyLPAccum[selectedMonth] || 0);
+        } else if (monthlyLPAccum[selectedMonth] !== undefined) {
+          displayPoints = monthlyLPAccum[selectedMonth];
         } else {
           const monthlyData = (s as any).monthlyLeagueData;
           if (monthlyData && monthlyData[selectedMonth]) {
             displayPoints = monthlyData[selectedMonth].points || 0;
-            displayBadges = monthlyData[selectedMonth].badges || {};
           } else {
-            displayPoints = 0;
-            displayBadges = {};
+            displayPoints = s.leaguePoints || 0;
           }
         }
+
+        const mBadges = monthlyBadgesAccum[selectedMonth];
+        const hasMonthBadges = mBadges && Object.values(mBadges).some((v: any) => Number(v) > 0);
+        // Seçili ayda rozet varsa göster, yoksa öğrencinin genel rozetlerini göster (böylece eksik kalmaz)
+        displayBadges = hasMonthBadges ? mBadges : allStudentBadges;
       }
-      return { ...s, displayPoints, displayBadges };
+
+      return { 
+        ...s, 
+        badges: allStudentBadges, 
+        allBadges: allStudentBadges,
+        displayPoints, 
+        displayBadges,
+        examCount: studentExams.length 
+      };
     }).sort((a, b) => (b.displayPoints || 0) - (a.displayPoints || 0));
-  }, [state.students, state.results, selectedGrade, selectedMonth, state.arenaMonthlyData]);
+  }, [state.students, state.results, state.exams, selectedGrade, selectedMonth, state.arenaMonthlyData]);
 
   // Filtered by search and team tab
   const filteredStudents = useMemo(() => {
@@ -298,61 +494,127 @@ export const LeagueView = () => {
   };
 
   // Render Badge Pills Component
-  const renderBadges = (badges?: any, team?: string, compact = false) => {
-    if (!badges) return <span className="text-brand-ink/30 text-xs italic">-</span>;
+  const renderBadges = (rawBadges?: any, team?: string, compact = false) => {
+    if (!rawBadges) return <span className="text-brand-ink/30 text-xs italic">-</span>;
+
+    // Normalize incoming badges to a clean dictionary
+    const normCounts: Record<string, number> = {};
+    const customBadges: { label: string; count: number }[] = [];
+
+    const mapKey = (rawKey: string): string | null => {
+      const k = normalizeTurkish(rawKey).toLowerCase().replace(/[\s\.\-_]+/g, '');
+      if (k.includes('lgsfatih')) return 'lgsFatihi';
+      if (k.includes('ankakus')) return 'ankaKusu';
+      if (k.includes('zirvebekcisi')) return 'zirveBekcisi';
+      if (k.includes('ivmesampiyonu')) return 'ivmeSampiyonu';
+      if (k.includes('barajyikici')) return 'barajYikici';
+      if (k.includes('stratejimuhendisi') || k.includes('stratejimh')) return 'stratejiMuhendisi';
+      if (k.includes('istikrarelcisi')) return 'istikrarElcisi';
+      if (k.includes('sozelsovalye')) return 'sozelSovalyesi';
+      if (k.includes('sayisalkale')) return 'sayisalKalesi';
+      if (k.includes('matematikuyanis') || k.includes('matuyanis')) return 'matematikUyanisi';
+      if (k.includes('dengecambaz')) return 'dengeCambazi';
+      if (k.includes('keskinnisan')) return 'keskinNisanci';
+      if (k.includes('temelatici')) return 'temelAtici';
+      if (k.includes('filozof')) return 'filozof';
+      if (k.includes('newton')) return 'newton';
+      if (k.includes('pisagor')) return 'pisagor';
+      if (k.includes('uyuyandev')) return 'uyuyanDev';
+      if (k.includes('sabirtasi')) return 'sabirTasi';
+      if (k.includes('yinyang')) return 'yinYang';
+      if (k.includes('kalkan')) return 'kalkan';
+      if (k.includes('zirve')) return 'zirve';
+      if (k.includes('ivme')) return 'ivme';
+      if (k.includes('tamisabet')) return 'tamIsabet';
+      if (k.includes('kirmizikart')) return 'kirmiziKart';
+      if (k.includes('takimruhu')) return 'takimRuhu';
+      return null;
+    };
+
+    if (Array.isArray(rawBadges)) {
+      rawBadges.forEach(item => {
+        if (!item) return;
+        const name = typeof item === 'string' ? item : (item.name || item.label || '');
+        const mapped = mapKey(name);
+        if (mapped) {
+          normCounts[mapped] = (normCounts[mapped] || 0) + (typeof item === 'object' && item.count ? item.count : 1);
+        } else if (name) {
+          customBadges.push({ label: name, count: 1 });
+        }
+      });
+    } else if (typeof rawBadges === 'object') {
+      Object.entries(rawBadges).forEach(([key, val]) => {
+        const count = typeof val === 'number' ? val : (Number(val) || 0);
+        if (count <= 0) return;
+        const mapped = mapKey(key);
+        if (mapped) {
+          normCounts[mapped] = (normCounts[mapped] || 0) + count;
+        } else {
+          customBadges.push({ label: key, count });
+        }
+      });
+    }
+
     const list: { key: string; label: string; icon: string; count: number; bg: string; text: string; border: string }[] = [];
 
     // Efsanevi
-    if (badges.lgsFatihi > 0) list.push({ key: 'lf', label: 'LGS Fatihi', icon: '🏆', count: badges.lgsFatihi, bg: 'bg-amber-500', text: 'text-white font-extrabold', border: 'border-amber-400' });
-    if (badges.ankaKusu > 0) list.push({ key: 'ak', label: 'Anka Kuşu', icon: '🔥', count: badges.ankaKusu, bg: 'bg-gradient-to-r from-orange-500 to-amber-500', text: 'text-white font-extrabold', border: 'border-orange-400' });
+    if (normCounts.lgsFatihi > 0) list.push({ key: 'lf', label: 'LGS Fatihi', icon: '🏆', count: normCounts.lgsFatihi, bg: 'bg-amber-500', text: 'text-white font-extrabold', border: 'border-amber-400' });
+    if (normCounts.ankaKusu > 0) list.push({ key: 'ak', label: 'Anka Kuşu', icon: '🔥', count: normCounts.ankaKusu, bg: 'bg-gradient-to-r from-orange-500 to-amber-500', text: 'text-white font-extrabold', border: 'border-orange-400' });
 
     // Uzmanlık
-    if (badges.zirveBekcisi > 0) list.push({ key: 'zb', label: 'Zirve Bekçisi', icon: '🏰', count: badges.zirveBekcisi, bg: 'bg-fuchsia-100', text: 'text-fuchsia-900 font-bold', border: 'border-fuchsia-200' });
-    if (badges.ivmeSampiyonu > 0) list.push({ key: 'is', label: 'İvme Şampiyonu', icon: '⚡', count: badges.ivmeSampiyonu, bg: 'bg-cyan-100', text: 'text-cyan-900 font-bold', border: 'border-cyan-200' });
-    if (badges.barajYikici > 0) list.push({ key: 'by', label: 'Baraj Yıkıcı', icon: '🔨', count: badges.barajYikici, bg: 'bg-orange-100', text: 'text-orange-900 font-bold', border: 'border-orange-200' });
-    if (badges.stratejiMuhendisi > 0) list.push({ key: 'sm', label: 'Strateji Mh.', icon: '🧠', count: badges.stratejiMuhendisi, bg: 'bg-indigo-100', text: 'text-indigo-900 font-bold', border: 'border-indigo-200' });
-    if (badges.istikrarElcisi > 0) list.push({ key: 'ie', label: 'İstikrar Elçisi', icon: '🕊️', count: badges.istikrarElcisi, bg: 'bg-teal-100', text: 'text-teal-900 font-bold', border: 'border-teal-200' });
+    if (normCounts.zirveBekcisi > 0) list.push({ key: 'zb', label: 'Zirve Bekçisi', icon: '🏰', count: normCounts.zirveBekcisi, bg: 'bg-fuchsia-100', text: 'text-fuchsia-900 font-bold', border: 'border-fuchsia-200' });
+    if (normCounts.ivmeSampiyonu > 0) list.push({ key: 'is', label: 'İvme Şampiyonu', icon: '⚡', count: normCounts.ivmeSampiyonu, bg: 'bg-cyan-100', text: 'text-cyan-900 font-bold', border: 'border-cyan-200' });
+    if (normCounts.barajYikici > 0) list.push({ key: 'by', label: 'Baraj Yıkıcı', icon: '🔨', count: normCounts.barajYikici, bg: 'bg-orange-100', text: 'text-orange-900 font-bold', border: 'border-orange-200' });
+    if (normCounts.stratejiMuhendisi > 0) list.push({ key: 'sm', label: 'Strateji Mh.', icon: '🧠', count: normCounts.stratejiMuhendisi, bg: 'bg-indigo-100', text: 'text-indigo-900 font-bold', border: 'border-indigo-200' });
+    if (normCounts.istikrarElcisi > 0) list.push({ key: 'ie', label: 'İstikrar Elçisi', icon: '🕊️', count: normCounts.istikrarElcisi, bg: 'bg-teal-100', text: 'text-teal-900 font-bold', border: 'border-teal-200' });
 
     // Takım
-    if (badges.sozelSovalyesi > 0) list.push({ key: 'ss', label: 'Sözel Şövalyesi', icon: '📜', count: badges.sozelSovalyesi, bg: 'bg-amber-100', text: 'text-amber-900 font-bold', border: 'border-amber-200' });
-    if (badges.sayisalKalesi > 0) list.push({ key: 'sk', label: 'Sayısal Kalesi', icon: '🏰', count: badges.sayisalKalesi, bg: 'bg-amber-100', text: 'text-amber-900 font-bold', border: 'border-amber-200' });
-    if (badges.matematikUyanisi > 0) list.push({ key: 'mu', label: 'Mat. Uyanışı', icon: '💡', count: badges.matematikUyanisi, bg: 'bg-blue-100', text: 'text-blue-900 font-bold', border: 'border-blue-200' });
-    if (badges.dengeCambazi > 0) list.push({ key: 'dc', label: 'Denge Cambazı', icon: '⚖️', count: badges.dengeCambazi, bg: 'bg-blue-100', text: 'text-blue-900 font-bold', border: 'border-blue-200' });
-    if (badges.keskinNisanci > 0) list.push({ key: 'kn', label: 'Keskin Nişancı', icon: '🎯', count: badges.keskinNisanci, bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' });
-    if (badges.temelAtici > 0) list.push({ key: 'ta', label: 'Temel Atıcı', icon: '🧱', count: badges.temelAtici, bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' });
+    if (normCounts.sozelSovalyesi > 0) list.push({ key: 'ss', label: 'Sözel Şövalyesi', icon: '📜', count: normCounts.sozelSovalyesi, bg: 'bg-amber-100', text: 'text-amber-900 font-bold', border: 'border-amber-200' });
+    if (normCounts.sayisalKalesi > 0) list.push({ key: 'sk', label: 'Sayısal Kalesi', icon: '🏰', count: normCounts.sayisalKalesi, bg: 'bg-amber-100', text: 'text-amber-900 font-bold', border: 'border-amber-200' });
+    if (normCounts.matematikUyanisi > 0) list.push({ key: 'mu', label: 'Mat. Uyanışı', icon: '💡', count: normCounts.matematikUyanisi, bg: 'bg-blue-100', text: 'text-blue-900 font-bold', border: 'border-blue-200' });
+    if (normCounts.dengeCambazi > 0) list.push({ key: 'dc', label: 'Denge Cambazı', icon: '⚖️', count: normCounts.dengeCambazi, bg: 'bg-blue-100', text: 'text-blue-900 font-bold', border: 'border-blue-200' });
+    if (normCounts.keskinNisanci > 0) list.push({ key: 'kn', label: 'Keskin Nişancı', icon: '🎯', count: normCounts.keskinNisanci, bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' });
+    if (normCounts.temelAtici > 0) list.push({ key: 'ta', label: 'Temel Atıcı', icon: '🧱', count: normCounts.temelAtici, bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' });
 
     // Branş Efsaneleri
-    if (badges.filozof > 0) list.push({ key: 'filozof', label: 'Filozof', icon: '📚', count: badges.filozof, bg: 'bg-rose-100', text: 'text-rose-900 font-bold', border: 'border-rose-200' });
-    if (badges.newton > 0) list.push({ key: 'newton', label: 'Newton', icon: '🔭', count: badges.newton, bg: 'bg-sky-100', text: 'text-sky-900 font-bold', border: 'border-sky-200' });
-    if (badges.pisagor > 0) list.push({ key: 'pisagor', label: 'Pisagor', icon: '📐', count: badges.pisagor, bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' });
+    if (normCounts.filozof > 0) list.push({ key: 'filozof', label: 'Filozof', icon: '📚', count: normCounts.filozof, bg: 'bg-rose-100', text: 'text-rose-900 font-bold', border: 'border-rose-200' });
+    if (normCounts.newton > 0) list.push({ key: 'newton', label: 'Newton', icon: '🔭', count: normCounts.newton, bg: 'bg-sky-100', text: 'text-sky-900 font-bold', border: 'border-sky-200' });
+    if (normCounts.pisagor > 0) list.push({ key: 'pisagor', label: 'Pisagor', icon: '📐', count: normCounts.pisagor, bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' });
+
+    // Gizemli Rozetler
+    if (normCounts.uyuyanDev > 0) list.push({ key: 'ud', label: 'Uyuyan Dev', icon: '🦁', count: normCounts.uyuyanDev, bg: 'bg-violet-100', text: 'text-violet-900 font-bold', border: 'border-violet-200' });
+    if (normCounts.sabirTasi > 0) list.push({ key: 'st', label: 'Sabır Taşı', icon: '💎', count: normCounts.sabirTasi, bg: 'bg-stone-100', text: 'text-stone-900 font-bold', border: 'border-stone-200' });
+    if (normCounts.yinYang > 0) list.push({ key: 'yy', label: 'Yin Yang', icon: '☯️', count: normCounts.yinYang, bg: 'bg-zinc-100', text: 'text-zinc-900 font-bold', border: 'border-zinc-200' });
 
     // Temel
-    if (badges.kalkan > 0) list.push({ key: 'kalkan', label: 'Kalkan', icon: '🛡️', count: badges.kalkan, bg: 'bg-amber-100', text: 'text-amber-900 font-bold', border: 'border-amber-200' });
-    if (badges.zirve > 0) list.push({ key: 'zirve', label: 'Zirve', icon: '👑', count: badges.zirve, bg: 'bg-purple-100', text: 'text-purple-900 font-bold', border: 'border-purple-200' });
-    if (badges.ivme > 0) list.push({ key: 'ivme', label: 'İvme', icon: '🚀', count: badges.ivme, bg: 'bg-blue-100', text: 'text-blue-900 font-bold', border: 'border-blue-200' });
-    if (badges.tamIsabet > 0) list.push({ key: 'tamIsabet', label: 'Tam İsabet', icon: '🎯', count: badges.tamIsabet, bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' });
-    if (badges.kirmiziKart > 0) list.push({ key: 'kirmiziKart', label: 'Kırmızı Kart', icon: '🟥', count: badges.kirmiziKart, bg: 'bg-rose-100', text: 'text-rose-900 font-bold', border: 'border-rose-200' });
+    if (normCounts.kalkan > 0) list.push({ key: 'kalkan', label: 'Kalkan', icon: '🛡️', count: normCounts.kalkan, bg: 'bg-amber-100', text: 'text-amber-900 font-bold', border: 'border-amber-200' });
+    if (normCounts.zirve > 0) list.push({ key: 'zirve', label: 'Zirve', icon: '👑', count: normCounts.zirve, bg: 'bg-purple-100', text: 'text-purple-900 font-bold', border: 'border-purple-200' });
+    if (normCounts.ivme > 0) list.push({ key: 'ivme', label: 'İvme', icon: '🚀', count: normCounts.ivme, bg: 'bg-blue-100', text: 'text-blue-900 font-bold', border: 'border-blue-200' });
+    if (normCounts.tamIsabet > 0) list.push({ key: 'tamIsabet', label: 'Tam İsabet', icon: '🎯', count: normCounts.tamIsabet, bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' });
+    if (normCounts.kirmiziKart > 0) list.push({ key: 'kirmiziKart', label: 'Kırmızı Kart', icon: '🟥', count: normCounts.kirmiziKart, bg: 'bg-rose-100', text: 'text-rose-900 font-bold', border: 'border-rose-200' });
+    if (normCounts.takimRuhu > 0) list.push({ key: 'takimRuhu', label: 'Takım Ruhu', icon: '🤝', count: normCounts.takimRuhu, bg: 'bg-teal-100', text: 'text-teal-900 font-bold', border: 'border-teal-200' });
+
+    // Custom badges
+    customBadges.forEach((cb, idx) => {
+      list.push({ key: `custom-${idx}`, label: cb.label, icon: '🏅', count: cb.count, bg: 'bg-amber-50', text: 'text-amber-950 font-bold', border: 'border-amber-200' });
+    });
 
     if (list.length === 0) return <span className="text-brand-ink/30 text-xs italic">-</span>;
 
     if (compact) {
       return (
-        <div className="flex flex-wrap items-center gap-1">
-          {list.slice(0, 4).map(b => (
+        <div className="flex flex-wrap items-center gap-1 max-w-full">
+          {list.map(b => (
             <span 
               key={b.key} 
-              title={`${b.label} (${b.count})`}
-              className={`${b.bg} ${b.text} border ${b.border} text-[10px] px-1.5 py-0.5 rounded-md shadow-2xs inline-flex items-center gap-0.5 shrink-0`}
+              title={`${b.label} (x${b.count})`}
+              className={`${b.bg} ${b.text} border ${b.border} text-[10px] px-1.5 py-0.5 rounded-md shadow-2xs inline-flex items-center gap-1 shrink-0 transition-transform hover:scale-105`}
             >
               <span>{b.icon}</span>
-              {b.count > 1 && <span className="text-[9px] opacity-80">x{b.count}</span>}
+              <span className="font-bold text-[9.5px] leading-none">{b.label}</span>
+              {b.count > 1 && <span className="opacity-90 font-black text-[8.5px]">x{b.count}</span>}
             </span>
           ))}
-          {list.length > 4 && (
-            <span className="text-[10px] font-bold text-brand-ink/50 bg-[#F2EFE9] px-1.5 py-0.5 rounded-md">
-              +{list.length - 4}
-            </span>
-          )}
         </div>
       );
     }
@@ -1308,7 +1570,7 @@ export const LeagueView = () => {
                         {(s.displayPoints !== undefined ? s.displayPoints : s.leaguePoints) || 0} LP
                       </td>
                       <td className="py-3 px-3">
-                        {renderBadges((s.displayBadges || s.badges), s.leagueTeam)}
+                        {renderBadges((s.displayBadges || s.allBadges || s.badges), s.leagueTeam)}
                       </td>
                     </tr>
                   ))}
@@ -1388,7 +1650,7 @@ export const LeagueView = () => {
                         </span>
 
                         <div className="min-w-0 overflow-x-auto no-scrollbar flex-1">
-                          {renderBadges((s.displayBadges || s.badges), s.leagueTeam, true)}
+                          {renderBadges((s.displayBadges || s.allBadges || s.badges), s.leagueTeam, true)}
                         </div>
                       </div>
                       
@@ -1479,7 +1741,7 @@ export const LeagueView = () => {
                               {(s.displayPoints !== undefined ? s.displayPoints : s.leaguePoints) || 0} LP
                             </td>
                             <td className="py-3">
-                              {renderBadges((s.displayBadges || s.badges), s.leagueTeam, true)}
+                              {renderBadges((s.allBadges || s.badges || s.displayBadges), s.leagueTeam, true)}
                             </td>
                           </tr>
                         ))}
@@ -1774,26 +2036,109 @@ export const LeagueView = () => {
 
           {/* 9. Öğrenci Detay Modalı (Bottom sheet on Mobile, Modal on Desktop) */}
           {selectedStudent && (() => {
-            const studentResult = state.results.find(r => r.studentNo === selectedStudent.no && selectedStudent.no !== 0);
-            
-            const allHistory = state.exams
-              .filter(e => studentResult?.scores?.[e.name])
-              .sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime())
-              .map(e => ({
-                score: studentResult!.scores[e.name],
-                details: studentResult!.details?.[e.name]?.lessons,
-                name: e.name,
-                date: e.date
-              }));
+            const sNo = selectedStudent.no !== undefined ? Number(selectedStudent.no) : 0;
+            const sNameNorm = selectedStudent.name ? normalizeTurkish(selectedStudent.name).trim().toLowerCase() : '';
+
+            // 1. Sınavların kendi altındaki results listeleri ve global results üzerinden öğrencinin girdiği tüm sınavları bul
+            const allHistory = (state.exams || [])
+              .map(exam => {
+                // Sınavın kendi sonuçlarında ara (Birincil kaynak)
+                const examRes = (exam.results || []).find((r: any) => {
+                  const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
+                  if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
+                  if (selectedStudent.id && r.studentId && selectedStudent.id === r.studentId) return true;
+                  const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
+                  return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
+                });
+
+                // Global state.results içinde ara (İkincil kaynak)
+                const globalRes = (state.results || []).find((r: any) => {
+                  const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
+                  if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
+                  if (selectedStudent.id && r.studentId && selectedStudent.id === r.studentId) return true;
+                  const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
+                  return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
+                });
+
+                const scoreInGlobal = globalRes?.scores 
+                  ? (globalRes.scores[String(exam.id)] ?? globalRes.scores[exam.name]) 
+                  : undefined;
+
+                const participated = Boolean(examRes) || (scoreInGlobal !== undefined && scoreInGlobal > 0);
+                if (!participated) return null;
+
+                const score = Number(
+                  examRes?.evaluatedScore?.total?.lgsScore ?? 
+                  examRes?.lgsScore ?? 
+                  examRes?.evaluatedScore?.total?.net ?? 
+                  examRes?.net ?? 
+                  examRes?.average ?? 
+                  scoreInGlobal ?? 
+                  0
+                );
+
+                const details = 
+                  examRes?.evaluatedScore?.subjectScores || 
+                  examRes?.scores || 
+                  globalRes?.details?.[exam.name]?.lessons || 
+                  globalRes?.details?.lessons || 
+                  globalRes?.evaluatedScore?.subjectScores;
+
+                return {
+                  examId: exam.id,
+                  name: exam.name,
+                  date: exam.date,
+                  score,
+                  details,
+                  examRes
+                };
+              })
+              .filter(Boolean) as { examId: string; name: string; date: string; score: number; details: any; examRes: any }[];
+
+            allHistory.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
               
             const rawHistory = allHistory.map((h, i) => {
               const pastExams = allHistory.slice(0, i);
               const prevAverage = pastExams.length > 0 ? (pastExams.reduce((sum, p) => sum + p.score, 0) / pastExams.length) : 0;
               let pastTeam = pastExams.length > 0 ? determineLeagueTeam(prevAverage) : 'Taktik Avcıları';
               if (pastTeam === 'Atanmadı') pastTeam = 'Taktik Avcıları';
-              const { earnedLP, badgeCounts } = calculateAtaLigPoints(h.score, prevAverage, h.details, pastExams, pastTeam);
               
-              let finalEarnedLP = earnedLP;
+              const { earnedLP: calculatedLP, badgeCounts } = calculateAtaLigPoints(h.score, prevAverage, h.details, pastExams, pastTeam);
+
+              // Sınav sonucunda önceden saklanmış rozetler varsa eksiksiz eşle
+              if (Array.isArray(h.examRes?.earnedBadges)) {
+                h.examRes.earnedBadges.forEach((bName: string) => {
+                  const norm = normalizeTurkish(bName).toLowerCase().replace(/[\s\.]+/g, '');
+                  if (norm.includes('tamisabet')) badgeCounts.tamIsabet = Math.max(badgeCounts.tamIsabet || 0, 1);
+                  else if (norm.includes('kalkan')) badgeCounts.kalkan = Math.max(badgeCounts.kalkan || 0, 1);
+                  else if (norm.includes('zirvebekcisi')) badgeCounts.zirveBekcisi = Math.max(badgeCounts.zirveBekcisi || 0, 1);
+                  else if (norm.includes('zirve')) badgeCounts.zirve = Math.max(badgeCounts.zirve || 0, 1);
+                  else if (norm.includes('ivmesampiyonu')) badgeCounts.ivmeSampiyonu = Math.max(badgeCounts.ivmeSampiyonu || 0, 1);
+                  else if (norm.includes('ivme')) badgeCounts.ivme = Math.max(badgeCounts.ivme || 0, 1);
+                  else if (norm.includes('lgsfatih')) badgeCounts.lgsFatihi = Math.max(badgeCounts.lgsFatihi || 0, 1);
+                  else if (norm.includes('ankakus')) badgeCounts.ankaKusu = Math.max(badgeCounts.ankaKusu || 0, 1);
+                  else if (norm.includes('kirmizikart')) badgeCounts.kirmiziKart = Math.max(badgeCounts.kirmiziKart || 0, 1);
+                  else if (norm.includes('barajyikici')) badgeCounts.barajYikici = Math.max(badgeCounts.barajYikici || 0, 1);
+                  else if (norm.includes('stratejimuhendisi')) badgeCounts.stratejiMuhendisi = Math.max(badgeCounts.stratejiMuhendisi || 0, 1);
+                  else if (norm.includes('istikrarelcisi')) badgeCounts.istikrarElcisi = Math.max(badgeCounts.istikrarElcisi || 0, 1);
+                  else if (norm.includes('sozelsovalye')) badgeCounts.sozelSovalyesi = Math.max(badgeCounts.sozelSovalyesi || 0, 1);
+                  else if (norm.includes('sayisalkale')) badgeCounts.sayisalKalesi = Math.max(badgeCounts.sayisalKalesi || 0, 1);
+                  else if (norm.includes('matematikuyanis') || norm.includes('matuyanis')) badgeCounts.matematikUyanisi = Math.max(badgeCounts.matematikUyanisi || 0, 1);
+                  else if (norm.includes('dengecambaz')) badgeCounts.dengeCambazi = Math.max(badgeCounts.dengeCambazi || 0, 1);
+                  else if (norm.includes('keskinnisan')) badgeCounts.keskinNisanci = Math.max(badgeCounts.keskinNisanci || 0, 1);
+                  else if (norm.includes('temelatici')) badgeCounts.temelAtici = Math.max(badgeCounts.temelAtici || 0, 1);
+                  else if (norm.includes('filozof')) badgeCounts.filozof = Math.max(badgeCounts.filozof || 0, 1);
+                  else if (norm.includes('newton')) badgeCounts.newton = Math.max(badgeCounts.newton || 0, 1);
+                  else if (norm.includes('pisagor')) badgeCounts.pisagor = Math.max(badgeCounts.pisagor || 0, 1);
+                  else if (norm.includes('uyuyandev')) badgeCounts.uyuyanDev = Math.max(badgeCounts.uyuyanDev || 0, 1);
+                  else if (norm.includes('sabirtasi')) badgeCounts.sabirTasi = Math.max(badgeCounts.sabirTasi || 0, 1);
+                  else if (norm.includes('yinyang')) badgeCounts.yinYang = Math.max(badgeCounts.yinYang || 0, 1);
+                });
+              }
+
+              let finalEarnedLP = typeof h.examRes?.earnedLP === 'number' && h.examRes.earnedLP > 0
+                ? h.examRes.earnedLP
+                : calculatedLP;
               
               // Re-calculate Anka Kusu for this specific exam
               const transfer = selectedStudent.transferHistory?.find((th: any) => th.examName === h.name);
@@ -1811,7 +2156,7 @@ export const LeagueView = () => {
               };
             }).reverse(); // newest first
 
-            const history = rawHistory.filter(h => {
+            const periodHistory = rawHistory.filter(h => {
               if (selectedMonth === 'all') return true;
               if (h.date) {
                 const dateObj = parseDate(h.date);
@@ -1820,6 +2165,23 @@ export const LeagueView = () => {
               }
               return false;
             });
+
+            // Seçilen dönemde sınav yoksa veya kullanıcı tümünü görmek istiyorsa rawHistory göster
+            const isShowingAll = modalShowAllExams || selectedMonth === 'all' || periodHistory.length === 0;
+            const history = isShowingAll ? rawHistory : periodHistory;
+
+            // Öğrencinin kazandığı tüm rozetleri birleştir (Kütük genel lig rozetleri + sınav bazlı rozetler)
+            const aggregatedBadges: Record<string, number> = { ...(selectedStudent.allBadges || selectedStudent.badges || {}) };
+            rawHistory.forEach(h => {
+              if (h.badgeCounts) {
+                Object.entries(h.badgeCounts).forEach(([k, count]: [string, any]) => {
+                  if (typeof count === 'number' && count > 0) {
+                    aggregatedBadges[k] = (aggregatedBadges[k] || 0) + count;
+                  }
+                });
+              }
+            });
+            const totalBadgesCount = Object.values(aggregatedBadges).reduce((sum, c) => sum + (typeof c === 'number' && c > 0 ? c : 0), 0);
 
             const studentRank = baseStudents.findIndex(s => s.no === selectedStudent.no) + 1;
 
@@ -1881,9 +2243,37 @@ export const LeagueView = () => {
                       <div className="bg-[#FAF9F6] p-3 rounded-2xl border border-brand-border/70 text-center col-span-2 sm:col-span-1">
                         <p className="text-[10px] uppercase font-bold text-brand-ink/50 tracking-wider">Girdiği Sınavlar</p>
                         <p className="text-xl sm:text-2xl font-serif font-black text-blue-700 tabular-nums mt-0.5">
-                          {history.length} Deneme
+                          {rawHistory.length} Deneme
                         </p>
+                        {selectedMonth !== 'all' && rawHistory.length > 0 && (
+                          <p className="text-[10px] font-semibold text-brand-ink/50 mt-0.5">
+                            {selectedMonthLabel}: {periodHistory.length} • Toplam: {rawHistory.length}
+                          </p>
+                        )}
                       </div>
+                    </div>
+
+                    {/* Öğrencinin Kazandığı Rozetler Vitrini */}
+                    <div className="bg-[#FAF9F6] border border-brand-border/70 rounded-2xl p-4 shadow-2xs space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-brand-ink/70 flex items-center gap-1.5">
+                          <span>🏅</span>
+                          <span>Öğrencinin Kazandığı Rozetler</span>
+                        </h4>
+                        <span className="text-[11px] font-bold text-brand-ink/70 bg-white px-2.5 py-0.5 rounded-full border border-brand-border/60">
+                          {totalBadgesCount > 0 ? `${totalBadgesCount} Rozet Kazanıldı` : 'Henüz Rozet Yok'}
+                        </span>
+                      </div>
+                      
+                      {totalBadgesCount > 0 ? (
+                        <div className="bg-white p-3 rounded-xl border border-brand-border/50">
+                          {renderBadges(aggregatedBadges, selectedStudent.leagueTeam)}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-brand-ink/50 italic py-2">
+                          Öğrencinin henüz kazanılmış bir rozeti bulunmuyor. Herhangi bir derste 0 yanlış yaparak "Tam İsabet" veya boş bırakarak "Kalkan" kazanabilirsiniz.
+                        </p>
+                      )}
                     </div>
 
                     {/* Transfer History */}
@@ -1923,10 +2313,45 @@ export const LeagueView = () => {
 
                     {/* Exam History Timeline */}
                     <div>
-                      <h4 className="font-bold text-xs uppercase tracking-wider text-brand-ink/70 mb-2.5 flex items-center gap-1.5">
-                        <span>📋</span>
-                        <span>Sınav Bazlı LP ve Rozet Kazanımları</span>
-                      </h4>
+                      <div className="flex items-center justify-between mb-2.5 flex-wrap gap-2">
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-brand-ink/70 flex items-center gap-1.5">
+                          <span>📋</span>
+                          <span>Sınav Bazlı LP ve Rozet Kazanımları</span>
+                        </h4>
+                        {selectedMonth !== 'all' && rawHistory.length > 0 && (
+                          <div className="flex items-center bg-[#FAF9F6] p-0.5 rounded-lg border border-brand-border/70 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => setModalShowAllExams(false)}
+                              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                                !modalShowAllExams && periodHistory.length > 0
+                                  ? 'bg-white text-brand-ink shadow-2xs'
+                                  : 'text-brand-ink/60 hover:text-brand-ink'
+                              }`}
+                            >
+                              Bu Ay ({periodHistory.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModalShowAllExams(true)}
+                              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                                modalShowAllExams || periodHistory.length === 0
+                                  ? 'bg-white text-brand-ink shadow-2xs'
+                                  : 'text-brand-ink/60 hover:text-brand-ink'
+                              }`}
+                            >
+                              Tüm Sınavlar ({rawHistory.length})
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bilgilendirme Notu (Seçili ayda sınav yok ama diğer aylarda varsa) */}
+                      {selectedMonth !== 'all' && periodHistory.length === 0 && rawHistory.length > 0 && (
+                        <div className="bg-amber-50/80 border border-amber-200/80 text-amber-900 text-xs rounded-xl p-3 mb-3 leading-relaxed">
+                          Seçili filtre döneminde ({selectedMonthLabel}) sınav bulunmuyor. Öğrencinin diğer dönemlerde katıldığı <strong>{rawHistory.length} deneme sınavı</strong> aşağıda listelenmektedir.
+                        </div>
+                      )}
 
                       {history.length > 0 ? (
                         <div className="space-y-3">
@@ -1936,7 +2361,7 @@ export const LeagueView = () => {
                                 <div>
                                   <h5 className="font-bold text-xs sm:text-sm text-brand-ink">{h.examName}</h5>
                                   <p className="text-[11px] font-medium text-brand-ink/60">
-                                    {parseDate(h.date).toLocaleDateString('tr-TR')} • Puan: <span className="font-bold text-blue-700">{h.score.toFixed(2)}</span>
+                                    {parseDate(h.date).toLocaleDateString('tr-TR')} • Puan / Net: <span className="font-bold text-blue-700">{h.score.toFixed(2)}</span>
                                   </p>
                                 </div>
                                 <div className={`px-2.5 py-1 rounded-xl text-xs font-bold font-mono shadow-2xs ${
@@ -1960,7 +2385,7 @@ export const LeagueView = () => {
                         </div>
                       ) : (
                         <p className="text-xs text-brand-ink/50 italic text-center py-8 bg-[#FAF9F6] rounded-xl border border-brand-border/60">
-                          Seçilen dönemde sınav kaydı bulunmuyor.
+                          Öğrenciye ait herhangi bir deneme sınavı kaydı bulunmuyor.
                         </p>
                       )}
                     </div>

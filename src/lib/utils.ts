@@ -1,6 +1,8 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import * as XLSX from "xlsx";
+import { normalizeTurkish } from './omrEngine';
+export { normalizeTurkish };
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -268,12 +270,14 @@ export const calculateAtaLigPoints = (examScore: number, previousAverage: number
   let matN = 0, turkN = 0, fenN = 0, inkN = 0, dinN = 0;
   let allNetNonNegative = true;
 
-  if (lessonsDetails) {
-    Object.values(lessonsDetails).forEach((lesson: any) => {
-      const name = normalizeForSearch(lesson.name || lesson.lessonName || '');
-      const lD = lesson.D || 0;
-      const lY = lesson.Y || 0;
-      let lN = lesson.N !== undefined ? lesson.N : (lesson.net !== undefined ? lesson.net : (lesson.n !== undefined ? lesson.n : (lD - lY / 3)));
+  if (lessonsDetails && typeof lessonsDetails === 'object') {
+    Object.entries(lessonsDetails).forEach(([k, lesson]: [string, any]) => {
+      if (!lesson || typeof lesson !== 'object') return;
+      const name = normalizeForSearch(lesson.name || lesson.lessonName || k || '');
+      const lD = lesson.D !== undefined ? Number(lesson.D) : (lesson.correct !== undefined ? Number(lesson.correct) : 0);
+      const lY = lesson.Y !== undefined ? Number(lesson.Y) : (lesson.wrong !== undefined ? Number(lesson.wrong) : 0);
+      const lB = lesson.B !== undefined ? Number(lesson.B) : (lesson.empty !== undefined ? Number(lesson.empty) : 0);
+      let lN = lesson.N !== undefined ? Number(lesson.N) : (lesson.net !== undefined ? Number(lesson.net) : (lesson.n !== undefined ? Number(lesson.n) : (lD - lY / 3)));
       
       if (lN < 0) allNetNonNegative = false;
       
@@ -284,22 +288,22 @@ export const calculateAtaLigPoints = (examScore: number, previousAverage: number
       if (name.includes('fen')) { fenD = lD; fenY += lY; fenN = lN; }
       if (name.includes('tur')) { turkD = lD; turkY = lY; turkN = lN; }
 
-      totalD += lesson.D || 0;
-      totalY += lesson.Y || 0;
-      totalB += lesson.B || 0;
+      totalD += lD;
+      totalY += lY;
+      totalB += lB;
       
-      // Tam İsabet (+10 LP): Y === 0 and D > 0
-      if (lesson.Y === 0 && (lesson.D || 0) > 0) {
+      // Tam İsabet (+10 LP): 0 Yanlış ve en az 1 Doğru
+      if (lY === 0 && lD > 0) {
         earnedLP += 10;
         badgeCounts.tamIsabet += 1;
         earnedBadges.push('Tam İsabet');
       }
 
       if (name.includes('mat')) {
-        if (lesson.N !== undefined) mathNet = lesson.N;
-        else if (lesson.net !== undefined) mathNet = lesson.net;
-        else if (lesson.n !== undefined) mathNet = lesson.n;
-        else mathNet = (lesson.D || 0) - ((lesson.Y || 0) / 3);
+        if (lesson.N !== undefined) mathNet = Number(lesson.N);
+        else if (lesson.net !== undefined) mathNet = Number(lesson.net);
+        else if (lesson.n !== undefined) mathNet = Number(lesson.n);
+        else mathNet = lD - (lY / 3);
       }
     });
   }
@@ -525,90 +529,182 @@ export function parseDate(dateStr: string | undefined): Date {
   const d = new Date(dateStr);
   return isNaN(d.getTime()) ? new Date() : d;
 }
-export function recalculateLeagueForStudents(students: any[], results: any[], exams: any[], approvedTransfers: any[] = []) {
+export function recalculateLeagueForStudents(students: any[], results: any[] = [], exams: any[] = [], approvedTransfers: any[] = []) {
   const sortedExams = [...exams].sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
   
   const studentExamData: Record<number, Record<string, { team: string, participated: boolean }>> = {};
   
   const firstPass = students.map(student => {
-    const result = results.find(r => r.studentNo === student.no && student.no !== 0);
+    const sNo = Number(student.no) || 0;
+    const sNameNorm = student.name ? normalizeTurkish(student.name).trim().toLowerCase() : '';
+
+    // Global sonuç listesindeki kaydı (varsa)
+    const globalResult = (results || []).find((r: any) => {
+      const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : undefined);
+      if (sNo > 0 && rNo !== undefined && rNo === sNo) return true;
+      if (sNameNorm && r.name && normalizeTurkish(r.name).trim().toLowerCase() === sNameNorm) return true;
+      return false;
+    });
     
     let totalLP = 0;
     let currentTeam = 'Atanmadı';
     let lastTransfer = '';
     const transferHistory: any[] = [];
     let pendingTransfer: any = null;
-    const badges: Record<string, number> = { kalkan: 0, ivme: 0, zirve: 0, tamIsabet: 0, kirmiziKart: 0, zirveBekcisi: 0, ivmeSampiyonu: 0, barajYikici: 0, stratejiMuhendisi: 0, istikrarElcisi: 0, lgsFatihi: 0, ankaKusu: 0 };
+    const badges: Record<string, number> = { 
+      kalkan: 0, ivme: 0, zirve: 0, tamIsabet: 0, kirmiziKart: 0, 
+      zirveBekcisi: 0, ivmeSampiyonu: 0, barajYikici: 0, stratejiMuhendisi: 0, istikrarElcisi: 0, 
+      lgsFatihi: 0, ankaKusu: 0, sozelSovalyesi: 0, sayisalKalesi: 0, matematikUyanisi: 0, 
+      dengeCambazi: 0, keskinNisanci: 0, temelAtici: 0, uyuyanDev: 0, sabirTasi: 0, 
+      yinYang: 0, filozof: 0, newton: 0, pisagor: 0 
+    };
     const monthlyLeagueData: Record<string, { points: number, badges: Record<string, number> }> = {};
     
     studentExamData[student.no] = {};
 
-    if (result && result.scores) {
-      const historyExamsForStudent: any[] = [];
-      let runningSum = 0;
-      let count = 0;
+    const historyExamsForStudent: any[] = [];
+    let runningSum = 0;
+    let count = 0;
+    
+    for (const exam of sortedExams) {
+      // 1. Sınavın kendi altındaki results listesinde öğrenciyi ara (Birincil kaynak)
+      const examRes = (exam.results || []).find((r: any) => {
+        const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : undefined);
+        if (sNo > 0 && rNo !== undefined && rNo === sNo) return true;
+        if (sNameNorm && r.name && normalizeTurkish(r.name).trim().toLowerCase() === sNameNorm) return true;
+        return false;
+      });
+
+      // 2. Global sonuç listesinde skor kontrolü
+      const scoreInGlobal = globalResult?.scores 
+        ? (globalResult.scores[String(exam.id)] ?? globalResult.scores[exam.name]) 
+        : undefined;
+
+      const participated = Boolean(examRes) || (scoreInGlobal !== undefined && scoreInGlobal > 0);
+      let teamForThisExam = count > 0 ? determineLeagueTeam(runningSum / count) : 'Taktik Avcıları';
+      if (teamForThisExam === 'Atanmadı') teamForThisExam = 'Taktik Avcıları';
       
-      for (const exam of sortedExams) {
-        const participated = result.scores[exam.name] !== undefined && result.scores[exam.name] > 0;
-        let teamForThisExam = count > 0 ? determineLeagueTeam(runningSum / count) : 'Taktik Avcıları';
-        if (teamForThisExam === 'Atanmadı') teamForThisExam = 'Taktik Avcıları';
-        
-        studentExamData[student.no][exam.name] = {
-           team: teamForThisExam,
-           participated
-        };
-        
-        if (participated) {
-          const score = result.scores[exam.name];
-          const details = result.details?.[exam.name]?.lessons;
-          const prevAverage = count > 0 ? (runningSum / count) : 0;
-          
-          const { earnedLP, badgeCounts } = calculateAtaLigPoints(score, prevAverage, details, historyExamsForStudent, teamForThisExam);
-          
-          totalLP += earnedLP;
-          Object.keys(badgeCounts).forEach(k => {
-             badges[k] += badgeCounts[k as keyof typeof badgeCounts];
+      studentExamData[student.no][exam.name] = {
+         team: teamForThisExam,
+         participated
+      };
+      
+      if (participated) {
+        const score = Number(
+          examRes?.evaluatedScore?.total?.lgsScore ?? 
+          examRes?.lgsScore ?? 
+          examRes?.evaluatedScore?.total?.net ?? 
+          examRes?.net ?? 
+          examRes?.average ?? 
+          scoreInGlobal ?? 
+          0
+        );
+        const rawDetails = examRes?.evaluatedScore?.subjectScores 
+          || examRes?.scores 
+          || globalResult?.details?.[exam.name]?.lessons 
+          || globalResult?.details?.lessons 
+          || globalResult?.evaluatedScore?.subjectScores;
+
+        let resolvedDetails = rawDetails;
+        if (rawDetails && exam.subjects && Array.isArray(exam.subjects)) {
+          const mapped: Record<string, any> = {};
+          Object.entries(rawDetails).forEach(([key, val]: [string, any]) => {
+            const sub = exam.subjects.find((s: any) => String(s.id) === String(key) || String(s.name) === String(key));
+            const subName = sub ? sub.name : key;
+            mapped[subName] = { ...(typeof val === 'object' ? val : {}), name: subName };
           });
-          
-          // Track monthly points and badges based on exam.date
-          const dateObj = parseDate(exam.date);
-          const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
-          if (!monthlyLeagueData[monthKey]) {
-            monthlyLeagueData[monthKey] = {
-              points: 0,
-              badges: { kalkan: 0, ivme: 0, zirve: 0, tamIsabet: 0, kirmiziKart: 0, zirveBekcisi: 0, ivmeSampiyonu: 0, barajYikici: 0, stratejiMuhendisi: 0, istikrarElcisi: 0, lgsFatihi: 0, ankaKusu: 0, sozelSovalyesi: 0, sayisalKalesi: 0, matematikUyanisi: 0, dengeCambazi: 0, keskinNisanci: 0, temelAtici: 0 }
-            };
+          resolvedDetails = mapped;
+        }
+
+        const prevAverage = count > 0 ? (runningSum / count) : 0;
+        const { earnedLP: calcLP, badgeCounts } = calculateAtaLigPoints(score, prevAverage, resolvedDetails, historyExamsForStudent, teamForThisExam);
+
+        // Sınavda önceden hesaplanan rozetler varsa eksiksiz dahil et
+        if (Array.isArray(examRes?.earnedBadges)) {
+          examRes.earnedBadges.forEach((bName: string) => {
+            const norm = normalizeTurkish(bName).toLowerCase().replace(/[\s\.]+/g, '');
+            if (norm.includes('tamisabet')) badgeCounts.tamIsabet = Math.max(badgeCounts.tamIsabet || 0, 1);
+            else if (norm.includes('kalkan')) badgeCounts.kalkan = Math.max(badgeCounts.kalkan || 0, 1);
+            else if (norm.includes('zirvebekcisi')) badgeCounts.zirveBekcisi = Math.max(badgeCounts.zirveBekcisi || 0, 1);
+            else if (norm.includes('zirve')) badgeCounts.zirve = Math.max(badgeCounts.zirve || 0, 1);
+            else if (norm.includes('ivmesampiyonu')) badgeCounts.ivmeSampiyonu = Math.max(badgeCounts.ivmeSampiyonu || 0, 1);
+            else if (norm.includes('ivme')) badgeCounts.ivme = Math.max(badgeCounts.ivme || 0, 1);
+            else if (norm.includes('lgsfatih')) badgeCounts.lgsFatihi = Math.max(badgeCounts.lgsFatihi || 0, 1);
+            else if (norm.includes('ankakus')) badgeCounts.ankaKusu = Math.max(badgeCounts.ankaKusu || 0, 1);
+            else if (norm.includes('kirmizikart')) badgeCounts.kirmiziKart = Math.max(badgeCounts.kirmiziKart || 0, 1);
+            else if (norm.includes('barajyikici')) badgeCounts.barajYikici = Math.max(badgeCounts.barajYikici || 0, 1);
+            else if (norm.includes('stratejimuhendisi')) badgeCounts.stratejiMuhendisi = Math.max(badgeCounts.stratejiMuhendisi || 0, 1);
+            else if (norm.includes('istikrarelcisi')) badgeCounts.istikrarElcisi = Math.max(badgeCounts.istikrarElcisi || 0, 1);
+            else if (norm.includes('sozelsovalye')) badgeCounts.sozelSovalyesi = Math.max(badgeCounts.sozelSovalyesi || 0, 1);
+            else if (norm.includes('sayisalkale')) badgeCounts.sayisalKalesi = Math.max(badgeCounts.sayisalKalesi || 0, 1);
+            else if (norm.includes('matematikuyanis') || norm.includes('matuyanis')) badgeCounts.matematikUyanisi = Math.max(badgeCounts.matematikUyanisi || 0, 1);
+            else if (norm.includes('dengecambaz')) badgeCounts.dengeCambazi = Math.max(badgeCounts.dengeCambazi || 0, 1);
+            else if (norm.includes('keskinnisan')) badgeCounts.keskinNisanci = Math.max(badgeCounts.keskinNisanci || 0, 1);
+            else if (norm.includes('temelatici')) badgeCounts.temelAtici = Math.max(badgeCounts.temelAtici || 0, 1);
+            else if (norm.includes('filozof')) badgeCounts.filozof = Math.max(badgeCounts.filozof || 0, 1);
+            else if (norm.includes('newton')) badgeCounts.newton = Math.max(badgeCounts.newton || 0, 1);
+            else if (norm.includes('pisagor')) badgeCounts.pisagor = Math.max(badgeCounts.pisagor || 0, 1);
+            else if (norm.includes('uyuyandev')) badgeCounts.uyuyanDev = Math.max(badgeCounts.uyuyanDev || 0, 1);
+            else if (norm.includes('sabirtasi')) badgeCounts.sabirTasi = Math.max(badgeCounts.sabirTasi || 0, 1);
+            else if (norm.includes('yinyang')) badgeCounts.yinYang = Math.max(badgeCounts.yinYang || 0, 1);
+          });
+        }
+
+        const earnedLP = typeof examRes?.earnedLP === 'number' && examRes.earnedLP > 0 ? examRes.earnedLP : calcLP;
+        
+        totalLP += earnedLP;
+        Object.keys(badgeCounts).forEach(k => {
+          if (badgeCounts[k as keyof typeof badgeCounts] > 0) {
+            badges[k] = (badges[k] || 0) + badgeCounts[k as keyof typeof badgeCounts];
           }
-          monthlyLeagueData[monthKey].points += earnedLP;
-          Object.keys(badgeCounts).forEach(k => {
-            if (monthlyLeagueData[monthKey].badges[k] !== undefined) {
-               monthlyLeagueData[monthKey].badges[k] += badgeCounts[k as keyof typeof badgeCounts];
-            } else {
-               monthlyLeagueData[monthKey].badges[k] = badgeCounts[k as keyof typeof badgeCounts];
+        });
+        
+        // Track monthly points and badges based on exam.date
+        const dateObj = parseDate(exam.date);
+        const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+        if (!monthlyLeagueData[monthKey]) {
+          monthlyLeagueData[monthKey] = {
+            points: 0,
+            badges: { 
+              kalkan: 0, ivme: 0, zirve: 0, tamIsabet: 0, kirmiziKart: 0, 
+              zirveBekcisi: 0, ivmeSampiyonu: 0, barajYikici: 0, stratejiMuhendisi: 0, istikrarElcisi: 0, 
+              lgsFatihi: 0, ankaKusu: 0, sozelSovalyesi: 0, sayisalKalesi: 0, matematikUyanisi: 0, 
+              dengeCambazi: 0, keskinNisanci: 0, temelAtici: 0, uyuyanDev: 0, sabirTasi: 0, 
+              yinYang: 0, filozof: 0, newton: 0, pisagor: 0 
+            }
+          };
+        }
+        monthlyLeagueData[monthKey].points += earnedLP;
+        Object.keys(badgeCounts).forEach(k => {
+          if (badgeCounts[k as keyof typeof badgeCounts] > 0) {
+            monthlyLeagueData[monthKey].badges[k] = (monthlyLeagueData[monthKey].badges[k] || 0) + badgeCounts[k as keyof typeof badgeCounts];
+          }
+        });
+        
+        let hTotalY = 0; let hTotalB = 0; let hMathNet = 0;
+        if (resolvedDetails) {
+          Object.entries(resolvedDetails).forEach(([k, l]: [string, any]) => {
+            if (!l || typeof l !== 'object') return;
+            const lY = l.Y !== undefined ? Number(l.Y) : (l.wrong !== undefined ? Number(l.wrong) : 0);
+            const lB = l.B !== undefined ? Number(l.B) : (l.empty !== undefined ? Number(l.empty) : 0);
+            hTotalY += lY;
+            hTotalB += lB;
+            const lname = (l.name || l.lessonName || k || '').toLowerCase();
+            if (lname.includes('mat')) {
+              if (l.N !== undefined) hMathNet = Number(l.N);
+              else if (l.net !== undefined) hMathNet = Number(l.net);
+              else if (l.n !== undefined) hMathNet = Number(l.n);
+              else hMathNet = (Number(l.D || l.correct || 0)) - (lY / 3);
             }
           });
-          
-          let hTotalY = 0; let hTotalB = 0; let hMathNet = 0;
-          if (details) {
-            Object.values(details).forEach((l: any) => {
-              hTotalY += l.Y || 0;
-              hTotalB += l.B || 0;
-              const lname = (l.name || l.lessonName || '').toLowerCase();
-              if (lname.includes('mat')) {
-                if (l.N !== undefined) hMathNet = l.N;
-                else if (l.net !== undefined) hMathNet = l.net;
-                else if (l.n !== undefined) hMathNet = l.n;
-                else hMathNet = (l.D || 0) - ((l.Y || 0) / 3);
-              }
-            });
-          }
+        }
 
-          historyExamsForStudent.push({
-            name: exam.name,
-            score,
-            details,
-            date: exam.date,
-            totalY: hTotalY,
+        historyExamsForStudent.push({
+          name: exam.name,
+          score,
+          details: resolvedDetails,
+          date: exam.date,
+          totalY: hTotalY,
             hasKalkan: hTotalB > hTotalY && hTotalB > 0,
             hasKirmiziKart: hTotalY >= 15 && teamForThisExam === 'Kutup Yıldızları',
             mathNet: hMathNet,
@@ -635,7 +731,7 @@ export function recalculateLeagueForStudents(students: any[], results: any[], ex
                      if (!monthlyLeagueData[tMonthKey]) {
                        monthlyLeagueData[tMonthKey] = {
                          points: 0,
-                         badges: { kalkan: 0, ivme: 0, zirve: 0, tamIsabet: 0, kirmiziKart: 0, zirveBekcisi: 0, ivmeSampiyonu: 0, barajYikici: 0, stratejiMuhendisi: 0, istikrarElcisi: 0, lgsFatihi: 0, ankaKusu: 0, sozelSovalyesi: 0, sayisalKalesi: 0, matematikUyanisi: 0, dengeCambazi: 0, keskinNisanci: 0, temelAtici: 0 }
+                         badges: { kalkan: 0, ivme: 0, zirve: 0, tamIsabet: 0, kirmiziKart: 0, zirveBekcisi: 0, ivmeSampiyonu: 0, barajYikici: 0, stratejiMuhendisi: 0, istikrarElcisi: 0, lgsFatihi: 0, ankaKusu: 0, sozelSovalyesi: 0, sayisalKalesi: 0, matematikUyanisi: 0, dengeCambazi: 0, keskinNisanci: 0, temelAtici: 0, uyuyanDev: 0, sabirTasi: 0, yinYang: 0, filozof: 0, newton: 0, pisagor: 0 }
                        };
                      }
                      monthlyLeagueData[tMonthKey].points += 100;
@@ -655,7 +751,6 @@ export function recalculateLeagueForStudents(students: any[], results: any[], ex
           }
         }
       }
-    }
     
     if (currentTeam === 'Atanmadı') currentTeam = 'Taktik Avcıları';
 

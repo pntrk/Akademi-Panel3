@@ -8,6 +8,7 @@ import {
   firebaseConfig, 
   fetchModularSchoolState 
 } from './firebase';
+import { optimizeExamResult } from './backupOptimizer';
 
 export interface DriveBackupItem {
   id: string;
@@ -1052,21 +1053,25 @@ export const prepareTeacherBroadcastPayload = (state: any, publishedBy = 'admin'
   }));
 
   // Sanitize exams
-  const safeExams = (state.exams || []).map((e: any) => ({
-    id: e.id,
-    no: e.no,
-    name: e.name,
-    date: e.date,
-    participantCount: e.participantCount,
-    examType: e.examType,
-    publisher: e.publisher,
-    participatingClasses: e.participatingClasses || [],
-    assignedHalls: e.assignedHalls || [],
-    keys: e.keys,
-    omrMap: e.omrMap,
-    results: e.results || [],
-    studentList: e.studentList || []
-  }));
+  const safeExams = (state.exams || []).map((e: any) => {
+    const isInternal = e.examType === 'internal' || (Boolean(e.keys) && Object.keys(e.keys).length > 0 && e.examType !== 'publisher');
+    const optimizedResults = (e.results || []).map(optimizeExamResult);
+    return {
+      id: e.id,
+      no: e.no,
+      name: e.name,
+      date: e.date,
+      participantCount: Math.max(e.participantCount || 0, optimizedResults.length),
+      examType: e.examType,
+      publisher: e.publisher,
+      participatingClasses: e.participatingClasses || [],
+      assignedHalls: e.assignedHalls || [],
+      keys: e.keys,
+      omrMap: (isInternal && e.omrMap) ? e.omrMap : undefined,
+      results: optimizedResults,
+      studentList: e.studentList || []
+    };
+  });
 
   const targetDriveId = state.canonicalDriveFileId || getLiveMasterFileId();
 

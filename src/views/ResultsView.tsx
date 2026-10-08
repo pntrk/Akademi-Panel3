@@ -447,20 +447,202 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
     return getStudentCanonicalSubjectScores(currentStudent, exam);
   }, [currentStudent, exam]);
 
-  // Öğrencinin son 3 kurum içi sınavındaki net gelişim verileri (Recharts için)
-  const recentExamsNetData = useMemo(() => {
-    const studentNo = currentStudent.no || (currentStudent as any).studentNo;
-    const studentName = (currentStudent.name || (currentStudent as any).studentName || '').trim().toLowerCase();
+  // Öğrencinin okul kütüğündeki ana kaydını bul (Lig takımı ve kariyer rozetleri için)
+  const dbStudent = useMemo(() => {
+    const sNo = currentStudent.no !== undefined 
+      ? Number(currentStudent.no) 
+      : (currentStudent.studentNo !== undefined ? Number(currentStudent.studentNo) : undefined);
+    const sNameNorm = normalizeTurkish(currentStudent.name || currentStudent.studentName || '').trim().toLowerCase();
+    
+    return (state.students || []).find(s => {
+      if (currentStudent.studentId && s.id === currentStudent.studentId) return true;
+      if (sNo !== undefined && sNo > 0 && Number(s.no) === sNo) return true;
+      if (s.name && normalizeTurkish(s.name).trim().toLowerCase() === sNameNorm) return true;
+      return false;
+    });
+  }, [state.students, currentStudent]);
 
-    // Kurum içi / optik sınavları veya mevcut sınavı filtrele ve tarihe göre sırala
-    const candidateExams = (state.exams || [])
-      .filter(e => e.examType === 'internal' || (e.subjects && e.subjects.length > 0) || e.id === exam.id)
-      .sort((a, b) => {
-        const dateA = new Date(a.date || 0).getTime();
-        const dateB = new Date(b.date || 0).getTime();
-        if (dateA !== dateB) return dateA - dateB;
-        return (a.no || 0) - (b.no || 0);
+  // Sınavda kazanılan rozetler (hem sınav nesnesinden hem de ders bazlı netlerden tam tespit)
+  const examBadges = useMemo(() => {
+    const list: Array<{ name: string; desc: string; icon: string }> = [];
+    const added = new Set<string>();
+
+    const addBadge = (name: string, desc: string, icon = '✨') => {
+      if (!added.has(name)) {
+        added.add(name);
+        list.push({ name, desc, icon });
+      }
+    };
+
+    // 1. Varsa currentStudent.earnedBadges dizisindekileri al
+    if (Array.isArray(currentStudent.earnedBadges)) {
+      currentStudent.earnedBadges.forEach(b => {
+        if (b && typeof b === 'string') addBadge(b, 'Bu sınavda kazanıldı', '🏅');
       });
+    }
+
+    // 2. Ders bazlı başarılardan dinamik hesapla
+    let totalD = 0;
+    let totalY = 0;
+    let totalB = 0;
+    let mathNet = 0;
+    let turkNet = 0;
+    let fenNet = 0;
+    let inkY = 0, dinY = 0, ingY = 0;
+    let matY = 0, fenY = 0;
+    let allNetNonNegative = true;
+
+    canonicalReportRows.forEach(r => {
+      const c = typeof r.correct === 'number' ? r.correct : 0;
+      const w = typeof r.wrong === 'number' ? r.wrong : 0;
+      const e = typeof r.empty === 'number' ? r.empty : 0;
+      const n = typeof r.net === 'number' ? r.net : 0;
+
+      totalD += c;
+      totalY += w;
+      totalB += e;
+      if (n < 0) allNetNonNegative = false;
+
+      const lower = normalizeClean(r.name);
+      if (lower.includes('mat')) { mathNet = n; matY = w; }
+      if (lower.includes('tur')) { turkNet = n; }
+      if (lower.includes('fen')) { fenNet = n; }
+      if (lower.includes('ink') || lower.includes('tarih') || lower.includes('sosyal')) { inkY = w; }
+      if (lower.includes('din') || lower.includes('dkab')) { dinY = w; }
+      if (lower.includes('ing') || lower.includes('yabanci') || lower.includes('dil')) { ingY = w; }
+
+      // Tam İsabet: 0 Yanlış ve en az 1 Doğru
+      if (w === 0 && c > 0) {
+        addBadge(`Tam İsabet (${r.name})`, `${r.name} dersinde sıfır yanlış`, '🎯');
+      }
+    });
+
+    const lgsScore = Number(scoreData?.total?.lgsScore) || (isLgs ? (totalD - totalY / 3) * 5 : 0);
+
+    // LGS Fatihi
+    if (totalD > 0 && totalY === 0 && totalB === 0) {
+      addBadge('LGS Fatihi', 'Tüm soruları eksiksiz doğru cevaplama', '👑');
+    }
+
+    // Kalkan (Savunma Rozeti): Boş sayısı yanlış sayısından fazla
+    if (totalB > totalY && totalB > 0) {
+      addBadge('Kalkan', 'Boş bırakarak netini koruma başarısı', '🛡️');
+    }
+
+    // Keskin Nişancı (%70+ doğruluk)
+    if (totalD + totalY > 0 && (totalD / (totalD + totalY)) >= 0.70) {
+      addBadge('Keskin Nişancı', '%70 üzeri yüksek isabet oranı', '🏹');
+    }
+
+    // Temel Atıcı (Eksi netsiz)
+    if (allNetNonNegative && totalD > 0) {
+      addBadge('Temel Atıcı', 'Tüm derslerde pozitif net başarısı', '🎯');
+    }
+
+    // Matematik Uyanışı (10+ Mat Net)
+    if (mathNet >= 10) {
+      addBadge('Matematik Uyanışı', 'Matematikte 10 ve üzeri net başarısı', '📐');
+    }
+
+    // Denge Cambazı (Türkçe >= 15 ve Fen >= 15)
+    if (turkNet >= 15 && fenNet >= 15) {
+      addBadge('Denge Cambazı', 'Türkçe ve Fende 15+ dengeli net', '⚖️');
+    }
+
+    // Sözel Şövalyesi (İnkılap, Din, İngilizce 0 yanlış)
+    if (inkY + dinY + ingY === 0 && totalD > 0) {
+      addBadge('Sözel Şövalyesi', 'Yan branşlarda sıfır yanlış başarısı', '⚔️');
+    }
+
+    // Sayısal Kalesi (Mat + Fen <= 2 yanlış)
+    if (matY + fenY <= 2 && totalD > 0 && (mathNet + fenNet >= 15)) {
+      addBadge('Sayısal Kalesi', 'Sayısal derslerde üstün başarı', '🏰');
+    }
+
+    // Zirve Koruma (400+ LGS Puanı)
+    if (lgsScore >= 400) {
+      addBadge('Zirve Koruma', '400 üzeri LGS puan barajı', '⭐');
+    }
+
+    return list;
+  }, [currentStudent, canonicalReportRows, scoreData, isLgs]);
+
+  const BADGE_MAP: Record<string, string> = {
+    tamIsabet: 'Tam İsabet',
+    kalkan: 'Kalkan',
+    ivme: 'İvme',
+    zirve: 'Zirve Koruma',
+    kirmiziKart: 'Kırmızı Kart',
+    zirveBekcisi: 'Zirve Bekçisi',
+    ivmeSampiyonu: 'İvme Şampiyonu',
+    barajYikici: 'Baraj Yıkıcı',
+    stratejiMuhendisi: 'Strateji Mühendisi',
+    istikrarElcisi: 'İstikrar Elçisi',
+    lgsFatihi: 'LGS Fatihi',
+    ankaKusu: 'Anka Kuşu',
+    sozelSovalyesi: 'Sözel Şövalyesi',
+    sayisalKalesi: 'Sayısal Kalesi',
+    matematikUyanisi: 'Matematik Uyanışı',
+    dengeCambazi: 'Denge Cambazı',
+    keskinNisanci: 'Keskin Nişancı',
+    temelAtici: 'Temel Atıcı',
+    uyuyanDev: 'Uyuyan Dev',
+    sabirTasi: 'Sabır Taşı',
+    yinYang: 'Yin Yang',
+    filozof: 'Filozof',
+    newton: 'Newton',
+    pisagor: 'Pisagor'
+  };
+
+  // Öğrencinin kütükteki genel lig rozetleri
+  const generalBadges = useMemo(() => {
+    const bObj = dbStudent?.badges || {};
+    return Object.entries(bObj)
+      .filter(([_, count]) => typeof count === 'number' && count > 0)
+      .map(([key, count]) => ({
+        name: BADGE_MAP[key] || key,
+        count: Number(count)
+      }));
+  }, [dbStudent]);
+
+  // Tüm rozetlerin birleştirilmiş listesi
+  const allBadgesList = useMemo(() => {
+    const combined: Array<{ name: string; desc?: string; icon?: string; count?: number; isExamBadge?: boolean }> = examBadges.map(b => ({
+      ...b,
+      isExamBadge: true
+    }));
+    const examBadgePrefixes = new Set(examBadges.map(b => b.name.split(' (')[0].toLowerCase()));
+
+    generalBadges.forEach(gb => {
+      const lower = gb.name.toLowerCase();
+      if (!examBadgePrefixes.has(lower)) {
+        combined.push({
+          name: gb.name,
+          desc: `Genel ligde ${gb.count} kez kazanıldı`,
+          icon: '🏆',
+          count: gb.count,
+          isExamBadge: false
+        });
+      }
+    });
+
+    return combined;
+  }, [examBadges, generalBadges]);
+
+  // Öğrencinin deneme sınavlarındaki net gelişim verileri (Recharts için)
+  const recentExamsNetData = useMemo(() => {
+    const studentNo = currentStudent.no !== undefined 
+      ? Number(currentStudent.no) 
+      : (currentStudent.studentNo !== undefined ? Number(currentStudent.studentNo) : undefined);
+    const studentName = normalizeTurkish(currentStudent.name || currentStudent.studentName || '').trim().toLowerCase();
+
+    // Tüm deneme sınavlarını tarihe göre sırala
+    const candidateExams = [...(state.exams || [])].sort((a, b) => {
+      const dateA = new Date(a.date || 0).getTime();
+      const dateB = new Date(b.date || 0).getTime();
+      if (dateA !== dateB) return dateA - dateB;
+      return (a.no || 0) - (b.no || 0);
+    });
 
     const points: Array<{
       id: string;
@@ -475,30 +657,69 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
 
     candidateExams.forEach(ex => {
       let dataForEx: { net: number; correct: number; wrong: number; isCurrent: boolean } | null = null;
+      const isThisExam = String(ex.id) === String(exam.id) || ex.name === exam.name;
 
-      if (ex.id === exam.id) {
-        // Şu anki modalda açık olan sınav (anlık güncellenen skor)
+      if (isThisExam) {
+        // Şu anki modalda açık olan sınav (anlık güncellenen karne skoru)
+        const currentNet = scoreData?.total?.net !== undefined 
+          ? Number(scoreData.total.net) 
+          : Number(currentStudent.net || currentStudent.average || 0);
+        const currentCorrect = scoreData?.total?.correct !== undefined 
+          ? Number(scoreData.total.correct) 
+          : Number(currentStudent.totalCorrect || 0);
+        const currentWrong = scoreData?.total?.wrong !== undefined 
+          ? Number(scoreData.total.wrong) 
+          : Number(currentStudent.totalWrong || 0);
+
         dataForEx = {
-          net: Number(Number(scoreData?.total?.net ?? 0).toFixed(2)),
-          correct: scoreData?.total?.correct ?? 0,
-          wrong: scoreData?.total?.wrong ?? 0,
+          net: Number(currentNet.toFixed(2)),
+          correct: currentCorrect,
+          wrong: currentWrong,
           isCurrent: true
         };
       } else {
-        // Geçmiş sınavdaki öğrenci sonucu
-        const match = (ex.results || []).find((r: any) => {
-          if (studentNo && (r.no === studentNo || r.studentNo === studentNo)) return true;
-          if (studentName && r.name && r.name.trim().toLowerCase() === studentName) return true;
+        // 1. Sınavın kendi altındaki results listesinde öğrenciyi ara
+        const matchInExam = (ex.results || []).find((r: any) => {
+          const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : undefined);
+          if (studentNo !== undefined && rNo !== undefined && studentNo === rNo) return true;
+          if (studentName && r.name && normalizeTurkish(r.name).trim().toLowerCase() === studentName) return true;
           return false;
         });
 
+        // 2. Global sonuç listesinde ara
+        const matchInGlobal = !matchInExam ? (state.results || []).find((r: any) => {
+          const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : undefined);
+          const isSame = (studentNo !== undefined && rNo !== undefined && studentNo === rNo) ||
+            (studentName && r.name && normalizeTurkish(r.name).trim().toLowerCase() === studentName);
+          return isSame && r.scores && (r.scores[String(ex.id)] !== undefined || r.scores[ex.name] !== undefined);
+        }) : null;
+
+        const match = matchInExam || matchInGlobal;
+
         if (match) {
           const matchScores = match.evaluatedScore || match.scores;
-          const netVal = matchScores?.total?.net ?? (match as any).netTotal ?? (typeof matchScores === 'number' ? matchScores : 0);
-          const cVal = matchScores?.total?.correct ?? (match as any).correctCount ?? 0;
-          const wVal = matchScores?.total?.wrong ?? (match as any).wrongCount ?? 0;
+          let netVal = 0;
+          if (typeof matchScores === 'object' && matchScores?.total?.net !== undefined) {
+            netVal = Number(matchScores.total.net);
+          } else if (typeof match.net === 'number') {
+            netVal = match.net;
+          } else if (typeof match.average === 'number') {
+            netVal = match.average;
+          } else if (typeof match.scores?.[String(ex.id)] === 'number') {
+            netVal = match.scores[String(ex.id)];
+          } else if (typeof match.scores?.[ex.name] === 'number') {
+            netVal = match.scores[ex.name];
+          }
+
+          const cVal = matchScores?.total?.correct !== undefined 
+            ? Number(matchScores.total.correct) 
+            : (match.totalCorrect !== undefined ? Number(match.totalCorrect) : Math.round(netVal));
+          const wVal = matchScores?.total?.wrong !== undefined 
+            ? Number(matchScores.total.wrong) 
+            : (match.totalWrong !== undefined ? Number(match.totalWrong) : 0);
+
           dataForEx = {
-            net: Number(Number(netVal).toFixed(2)),
+            net: Number(netVal.toFixed(2)),
             correct: cVal,
             wrong: wVal,
             isCurrent: false
@@ -521,9 +742,9 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
       }
     });
 
-    // Son 3 sınavı alalım
-    return points.slice(-3);
-  }, [state.exams, currentStudent, exam.id, scoreData]);
+    // En son girilen 5 sınavı (veya varsa tümünü) döndür
+    return points.length > 5 ? points.slice(-5) : points;
+  }, [state.exams, state.results, currentStudent, exam.id, exam.name, scoreData]);
 
   // Net artış/azalış trendi
   const netTrend = useMemo(() => {
@@ -840,34 +1061,93 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
             )}
           </div>
 
-          {/* Akademi Arena (AtaLig) LP Kartı */}
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black shadow-xs shrink-0">
-                <Award className="w-5 h-5" />
+          {/* Akademi Arena (AtaLig) LP Kartı & Rozetler Bölümü */}
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-2xl p-3.5 sm:p-4.5 flex flex-col gap-3 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-bold text-amber-950 flex items-center gap-2 flex-wrap">
+                    <span>Akademi Arena Lig Puanı (LP)</span>
+                    <span className="bg-amber-200 text-amber-950 px-2.5 py-0.5 rounded-full text-[11px] font-black shadow-2xs">
+                      +{currentStudent.earnedLP || Math.round((scoreData?.total?.net || 0) * 10)} LP
+                    </span>
+                    <span className="text-amber-800 text-[11px] font-semibold bg-amber-100/70 px-2 py-0.5 rounded-lg border border-amber-200/60">
+                      🛡️ {dbStudent?.leagueTeam || 'Taktik Avcıları'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 mt-0.5">
+                    Bu sınavdan kazanılan puan ve rozetler öğrencinin genel lig sıralamasına işlenmiştir.
+                  </p>
+                </div>
               </div>
-              <div>
-                <div className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                  <span>Akademi Arena Lig Puanı (LP)</span>
-                  <span className="bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded-full text-[10px] font-black">
-                    +{currentStudent.earnedLP || Math.round((scoreData?.total?.net || 0) * 10)} LP
+
+              {/* Rozet Sayacı Özeti */}
+              <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0">
+                <div className="px-3 py-1.5 rounded-xl bg-white/95 border border-amber-300 text-amber-900 text-xs font-bold shadow-2xs flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <span>
+                    {allBadgesList.length > 0 
+                      ? `${allBadgesList.length} Rozet Açıldı` 
+                      : 'Henüz Rozet Yok'}
                   </span>
                 </div>
-                <p className="text-[11px] text-amber-700 mt-0.5">
-                  Bu sınavdan kazanılan puan ve rozetler öğrencinin genel lig sıralamasına işlenmiştir.
-                </p>
               </div>
             </div>
-            {currentStudent.earnedBadges && currentStudent.earnedBadges.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {currentStudent.earnedBadges.map((badge, bIdx) => (
-                  <span key={bIdx} className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-900 text-xs font-bold shadow-2xs flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{badge}</span>
+
+            {/* Öğrencinin Kazandığı Rozetler Vitrini */}
+            <div className="pt-2.5 border-t border-amber-200/70 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3 text-amber-600" />
+                  <span>Öğrencinin Kazandığı Rozetler:</span>
+                </span>
+                {allBadgesList.length > 0 && (
+                  <span className="text-[10px] text-amber-700 font-medium">
+                    {examBadges.length > 0 ? `${examBadges.length} sınav rozeti` : ''} 
+                    {examBadges.length > 0 && generalBadges.length > 0 ? ' • ' : ''}
+                    {generalBadges.length > 0 ? `${generalBadges.length} kariyer lig rozeti` : ''}
                   </span>
-                ))}
+                )}
               </div>
-            )}
+
+              {allBadgesList.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {allBadgesList.map((badge, bIdx) => (
+                    <div
+                      key={bIdx}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1.5 border transition-all ${
+                        badge.isExamBadge
+                          ? 'bg-white border-amber-300 text-amber-950 hover:border-amber-400 hover:shadow-xs'
+                          : 'bg-amber-100/60 border-amber-300/80 text-amber-900 hover:bg-amber-100'
+                      }`}
+                      title={badge.desc || badge.name}
+                    >
+                      <span className="text-sm shrink-0">{badge.icon || '✨'}</span>
+                      <span className="font-bold">{badge.name}</span>
+                      {badge.count && badge.count > 1 ? (
+                        <span className="text-[10px] bg-amber-200 text-amber-950 px-1.5 py-0.2 rounded-full font-black">
+                          x{badge.count}
+                        </span>
+                      ) : badge.isExamBadge ? (
+                        <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">
+                          Yeni
+                        </span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white/80 rounded-xl p-2.5 border border-amber-200/70 text-xs text-amber-800 flex items-center gap-2">
+                  <span className="text-amber-500 font-bold">💡</span>
+                  <span>
+                    Bu sınavda henüz rozet kazanılmadı. Herhangi bir derste 0 yanlış yaparak <strong className="font-bold text-amber-950">"Tam İsabet"</strong> veya boş bırakarak <strong className="font-bold text-amber-950">"Kalkan"</strong> rozeti kazanabilirsiniz.
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Son 3 Kurum İçi Sınav Net Gelişimi Çizgi Grafiği (Recharts) */}
@@ -879,13 +1159,13 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
                 </div>
                 <div>
                   <h3 className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                    <span>Son 3 Kurum İçi Sınav Net Gelişimi</span>
-                    <span className="text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                      {recentExamsNetData.length} Sınav
+                    <span>Deneme Sınavları Net Gelişimi</span>
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-full">
+                      {recentExamsNetData.length} Deneme Sınavı
                     </span>
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Öğrencinin kurum içi denemelerdeki net performans seyri
+                    Öğrencinin katıldığı tüm deneme sınavlarındaki net performans seyri
                   </p>
                 </div>
               </div>
@@ -2735,7 +3015,10 @@ export function ResultsView() {
                   ? (foundStudent.className || (finalSectionStr ? `${finalClassStr}-${finalSectionStr}` : finalClassStr)) 
                   : (sectionStr ? `${classStr}-${sectionStr}` : classStr);
 
-                if (!foundStudent && studentNo > 0 && studentName) {
+                const normName = normalizeClean(studentName);
+                const isAlreadyInDb = masterStudents.some(s => s.no === studentNo || (s.name && normalizeClean(s.name) === normName));
+                const isAlreadyInNew = newStudentsToAdd.some(s => s.no === studentNo || (s.name && normalizeClean(s.name) === normName));
+                if (!foundStudent && studentNo > 0 && studentName && !isAlreadyInDb && !isAlreadyInNew) {
                   newStudentsToAdd.push({
                     id: generateId(),
                     no: studentNo,
@@ -2897,7 +3180,10 @@ export function ResultsView() {
               ? (foundStudent.className || (finalSectionStr ? `${finalClassStr}-${finalSectionStr}` : finalClassStr)) 
               : (sec ? `${cls}-${sec}` : cls);
 
-            if (!foundStudent && studentNo > 0 && studentName) {
+            const normName = normalizeClean(studentName);
+            const isAlreadyInDb = masterStudents.some(s => s.no === studentNo || (s.name && normalizeClean(s.name) === normName));
+            const isAlreadyInNew = newStudentsToAdd.some(s => s.no === studentNo || (s.name && normalizeClean(s.name) === normName));
+            if (!foundStudent && studentNo > 0 && studentName && !isAlreadyInDb && !isAlreadyInNew) {
               newStudentsToAdd.push({
                 id: generateId(),
                 no: studentNo,
@@ -3031,11 +3317,7 @@ export function ResultsView() {
         });
         const updatedList = Array.from(existingResultsMap.values());
 
-        saveOmrExamResults(String(exam.id), updatedList);
-
-        if (newStudentsToAdd.length > 0) {
-          setStudents([...masterStudents, ...newStudentsToAdd]);
-        }
+        saveOmrExamResults(String(exam.id), updatedList, newStudentsToAdd);
 
         const matchMsg = matchedWithDbCount > 0 ? ` (${matchedWithDbCount} öğrenci okul kütüğüyle eşleştirildi)` : '';
         showAlert(`✓ ${newResults.length} öğrencinin sınav sonuçları ve ders netleri başarıyla aktarıldı${matchMsg}.`);
