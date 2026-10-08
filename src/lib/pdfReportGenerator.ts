@@ -1,6 +1,7 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { Exam, ExamResult } from '../types';
+import { normalizeTurkish } from './omrEngine';
 
 // Register vfs fonts for pdfMake
 try {
@@ -314,8 +315,19 @@ export async function generateBatchReportCardsPdf(
         const successRate = sub.count > 0 ? Math.max(0, Math.min(100, Math.round((ss.net / sub.count) * 100))) : 0;
         const rowBg = subIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
 
+        const subNorm = normalizeTurkish(sub.name);
+        let subDisplayName = sub.name;
+        if (subNorm.includes('turk')) subDisplayName = 'Türkçe';
+        else if (subNorm.includes('din') || subNorm.includes('dkab')) subDisplayName = 'Din Kültürü ve Ahlak Bilgisi';
+        else if (subNorm.includes('ing') || subNorm.includes('yabanci') || subNorm.includes('dil')) subDisplayName = 'İngilizce';
+        else if (subNorm.includes('ink') || subNorm.includes('tarih') || subNorm.includes('sosyal') || subNorm.includes('tar') || subNorm === 'sb') {
+          subDisplayName = 'Tarih / Sosyal Bilgiler';
+        }
+        else if (subNorm.includes('mat')) subDisplayName = 'Matematik';
+        else if (subNorm.includes('fen')) subDisplayName = 'Fen Bilimleri';
+
         subjectTableRows.push([
-          { text: sub.name, fontSize: 7.5, bold: true, color: '#1e293b', fillColor: rowBg, margin: [4, 2.5, 4, 2.5] },
+          { text: subDisplayName, fontSize: 7.5, bold: true, color: '#1e293b', fillColor: rowBg, margin: [4, 2.5, 4, 2.5] },
           { text: String(sub.count), fontSize: 7.5, alignment: 'center', color: '#64748b', fillColor: rowBg, margin: [2, 2.5, 2, 2.5] },
           { text: String(ss.correct), fontSize: 7.5, bold: true, alignment: 'center', color: '#047857', fillColor: rowBg, margin: [2, 2.5, 2, 2.5] },
           { text: String(ss.wrong), fontSize: 7.5, bold: true, alignment: 'center', color: '#e11d48', fillColor: rowBg, margin: [2, 2.5, 2, 2.5] },

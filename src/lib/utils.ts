@@ -270,19 +270,19 @@ export const calculateAtaLigPoints = (examScore: number, previousAverage: number
 
   if (lessonsDetails) {
     Object.values(lessonsDetails).forEach((lesson: any) => {
-      const name = (lesson.name || lesson.lessonName || '').toLowerCase();
+      const name = normalizeForSearch(lesson.name || lesson.lessonName || '');
       const lD = lesson.D || 0;
       const lY = lesson.Y || 0;
       let lN = lesson.N !== undefined ? lesson.N : (lesson.net !== undefined ? lesson.net : (lesson.n !== undefined ? lesson.n : (lD - lY / 3)));
       
       if (lN < 0) allNetNonNegative = false;
       
-      if (name.includes('ink')) { inkY += lY; inkN = lN; }
-      if (name.includes('din')) { dinY += lY; dinN = lN; }
-      if (name.includes('ing')) { ingY += lY; }
+      if (name.includes('ink') || name.includes('tarih') || name.includes('sosyal')) { inkY += lY; inkN = lN; }
+      if (name.includes('din') || name.includes('dkab')) { dinY += lY; dinN = lN; }
+      if (name.includes('ing') || name.includes('yabanci') || name.includes('dil')) { ingY += lY; }
       if (name.includes('mat')) { matD = lD; matY += lY; matN = lN; }
       if (name.includes('fen')) { fenD = lD; fenY += lY; fenN = lN; }
-      if (name.includes('tür') || name.includes('turk') || name === 'türkçe') { turkD = lD; turkY = lY; turkN = lN; }
+      if (name.includes('tur')) { turkD = lD; turkY = lY; turkN = lN; }
 
       totalD += lesson.D || 0;
       totalY += lesson.Y || 0;

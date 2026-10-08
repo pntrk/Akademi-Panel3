@@ -62,10 +62,344 @@ import {
   SlidersHorizontal,
   ChevronRight,
   FileCheck,
-  Loader2
+  Loader2,
+  GraduationCap
 } from 'lucide-react';
 import { AnalysisView } from './AnalysisView';
 import { generateBatchReportCardsPdf, StudentEvaluatedData } from '../lib/pdfReportGenerator';
+
+/* =========================================================================
+   CANONICAL SUBJECT DEFINITIONS & DEDUPLICATION HELPERS
+   8. Sınıf: Türkçe, Din Kültürü ve Ahlak Bilgisi, İngilizce, İnkılap Tarihi, Matematik, Fen Bilimleri
+   5,6,7. Sınıf: Türkçe, Din Kültürü ve Ahlak Bilgisi, İngilizce, Sosyal Bilgiler, Matematik, Fen Bilimleri
+   ========================================================================= */
+
+/**
+ * Veritabanı ve arayüzdeki sınıfları tutarlı ve resmi formatta (örn. 8-A) gösterir.
+ */
+export const formatDisplayClass = (record: any): string => {
+  if (!record) return '-';
+  const { cls, sec } = formatClassSec(
+    record.className || record.studentClass || record.classStr,
+    record.sectionStr
+  );
+  if (cls && sec) return `${cls}-${sec}`;
+  if (record.className && record.className !== '-') return record.className;
+  if (record.studentClass && record.studentClass !== '-') return record.studentClass;
+  if (cls) return `${cls}. Sınıf`;
+  return '-';
+};
+
+/**
+ * Bir öğrencinin veya sınav sonucunun seçilen sınıf filtresine uyup uymadığını kontrol eder.
+ * Veritabanındaki '8A', '8-A', '8/A' varyasyonlarını akıllıca eşit kabul eder.
+ */
+export const isStudentInClass = (record: any, targetClass: string): boolean => {
+  if (!targetClass || targetClass === 'ALL') return true;
+  if (!record) return false;
+
+  const targetParsed = formatClassSec(targetClass);
+  const recordParsed = formatClassSec(
+    record.className || record.studentClass || record.classStr,
+    record.sectionStr
+  );
+
+  if (targetParsed.cls && targetParsed.sec && recordParsed.cls && recordParsed.sec) {
+    return targetParsed.cls === recordParsed.cls && targetParsed.sec === recordParsed.sec;
+  }
+
+  const rCls = String(record.className || record.studentClass || record.classStr || '').replace(/[\s\-_/.]/g, '').toUpperCase();
+  const tCls = String(targetClass).replace(/[\s\-_/.]/g, '').toUpperCase();
+  return rCls === tCls || rCls.startsWith(tCls) || tCls.startsWith(rCls);
+};
+
+/**
+ * Bir kaydın (öğrenci veya sınav sonucu) kademe seviyesini döndürür (örn. "8", "7", "6", "5").
+ */
+export const extractGradeLevel = (record: any): string => {
+  if (!record) return '';
+  if (typeof record === 'string') {
+    const parsed = formatClassSec(record);
+    if (parsed.cls) return parsed.cls;
+    const m = record.match(/^(\d+)/);
+    return m ? m[1] : '';
+  }
+  const parsed = formatClassSec(
+    record.className || record.studentClass || record.classStr,
+    record.sectionStr
+  );
+  if (parsed.cls) return parsed.cls;
+  const raw = String(record.className || record.studentClass || record.classStr || '');
+  const m = raw.match(/^(\d+)/);
+  return m ? m[1] : '';
+};
+
+/**
+ * Bir öğrencinin veya sınav sonucunun seçilen kademe filtresine (örn. "8", "7") uyup uymadığını kontrol eder.
+ */
+export const isStudentInGrade = (record: any, targetGrade: string): boolean => {
+  if (!targetGrade || targetGrade === 'ALL') return true;
+  const grade = extractGradeLevel(record);
+  return grade === targetGrade;
+};
+
+export function normalizeClean(text?: string | null): string {
+  if (!text) return '';
+  return text
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .trim();
+}
+
+export interface CanonicalSubject {
+  key: string;
+  name: string;
+  aliases: string[];
+  defaultQuestionCount: number;
+}
+
+export const CANONICAL_8TH_GRADE_SUBJECTS: CanonicalSubject[] = [
+  {
+    key: 'turkce',
+    name: 'Türkçe',
+    aliases: ['turkce', 'türkçe', 'turk', 'türk', 'tr'],
+    defaultQuestionCount: 20
+  },
+  {
+    key: 'din',
+    name: 'Din Kültürü ve Ahlak Bilgisi',
+    aliases: ['din kulturu ve ahlak bilgisi', 'din kültürü ve ahlak bilgisi', 'din kulturu', 'din kültürü', 'din k.ve a.b.', 'din k.', 'din', 'dkab'],
+    defaultQuestionCount: 10
+  },
+  {
+    key: 'ingilizce',
+    name: 'İngilizce',
+    aliases: ['ingilizce', 'ing', 'yabanci dil', 'yabancı dil', 'ydil', 'english', 'dil', 'ing.', 'y.dil'],
+    defaultQuestionCount: 10
+  },
+  {
+    key: 'tarih_sosyal',
+    name: 'Tarih / Sosyal Bilgiler',
+    aliases: [
+      'tarih', 'sosyal', 'sosyal bilgiler', 'sosyal bilimler', 'sb', 'sos', 
+      'inkilap', 'inkilap tarihi', 'inkılap tarihi', 'inkılap', 
+      't.c. inkilap tarihi ve ataturkculuk', 't.c. inkılap tarihi ve atatürkçülük', 
+      't.c. inkilap', 't.c. inkılap', 't.c inkilap', 'tc inkilap', 'tar',
+      'tarih / sosyal bilgiler', 'tarih/ sosyal bilgiler', 'tarih/sosyal bilgiler'
+    ],
+    defaultQuestionCount: 10
+  },
+  {
+    key: 'matematik',
+    name: 'Matematik',
+    aliases: ['matematik', 'mat', 'mat.'],
+    defaultQuestionCount: 20
+  },
+  {
+    key: 'fen',
+    name: 'Fen Bilimleri',
+    aliases: ['fen bilimleri', 'fen bilgisi', 'fen', 'f.b.', 'fen.'],
+    defaultQuestionCount: 20
+  }
+];
+
+export const CANONICAL_5_6_7_GRADE_SUBJECTS: CanonicalSubject[] = [
+  {
+    key: 'turkce',
+    name: 'Türkçe',
+    aliases: ['turkce', 'türkçe', 'turk', 'türk', 'tr'],
+    defaultQuestionCount: 20
+  },
+  {
+    key: 'din',
+    name: 'Din Kültürü ve Ahlak Bilgisi',
+    aliases: ['din kulturu ve ahlak bilgisi', 'din kültürü ve ahlak bilgisi', 'din kulturu', 'din kültürü', 'din k.ve a.b.', 'din k.', 'din', 'dkab'],
+    defaultQuestionCount: 10
+  },
+  {
+    key: 'ingilizce',
+    name: 'İngilizce',
+    aliases: ['ingilizce', 'ing', 'yabanci dil', 'yabancı dil', 'ydil', 'english', 'dil', 'ing.', 'y.dil'],
+    defaultQuestionCount: 10
+  },
+  {
+    key: 'tarih_sosyal',
+    name: 'Tarih / Sosyal Bilgiler',
+    aliases: [
+      'sosyal bilgiler', 'sosyal bilimler', 'sosyal', 'sb', 'sos', 
+      'tarih', 'inkilap', 'inkilap tarihi', 'inkılap tarihi', 'inkılap', 
+      't.c. inkilap', 'tc inkilap', 'tar',
+      'tarih / sosyal bilgiler', 'tarih/ sosyal bilgiler', 'tarih/sosyal bilgiler'
+    ],
+    defaultQuestionCount: 10
+  },
+  {
+    key: 'matematik',
+    name: 'Matematik',
+    aliases: ['matematik', 'mat', 'mat.'],
+    defaultQuestionCount: 20
+  },
+  {
+    key: 'fen',
+    name: 'Fen Bilimleri',
+    aliases: ['fen bilimleri', 'fen bilgisi', 'fen', 'f.b.', 'fen.'],
+    defaultQuestionCount: 20
+  }
+];
+
+export function getCanonicalSubjectsForGrade(gradeLevel: string | null): CanonicalSubject[] {
+  if (gradeLevel === '5' || gradeLevel === '6' || gradeLevel === '7') {
+    return CANONICAL_5_6_7_GRADE_SUBJECTS;
+  }
+  return CANONICAL_8TH_GRADE_SUBJECTS;
+}
+
+export function getStandardSubjectName(name: string, gradeLevel?: string | null): string {
+  const nl = normalizeClean(name);
+  if (nl.includes('turk')) return 'Türkçe';
+  if (nl.includes('din') || nl.includes('dkab')) return 'Din Kültürü ve Ahlak Bilgisi';
+  if (nl.includes('ing') || nl.includes('yabanci') || nl.includes('dil') || nl.includes('english')) return 'İngilizce';
+  if (nl.includes('ink') || nl.includes('tarih') || nl.includes('sosyal') || nl.includes('tar') || nl === 'sb') {
+    return 'Tarih / Sosyal Bilgiler';
+  }
+  if (nl.includes('mat')) return 'Matematik';
+  if (nl.includes('fen')) return 'Fen Bilimleri';
+  return name;
+}
+
+export interface CanonicalSubjectScoreItem {
+  key: string;
+  name: string;
+  correct: number | string;
+  wrong: number | string;
+  empty: number | string;
+  net: number | string;
+  questionCount: number;
+}
+
+export function getStudentCanonicalSubjectScores(
+  student: any,
+  exam?: Exam
+): CanonicalSubjectScoreItem[] {
+  if (!student) return [];
+  const grade = extractGradeLevel(student) || (exam?.name ? extractGradeLevel({ className: exam.name }) : null) || '8';
+  const canonicalList = getCanonicalSubjectsForGrade(grade);
+
+  const rawSubjectScores = student.evaluatedScore?.subjectScores 
+    || (typeof student.scores === 'object' && student.scores !== null && !Array.isArray(student.scores) ? student.scores : {});
+
+  return canonicalList.map(canon => {
+    let matchedScoreObj: any = null;
+
+    // 1. Arama: rawSubjectScores anahtarları (öğrencinin kayıtlı ders skorları)
+    for (const [rawKey, val] of Object.entries(rawSubjectScores)) {
+      if (val === undefined || val === null) continue;
+      const cleanKey = normalizeClean(String(rawKey));
+
+      // Doğrudan takma ad (alias) eşleştirmesi
+      const isDirectMatch = canon.aliases.some(alias => {
+        const ca = normalizeClean(alias);
+        return cleanKey === ca || cleanKey.includes(ca) || ca.includes(cleanKey);
+      });
+
+      // Anahtar sınav ders ID'si ise (örn. '1', '2', '4') sınav ders tanımıyla eşleştir
+      let isIdMatch = false;
+      if (exam?.subjects) {
+        const sub = exam.subjects.find(s => String(s.id) === String(rawKey).trim());
+        if (sub) {
+          const subNameClean = normalizeClean(sub.name);
+          isIdMatch = canon.aliases.some(alias => {
+            const ca = normalizeClean(alias);
+            return subNameClean === ca || subNameClean.includes(ca) || ca.includes(subNameClean);
+          });
+        }
+      }
+
+      if (isDirectMatch || isIdMatch) {
+        matchedScoreObj = val;
+        break;
+      }
+    }
+
+    // 2. Yedek: Eğer rawSubjectScores içinde bulunamadıysa student.scores içinde ara
+    if (!matchedScoreObj && typeof student.scores === 'object' && student.scores !== null && !Array.isArray(student.scores)) {
+      for (const [sKey, sVal] of Object.entries(student.scores)) {
+        if (sVal === undefined || sVal === null) continue;
+        const cleanSKey = normalizeClean(String(sKey));
+        const match = canon.aliases.some(alias => {
+          const ca = normalizeClean(alias);
+          return cleanSKey === ca || cleanSKey.includes(ca) || ca.includes(cleanSKey);
+        });
+        if (match) {
+          matchedScoreObj = sVal;
+          break;
+        }
+      }
+    }
+
+    // Sınavda tanımlı soru sayısı varsa al
+    const examSub = exam?.subjects?.find(s => {
+      const sNameClean = normalizeClean(s.name);
+      return canon.aliases.some(alias => {
+        const ca = normalizeClean(alias);
+        return sNameClean === ca || sNameClean.includes(ca) || ca.includes(sNameClean);
+      });
+    });
+    const questionCount = examSub?.count || canon.defaultQuestionCount;
+
+    if (matchedScoreObj && typeof matchedScoreObj === 'object') {
+      const c = matchedScoreObj.correct !== undefined ? matchedScoreObj.correct : '-';
+      const w = matchedScoreObj.wrong !== undefined ? matchedScoreObj.wrong : '-';
+      const n = typeof matchedScoreObj.net === 'number' 
+        ? matchedScoreObj.net 
+        : (typeof matchedScoreObj.netTotal === 'number' ? matchedScoreObj.netTotal : (matchedScoreObj.net !== undefined ? matchedScoreObj.net : '-'));
+
+      let e: number | string = '-';
+      if (matchedScoreObj.empty !== undefined) {
+        e = matchedScoreObj.empty;
+      } else if (typeof c === 'number' && typeof w === 'number') {
+        e = Math.max(0, questionCount - c - w);
+      }
+
+      return {
+        key: canon.key,
+        name: canon.name,
+        correct: c,
+        wrong: w,
+        empty: e,
+        net: n,
+        questionCount
+      };
+    } else if (typeof matchedScoreObj === 'number') {
+      return {
+        key: canon.key,
+        name: canon.name,
+        correct: '-',
+        wrong: '-',
+        empty: '-',
+        net: matchedScoreObj,
+        questionCount
+      };
+    }
+
+    return {
+      key: canon.key,
+      name: canon.name,
+      correct: '-',
+      wrong: '-',
+      empty: '-',
+      net: '-',
+      questionCount
+    };
+  });
+}
 
 /* =========================================================================
    1. STUDENT REPORT MODAL (Öğrenci Sınav Karnesi & Anlık Cevap Düzenleme)
@@ -93,6 +427,12 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
   const isAyt = isAytExam(exam);
   const options = (exam.optionsCount || 4) === 4 ? OPTS_4 : OPTS_5;
   const scoreData = currentStudent.evaluatedScore || (currentStudent as any).scores;
+
+  const studentGrade = extractGradeLevel(currentStudent) || (exam?.name ? extractGradeLevel({ className: exam.name }) : null) || '8';
+  const isGrade8 = studentGrade === '8';
+  const canonicalReportRows = useMemo(() => {
+    return getStudentCanonicalSubjectScores(currentStudent, exam);
+  }, [currentStudent, exam]);
 
   // Öğrencinin son 3 kurum içi sınavındaki net gelişim verileri (Recharts için)
   const recentExamsNetData = useMemo(() => {
@@ -310,20 +650,16 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
             </thead>
             <tbody>
       `;
-      const subScores = scoreData?.subjectScores || {};
-      const subKeys = Object.keys(subScores);
-      if (subKeys.length > 0) {
-        subKeys.forEach(sId => {
-          const subObj = exam.subjects?.find(s => String(s.id) === String(sId));
-          const subName = subObj ? subObj.name : sId;
-          const ss = subScores[sId];
+      if (canonicalReportRows && canonicalReportRows.length > 0) {
+        canonicalReportRows.forEach(row => {
+          const netStr = typeof row.net === 'number' ? row.net.toFixed(2).replace('.', ',') : (row.net || '-');
           html += `
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:7px 10px; text-align:left; font-weight:bold;">${subName}</td>
-              <td style="padding:7px; color:#16a34a; font-weight:bold;">${ss.correct ?? '-'}</td>
-              <td style="padding:7px; color:#dc2626; font-weight:bold;">${ss.wrong ?? '-'}</td>
-              <td style="padding:7px; color:#64748b;">${ss.empty ?? '-'}</td>
-              <td style="padding:7px; color:#2563eb; font-weight:900; background:#eff6ff;">${typeof ss.net === 'number' ? ss.net.toFixed(2).replace('.', ',') : (ss.net || '-')}</td>
+              <td style="padding:7px 10px; text-align:left; font-weight:bold;">${row.name}</td>
+              <td style="padding:7px; color:#16a34a; font-weight:bold;">${row.correct ?? '-'}</td>
+              <td style="padding:7px; color:#dc2626; font-weight:bold;">${row.wrong ?? '-'}</td>
+              <td style="padding:7px; color:#64748b;">${row.empty ?? '-'}</td>
+              <td style="padding:7px; color:#2563eb; font-weight:900; background:#eff6ff;">${netStr}</td>
             </tr>
           `;
         });
@@ -615,12 +951,12 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
           </div>
 
           {!currentStudent.answers || currentStudent.answers.length === 0 ? (
-            /* Publisher Exam: Clean Scorecard Table */
+            /* Publisher Exam: Clean Scorecard Table (Mükerrersiz Resmi Müfredat Dersleri) */
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
               <div className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between text-xs font-bold">
                 <span className="flex items-center gap-2">
                   <BarChart3 className="w-4 h-4 text-amber-400" />
-                  Ders Bazlı Sonuç ve Net Dağılımı (Yayıncı Denemesi)
+                  Ders Bazlı Sonuç ve Net Dağılımı ({isGrade8 ? '8. Sınıf' : `${studentGrade}. Sınıf`} Müfredatı)
                 </span>
                 <span className="text-[11px] text-slate-300 font-mono">
                   Toplam Net: {(scoreData?.total?.net || 0).toFixed(2).replace('.', ',')}
@@ -638,34 +974,44 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {Object.keys(scoreData?.subjectScores || {}).length > 0 ? (
-                      Object.entries(scoreData?.subjectScores || {}).map(([sId, ss]: [string, any], idx) => {
-                        const subObj = exam.subjects?.find(s => String(s.id) === String(sId));
-                        const name = subObj ? subObj.name : sId;
-                        return (
-                          <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="p-3 font-bold text-slate-800">{name}</td>
-                            <td className="p-3 text-center font-bold text-emerald-600 font-mono">{ss.correct ?? '-'}</td>
-                            <td className="p-3 text-center font-bold text-rose-600 font-mono">{ss.wrong ?? '-'}</td>
-                            <td className="p-3 text-center font-medium text-slate-500 font-mono">{ss.empty ?? '-'}</td>
-                            <td className="p-3 text-center font-black text-blue-700 bg-blue-50/30 font-mono">
-                              {typeof ss.net === 'number' ? ss.net.toFixed(2).replace('.', ',') : (ss.net || '-')}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td className="p-3 font-bold text-slate-800">Genel Sınav Sonucu</td>
-                        <td className="p-3 text-center font-bold text-emerald-600 font-mono">{scoreData?.total?.correct || '-'}</td>
-                        <td className="p-3 text-center font-bold text-rose-600 font-mono">{scoreData?.total?.wrong || '-'}</td>
-                        <td className="p-3 text-center font-medium text-slate-500 font-mono">{scoreData?.total?.empty || '-'}</td>
+                    {canonicalReportRows.map((row) => (
+                      <tr key={row.key} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span>
+                          <span>{row.name}</span>
+                        </td>
+                        <td className="p-3 text-center font-bold text-emerald-600 font-mono">
+                          {row.correct !== '-' ? row.correct : '-'}
+                        </td>
+                        <td className="p-3 text-center font-bold text-rose-600 font-mono">
+                          {row.wrong !== '-' ? row.wrong : '-'}
+                        </td>
+                        <td className="p-3 text-center font-medium text-slate-500 font-mono">
+                          {row.empty !== '-' ? row.empty : '-'}
+                        </td>
                         <td className="p-3 text-center font-black text-blue-700 bg-blue-50/30 font-mono">
-                          {(scoreData?.total?.net || 0).toFixed(2).replace('.', ',')}
+                          {typeof row.net === 'number' ? row.net.toFixed(2).replace('.', ',') : (row.net || '-')}
                         </td>
                       </tr>
-                    )}
+                    ))}
                   </tbody>
+                  <tfoot className="bg-slate-100/90 font-bold border-t-2 border-slate-200">
+                    <tr>
+                      <td className="p-3 font-black text-slate-900">GENEL TOPLAM</td>
+                      <td className="p-3 text-center font-black text-emerald-700 font-mono text-sm">
+                        {scoreData?.total?.correct ?? (currentStudent.totalCorrect || 0)}
+                      </td>
+                      <td className="p-3 text-center font-black text-rose-700 font-mono text-sm">
+                        {scoreData?.total?.wrong ?? (currentStudent.totalWrong || 0)}
+                      </td>
+                      <td className="p-3 text-center font-bold text-slate-600 font-mono text-sm">
+                        {scoreData?.total?.empty ?? (currentStudent.totalEmpty || 0)}
+                      </td>
+                      <td className="p-3 text-center font-black text-blue-800 bg-blue-100/70 font-mono text-base">
+                        {(scoreData?.total?.net ?? (currentStudent.net || 0)).toFixed(2).replace('.', ',')}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
@@ -761,7 +1107,7 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
                     return (
                       <div key={sub.id} className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col">
                         <div className="bg-slate-800 text-white px-3 py-2 flex justify-between items-center text-xs font-bold">
-                          <span className="truncate pr-2">{sub.name}</span>
+                          <span className="truncate pr-2">{getStandardSubjectName(sub.name, studentGrade)}</span>
                           <span className="shrink-0 text-[10px] bg-slate-700 px-2 py-0.5 rounded-full font-mono">
                             D:{ss.correct} Y:{ss.wrong} <span className="text-emerald-300 ml-1">N:{(ss.net || 0).toFixed(2).replace('.', ',')}</span>
                           </span>
@@ -928,7 +1274,7 @@ export function EditResultModal({ student, exam, onClose, onSave }: EditResultMo
               return (
                 <div key={sub.id} className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
                   <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 font-bold text-slate-700 text-xs sm:text-sm flex justify-between items-center">
-                    <span>{sub.name}</span>
+                    <span>{getStandardSubjectName(sub.name, extractGradeLevel(formData.classStr))}</span>
                     <span className="text-xs text-slate-400 font-mono">({sub.count} Soru)</span>
                   </div>
                   <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 bg-white">
@@ -984,45 +1330,6 @@ export function EditResultModal({ student, exam, onClose, onSave }: EditResultMo
     </div>
   );
 }
-
-/**
- * Veritabanı ve arayüzdeki sınıfları tutarlı ve resmi formatta (örn. 8-A) gösterir.
- */
-export const formatDisplayClass = (record: any): string => {
-  if (!record) return '-';
-  const { cls, sec } = formatClassSec(
-    record.className || record.studentClass || record.classStr,
-    record.sectionStr
-  );
-  if (cls && sec) return `${cls}-${sec}`;
-  if (record.className && record.className !== '-') return record.className;
-  if (record.studentClass && record.studentClass !== '-') return record.studentClass;
-  if (cls) return `${cls}. Sınıf`;
-  return '-';
-};
-
-/**
- * Bir öğrencinin veya sınav sonucunun seçilen sınıf filtresine uyup uymadığını kontrol eder.
- * Veritabanındaki '8A', '8-A', '8/A' varyasyonlarını akıllıca eşit kabul eder.
- */
-export const isStudentInClass = (record: any, targetClass: string): boolean => {
-  if (!targetClass || targetClass === 'ALL') return true;
-  if (!record) return false;
-
-  const targetParsed = formatClassSec(targetClass);
-  const recordParsed = formatClassSec(
-    record.className || record.studentClass || record.classStr,
-    record.sectionStr
-  );
-
-  if (targetParsed.cls && targetParsed.sec && recordParsed.cls && recordParsed.sec) {
-    return targetParsed.cls === recordParsed.cls && targetParsed.sec === recordParsed.sec;
-  }
-
-  const rCls = String(record.className || record.studentClass || record.classStr || '').replace(/[\s\-_/.]/g, '').toUpperCase();
-  const tCls = String(targetClass).replace(/[\s\-_/.]/g, '').toUpperCase();
-  return rCls === tCls || rCls.startsWith(tCls) || tCls.startsWith(rCls);
-};
 
 /**
  * Excel'den okunan ham satırı veritabanımızdaki (masterStudents) resmi öğrenci kaydıyla eşleştirir.
@@ -1200,6 +1507,7 @@ export function ResultsView() {
 
   // Search & Filters & Sorting
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedGradeFilter, setSelectedGradeFilter] = useState("ALL");
   const [selectedClassFilter, setSelectedClassFilter] = useState("ALL");
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
   const [classDropdownSearch, setClassDropdownSearch] = useState("");
@@ -1257,6 +1565,12 @@ export function ResultsView() {
       const sNo = String(s.no).trim();
       if (scannedNosSet.has(sNo)) return false;
 
+      // Kademe filtreleme (örn. 8. sınıflar, 7. sınıflar)
+      if (selectedGradeFilter !== "ALL") {
+        if (!isStudentInGrade(s, selectedGradeFilter)) return false;
+      }
+
+      // Şube/Sınıf filtreleme (örn. 8-A)
       if (selectedClassFilter !== "ALL") {
         if (!isStudentInClass(s, selectedClassFilter)) return false;
       }
@@ -1268,12 +1582,18 @@ export function ResultsView() {
 
       return true;
     });
-  }, [masterStudents, scannedNosSet, selectedClassFilter, searchQuery]);
+  }, [masterStudents, scannedNosSet, selectedGradeFilter, selectedClassFilter, searchQuery]);
 
   // Evaluated results with scores
   const evaluatedResults = useMemo(() => {
     let filtered = currentExamResults;
 
+    // Kademe filtreleme (örn. 8. sınıflar, 7. sınıflar)
+    if (selectedGradeFilter !== "ALL") {
+      filtered = filtered.filter(r => isStudentInGrade(r, selectedGradeFilter));
+    }
+
+    // Şube/Sınıf filtreleme (örn. 8-A)
     if (selectedClassFilter !== "ALL") {
       filtered = filtered.filter(r => isStudentInClass(r, selectedClassFilter));
     }
@@ -1327,6 +1647,7 @@ export function ResultsView() {
           classStr: effectiveCls,
           sectionStr: effectiveSec,
           studentClass: effectiveClass,
+          isMatchedWithDb: !!dbStudent,
           evaluatedScore: score,
           scores: score as any 
         };
@@ -1342,6 +1663,7 @@ export function ResultsView() {
           classStr: effectiveCls,
           sectionStr: effectiveSec,
           studentClass: effectiveClass,
+          isMatchedWithDb: !!dbStudent,
           evaluatedScore: res.evaluatedScore,
           scores: res.scores || (res.evaluatedScore as any)
         };
@@ -1375,6 +1697,7 @@ export function ResultsView() {
         classStr: effectiveCls,
         sectionStr: effectiveSec,
         studentClass: effectiveClass,
+        isMatchedWithDb: !!dbStudent,
         evaluatedScore: fallbackScore,
         scores: res.scores || (fallbackScore as any) 
       };
@@ -1386,7 +1709,7 @@ export function ResultsView() {
       }
       return b.evaluatedScore.total.net - a.evaluatedScore.total.net;
     });
-  }, [currentExamResults, exam, selectedClassFilter, searchQuery, isLgs]);
+  }, [currentExamResults, exam, selectedGradeFilter, selectedClassFilter, searchQuery, isLgs, masterStudents]);
 
   // Evaluated results with ranking and sorting
   const evaluatedResultsWithRank = useMemo(() => {
@@ -1480,9 +1803,11 @@ export function ResultsView() {
     const validPercentiles = evaluatedResults.map(r => r.evaluatedScore.total.percentile).filter((p): p is number => typeof p === 'number');
     const bestPercentile = validPercentiles.length > 0 ? Math.min(...validPercentiles).toFixed(2).replace('.', ',') : "0,00";
 
-    const relevantMasterCount = selectedClassFilter === "ALL" 
-      ? totalMaster 
-      : masterStudents.filter(s => isStudentInClass(s, selectedClassFilter)).length;
+    const relevantMasterCount = selectedClassFilter !== "ALL" 
+      ? masterStudents.filter(s => isStudentInClass(s, selectedClassFilter)).length
+      : selectedGradeFilter !== "ALL"
+      ? masterStudents.filter(s => isStudentInGrade(s, selectedGradeFilter)).length
+      : totalMaster;
 
     const participationRate = relevantMasterCount > 0 
       ? Math.min(100, Math.round((evaluatedResults.length / relevantMasterCount) * 100))
@@ -1502,7 +1827,7 @@ export function ResultsView() {
       maxLgs,
       bestPercentile
     };
-  }, [evaluatedResults, masterStudents, selectedClassFilter]);
+  }, [evaluatedResults, masterStudents, selectedClassFilter, selectedGradeFilter]);
 
   // Export results to Excel
   const handleExportResultsExcel = () => {
@@ -1520,11 +1845,11 @@ export function ResultsView() {
         "Kitapçık": r.booklet || "A",
       };
 
-      (exam.subjects || []).forEach(sub => {
-        const ss = r.evaluatedScore?.subjectScores?.[sub.id] || { correct: 0, wrong: 0, net: 0 };
-        row[`${sub.name} (D)`] = ss.correct;
-        row[`${sub.name} (Y)`] = ss.wrong;
-        row[`${sub.name} (Net)`] = typeof ss.net === 'number' ? Number(ss.net.toFixed(2)) : ss.net;
+      const studentSubScores = getStudentCanonicalSubjectScores(r, exam);
+      studentSubScores.forEach(ss => {
+        row[`${ss.name} (D)`] = ss.correct !== '-' ? ss.correct : 0;
+        row[`${ss.name} (Y)`] = ss.wrong !== '-' ? ss.wrong : 0;
+        row[`${ss.name} (Net)`] = typeof ss.net === 'number' ? Number(ss.net.toFixed(2)) : (ss.net !== '-' ? Number(ss.net) || 0 : 0);
       });
 
       row["Toplam Doğru"] = r.evaluatedScore.total.correct;
@@ -1647,6 +1972,84 @@ export function ResultsView() {
     return counts;
   }, [availableClasses, masterStudents]);
 
+  // Sınıf seviyeleri (Kademeler: örn. "8", "7", "6", "5")
+  const availableGrades = useMemo(() => {
+    const gradesSet = new Set<string>();
+    masterStudents.forEach(s => {
+      const g = extractGradeLevel(s);
+      if (g) gradesSet.add(g);
+    });
+    currentExamResults.forEach(r => {
+      const g = extractGradeLevel(r);
+      if (g) gradesSet.add(g);
+    });
+    // Veritabanında sınıf yoksa standart ortaokul kademelerini sağla
+    if (gradesSet.size === 0) {
+      ['8', '7', '6', '5'].forEach(g => gradesSet.add(g));
+    }
+    return Array.from(gradesSet).sort((a, b) => {
+      const numA = parseInt(a, 10);
+      const numB = parseInt(b, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numB - numA;
+      return a.localeCompare(b, 'tr', { numeric: true });
+    });
+  }, [masterStudents, currentExamResults]);
+
+  // Kademe bazlı sınav sonucu sayıları
+  const gradeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    availableGrades.forEach(g => {
+      counts[g] = currentExamResults.filter(r => isStudentInGrade(r, g)).length;
+    });
+    return counts;
+  }, [availableGrades, currentExamResults]);
+
+  // Kademe bazlı veritabanı kütük öğrenci sayıları
+  const gradeDbCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    availableGrades.forEach(g => {
+      counts[g] = masterStudents.filter(s => isStudentInGrade(s, g)).length;
+    });
+    return counts;
+  }, [availableGrades, masterStudents]);
+
+  // Seçili kademeye göre filtrelenmiş şubeler listesi
+  const filteredAvailableClasses = useMemo(() => {
+    if (selectedGradeFilter === 'ALL') {
+      return availableClasses;
+    }
+    const filtered = availableClasses.filter(cls => extractGradeLevel(cls) === selectedGradeFilter);
+    if (filtered.length === 0) {
+      return [`${selectedGradeFilter}-A`, `${selectedGradeFilter}-B`, `${selectedGradeFilter}-C`, `${selectedGradeFilter}-D`];
+    }
+    return filtered;
+  }, [availableClasses, selectedGradeFilter]);
+
+  // Seçili kademeye veya sınava göre gösterilecek resmi dersler (8. sınıf -> İnkılap Tarihi; 5,6,7. sınıf -> Sosyal Bilgiler)
+  const canonicalSubjectsForFilter = useMemo(() => {
+    if (selectedGradeFilter === '8') {
+      return CANONICAL_8TH_GRADE_SUBJECTS;
+    }
+    if (selectedGradeFilter === '5' || selectedGradeFilter === '6' || selectedGradeFilter === '7') {
+      return CANONICAL_5_6_7_GRADE_SUBJECTS;
+    }
+    const examGrade = extractGradeLevel({ className: exam.name });
+    if (examGrade === '5' || examGrade === '6' || examGrade === '7') {
+      return CANONICAL_5_6_7_GRADE_SUBJECTS;
+    }
+    return CANONICAL_8TH_GRADE_SUBJECTS;
+  }, [selectedGradeFilter, exam.name]);
+
+  const handleGradeFilterChange = (newGrade: string) => {
+    setSelectedGradeFilter(newGrade);
+    // Eğer seçilen şube bu kademeye ait değilse şube filtresini 'ALL' yap
+    if (newGrade !== 'ALL' && selectedClassFilter !== 'ALL') {
+      if (extractGradeLevel(selectedClassFilter) !== newGrade) {
+        setSelectedClassFilter('ALL');
+      }
+    }
+  };
+
   const safeConfirm = (msg: string): boolean => {
     try {
       return typeof window !== 'undefined' && window.confirm ? window.confirm(msg) : true;
@@ -1741,13 +2144,13 @@ export function ResultsView() {
             <th rowspan="2">Sınıf</th>
             <th rowspan="2">Kit.</th>`;
 
-    (exam.subjects || []).forEach(sub => {
+    canonicalSubjectsForFilter.forEach(sub => {
       html += `<th colspan="3">${sub.name}</th>`;
     });
 
     html += `<th colspan="${isLgs ? 6 : 4}" style="background-color: #e2e8f0;">GENEL TOPLAM</th></tr><tr>`;
 
-    (exam.subjects || []).forEach(() => {
+    canonicalSubjectsForFilter.forEach(() => {
       html += `<th class="D">D</th><th class="Y">Y</th><th class="net">N</th>`;
     });
     html += `<th class="D">D</th><th class="Y">Y</th><th>B</th><th class="net" style="background-color: #e2e8f0;">NET</th>`;
@@ -1764,9 +2167,11 @@ export function ResultsView() {
         <td>${student.classStr || '-'}/${student.sectionStr || '-'}</td>
         <td>${student.booklet || 'A'}</td>`;
 
-      (exam.subjects || []).forEach(sub => {
-        const ss = student.evaluatedScore?.subjectScores?.[sub.id] || { correct: 0, wrong: 0, net: 0 };
-        html += `<td class="D">${ss.correct}</td><td class="Y">${ss.wrong}</td><td class="net">${ss.net.toFixed(2).replace('.', ',')}</td>`;
+      const studentSubScores = getStudentCanonicalSubjectScores(student, exam);
+      canonicalSubjectsForFilter.forEach(sub => {
+        const ss = studentSubScores.find(s => s.key === sub.key) || { correct: '-', wrong: '-', net: '-' };
+        const netStr = typeof ss.net === 'number' ? ss.net.toFixed(2).replace('.', ',') : (ss.net !== '-' ? ss.net : '0,00');
+        html += `<td class="D">${ss.correct !== '-' ? ss.correct : '-'}</td><td class="Y">${ss.wrong !== '-' ? ss.wrong : '-'}</td><td class="net">${netStr}</td>`;
       });
 
       html += `<td class="D" style="font-weight:bold;">${student.evaluatedScore.total.correct}</td>
@@ -1787,9 +2192,13 @@ export function ResultsView() {
   };
 
   // Copy absent list
+  const absentFilterLabel = selectedClassFilter === 'ALL' 
+    ? (selectedGradeFilter === 'ALL' ? 'Tüm Okul' : `${selectedGradeFilter}. Sınıflar`) 
+    : selectedClassFilter;
+
   const handleCopyAbsentList = () => {
     if (absentStudents.length === 0) return;
-    const text = `Sınava Girmeyen Öğrenciler (${exam.name} - ${selectedClassFilter === 'ALL' ? 'Tüm Okul' : selectedClassFilter}):\n` +
+    const text = `Sınava Girmeyen Öğrenciler (${exam.name} - ${absentFilterLabel}):\n` +
       absentStudents.map((s, i) => `${i + 1}. [No: ${s.no}] ${s.name} (${s.classStr || s.className || ''}/${s.sectionStr || ''})`).join('\n');
     navigator.clipboard.writeText(text);
     showAlert("Sınava girmeyen öğrencilerin listesi panoya kopyalandı.");
@@ -1799,7 +2208,7 @@ export function ResultsView() {
   const handleShareWhatsApp = () => {
     if (absentStudents.length === 0) return;
     const text = `*${exam.name} - Sınava Katılmayan Öğrenciler*\n` +
-      `Sınıf/Şube: ${selectedClassFilter === 'ALL' ? 'Tüm Okul' : selectedClassFilter}\n` +
+      `Sınıf/Şube: ${absentFilterLabel}\n` +
       `Toplam: ${absentStudents.length} Öğrenci\n\n` +
       absentStudents.map((s, i) => `${i + 1}. [No: ${s.no}] ${s.name} (${s.classStr || s.className || ''}/${s.sectionStr || ''})`).join('\n');
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
@@ -1823,7 +2232,7 @@ export function ResultsView() {
     </style></head><body>
       <div class="header">
         <h2>${exam.name} - SINAVA KATILMAYAN (DEVAMSIZ) ÖĞRENCİLER</h2>
-        <p>Filtre: ${selectedClassFilter === 'ALL' ? 'Tüm Okul' : selectedClassFilter} • Toplam: ${absentStudents.length} Öğrenci • Tarih: ${new Date().toLocaleDateString('tr-TR')}</p>
+        <p>Filtre: ${absentFilterLabel} • Toplam: ${absentStudents.length} Öğrenci • Tarih: ${new Date().toLocaleDateString('tr-TR')}</p>
       </div>
       <table>
         <thead>
@@ -2189,6 +2598,10 @@ export function ResultsView() {
                   });
                 }
 
+                const finalStudentGrade = extractGradeLevel({ className: finalDisplayClass, classStr: finalClassStr }) 
+                  || extractGradeLevel({ className: exam.name }) 
+                  || '8';
+
                 const subjectScores: Record<string, { correct: number; wrong: number; empty: number; net: number }> = {};
                 let sumNets = 0;
                 let sumCorrect = 0;
@@ -2204,11 +2617,13 @@ export function ResultsView() {
                   const cleanN = isNaN(nVal) ? 0 : parseFloat(nVal.toFixed(2));
 
                   let stdName = mapping.name;
-                  const nl = mapping.name.toLowerCase();
-                  if (nl.includes('türk')) stdName = 'Türkçe';
-                  else if (nl.includes('tarih') || nl.includes('ink')) stdName = 'T.C. İnkılap Tarihi ve Atatürkçülük';
-                  else if (nl.includes('din')) stdName = 'Din Kültürü ve Ahlak Bilgisi';
-                  else if (nl.includes('ing') || nl.includes('yabancı')) stdName = 'İngilizce';
+                  const nl = normalizeClean(mapping.name);
+                  if (nl.includes('turk')) stdName = 'Türkçe';
+                  else if (nl.includes('din') || nl.includes('dkab')) stdName = 'Din Kültürü ve Ahlak Bilgisi';
+                  else if (nl.includes('ing') || nl.includes('yabanci') || nl.includes('dil') || nl.includes('english')) stdName = 'İngilizce';
+                  else if (nl.includes('tarih') || nl.includes('ink') || nl.includes('sosyal') || nl.includes('tar') || nl === 'sb') {
+                    stdName = 'Tarih / Sosyal Bilgiler';
+                  }
                   else if (nl.includes('mat')) stdName = 'Matematik';
                   else if (nl.includes('fen')) stdName = 'Fen Bilimleri';
 
@@ -2220,21 +2635,29 @@ export function ResultsView() {
                   };
 
                   subjectScores[stdName] = subScoreObj;
+                  if (stdName === 'Tarih / Sosyal Bilgiler') {
+                    subjectScores['İnkılap Tarihi'] = subScoreObj;
+                    subjectScores['Sosyal Bilgiler'] = subScoreObj;
+                    subjectScores['Tarih'] = subScoreObj;
+                  }
+                  if (stdName === 'İngilizce') {
+                    subjectScores['ingilizce'] = subScoreObj;
+                    subjectScores['ing'] = subScoreObj;
+                  }
 
                   const matchingExamSub = exam.subjects?.find(es => {
-                    const esl = es.name.toLowerCase();
-                    const nll = stdName.toLowerCase();
+                    const esl = normalizeClean(es.name);
+                    const nll = normalizeClean(stdName);
                     return esl === nll ||
-                      (nll.includes('türk') && esl.includes('türk')) ||
-                      (nll.includes('tarih') && (esl.includes('tarih') || esl.includes('ink'))) ||
-                      (nll.includes('din') && esl.includes('din')) ||
-                      (nll.includes('ing') && esl.includes('ing')) ||
+                      (nll.includes('turk') && esl.includes('turk')) ||
+                      ((nll.includes('din') || nll.includes('dkab')) && (esl.includes('din') || esl.includes('dkab'))) ||
+                      ((nll.includes('ing') || nll.includes('yabanci') || nll.includes('dil')) && (esl.includes('ing') || esl.includes('yabanci') || esl.includes('dil'))) ||
+                      ((nll.includes('ink') || nll.includes('tarih') || nll.includes('sosyal')) && (esl.includes('ink') || esl.includes('tarih') || esl.includes('sosyal'))) ||
                       (nll.includes('mat') && esl.includes('mat')) ||
                       (nll.includes('fen') && esl.includes('fen'));
                   });
                   if (matchingExamSub) {
                     subjectScores[String(matchingExamSub.id)] = subScoreObj;
-                    subjectScores[matchingExamSub.name] = subScoreObj;
                   }
 
                   sumNets += cleanN;
@@ -2346,30 +2769,36 @@ export function ResultsView() {
               });
             }
 
+            const fallbackStudentGrade = extractGradeLevel({ className: finalClassName, classStr: finalClassStr }) 
+              || extractGradeLevel({ className: exam.name }) 
+              || '8';
+
             const subjectScores: Record<string, { correct: number; wrong: number; empty: number; net: number }> = {};
             let parsedTotalNet = 0;
 
             Object.keys(row).forEach(key => {
-              const lKey = key.trim().toLowerCase();
+              const lKeyClean = normalizeClean(key);
               const val = parseFloat(String(row[key]).replace(',', '.'));
               if (!isNaN(val)) {
-                if (lKey.includes("toplam net") || lKey === "net") {
+                if (lKeyClean.includes("toplam net") || lKeyClean === "net") {
                   parsedTotalNet = val;
                 } else if (
-                  lKey.includes("türk") || lKey.includes("turk") || 
-                  lKey.includes("mat") || 
-                  lKey.includes("fen") || 
-                  lKey.includes("ink") || lKey.includes("tarih") || 
-                  lKey.includes("din") || 
-                  lKey.includes("ing") || lKey.includes("yabancı")
+                  lKeyClean.includes("turk") || 
+                  lKeyClean.includes("mat") || 
+                  lKeyClean.includes("fen") || 
+                  lKeyClean.includes("ink") || lKeyClean.includes("tarih") || lKeyClean.includes("sosyal") || lKeyClean.includes("tar") || lKeyClean === "sb" ||
+                  lKeyClean.includes("din") || lKeyClean.includes("dkab") ||
+                  lKeyClean.includes("ing") || lKeyClean.includes("yabanci") || lKeyClean.includes("dil") || lKeyClean.includes("english")
                 ) {
                   let stdName = key.trim();
-                  if (lKey.includes("türk")) stdName = "Türkçe";
-                  else if (lKey.includes("tarih") || lKey.includes("ink")) stdName = "T.C. İnkılap Tarihi ve Atatürkçülük";
-                  else if (lKey.includes("din")) stdName = "Din Kültürü ve Ahlak Bilgisi";
-                  else if (lKey.includes("ing") || lKey.includes("yabancı")) stdName = "İngilizce";
-                  else if (lKey.includes("mat")) stdName = "Matematik";
-                  else if (lKey.includes("fen")) stdName = "Fen Bilimleri";
+                  if (lKeyClean.includes("turk")) stdName = "Türkçe";
+                  else if (lKeyClean.includes("tarih") || lKeyClean.includes("ink") || lKeyClean.includes("sosyal") || lKeyClean.includes("tar") || lKeyClean === "sb") {
+                    stdName = "Tarih / Sosyal Bilgiler";
+                  }
+                  else if (lKeyClean.includes("din") || lKeyClean.includes("dkab")) stdName = "Din Kültürü ve Ahlak Bilgisi";
+                  else if (lKeyClean.includes("ing") || lKeyClean.includes("yabanci") || lKeyClean.includes("dil") || lKeyClean.includes("english")) stdName = "İngilizce";
+                  else if (lKeyClean.includes("mat")) stdName = "Matematik";
+                  else if (lKeyClean.includes("fen")) stdName = "Fen Bilimleri";
 
                   const subScoreObj = {
                     correct: Math.round(val),
@@ -2379,21 +2808,29 @@ export function ResultsView() {
                   };
 
                   subjectScores[stdName] = subScoreObj;
+                  if (stdName === 'Tarih / Sosyal Bilgiler') {
+                    subjectScores['İnkılap Tarihi'] = subScoreObj;
+                    subjectScores['Sosyal Bilgiler'] = subScoreObj;
+                    subjectScores['Tarih'] = subScoreObj;
+                  }
+                  if (stdName === 'İngilizce') {
+                    subjectScores['ingilizce'] = subScoreObj;
+                    subjectScores['ing'] = subScoreObj;
+                  }
 
                   const matchingExamSub = exam.subjects?.find(es => {
-                    const esl = es.name.toLowerCase();
-                    const nll = stdName.toLowerCase();
+                    const esl = normalizeClean(es.name);
+                    const nll = normalizeClean(stdName);
                     return esl === nll ||
-                      (nll.includes('türk') && esl.includes('türk')) ||
-                      (nll.includes('tarih') && (esl.includes('tarih') || esl.includes('ink'))) ||
-                      (nll.includes('din') && esl.includes('din')) ||
-                      (nll.includes('ing') && esl.includes('ing')) ||
+                      (nll.includes('turk') && esl.includes('turk')) ||
+                      ((nll.includes('din') || nll.includes('dkab')) && (esl.includes('din') || esl.includes('dkab'))) ||
+                      ((nll.includes('ing') || nll.includes('yabanci') || nll.includes('dil')) && (esl.includes('ing') || esl.includes('yabanci') || esl.includes('dil'))) ||
+                      ((nll.includes('ink') || nll.includes('tarih') || nll.includes('sosyal')) && (esl.includes('ink') || esl.includes('tarih') || esl.includes('sosyal'))) ||
                       (nll.includes('mat') && esl.includes('mat')) ||
                       (nll.includes('fen') && esl.includes('fen'));
                   });
                   if (matchingExamSub) {
                     subjectScores[String(matchingExamSub.id)] = subScoreObj;
-                    subjectScores[matchingExamSub.name] = subScoreObj;
                   }
                 }
               }
@@ -3488,9 +3925,34 @@ export function ResultsView() {
             </div>
 
             {/* Filtre ve Görünüm Kontrolleri (Mobilde 2 Eşit Sütun, Masaüstünde Yan Yana) */}
-            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
-              {/* Sınıf Filtresi */}
-              {availableClasses.length > 0 && (
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 flex-wrap sm:flex-nowrap">
+              {/* Kademe Seviyesi Filtresi (8. Sınıflar, 7. Sınıflar, vb.) */}
+              <div className="relative w-full sm:w-auto">
+                <div className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl pl-2.5 pr-7 py-2 text-xs font-bold text-slate-800 transition-colors shadow-2xs cursor-pointer">
+                  <GraduationCap className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <select
+                    value={selectedGradeFilter}
+                    onChange={e => handleGradeFilterChange(e.target.value)}
+                    className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs w-full appearance-none truncate"
+                    aria-label="Kademe Seviyesi Filtresi"
+                  >
+                    <option value="ALL">Tüm Kademeler ({currentExamResults.length}{masterStudents.length > 0 ? ` / ${masterStudents.length} Kütük` : ''})</option>
+                    {availableGrades.map(grade => {
+                      const examCount = gradeCounts[grade] || 0;
+                      const dbCount = gradeDbCounts[grade] || 0;
+                      return (
+                        <option key={grade} value={grade}>
+                          {grade}. Sınıflar ({examCount}{dbCount > 0 ? ` / ${dbCount} Öğrenci` : ''})
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Sınıf / Şube Filtresi - Veritabanındaki Sınıf Verilerini ve Şubeleri Gösterir */}
+              {filteredAvailableClasses.length > 0 && (
                 <div className="relative w-full sm:w-auto">
                   <div className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl pl-2.5 pr-7 py-2 text-xs font-bold text-slate-800 transition-colors shadow-2xs cursor-pointer">
                     <Filter className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -3498,10 +3960,16 @@ export function ResultsView() {
                       value={selectedClassFilter}
                       onChange={e => setSelectedClassFilter(e.target.value)}
                       className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs w-full appearance-none truncate"
-                      aria-label="Sınıf Filtresi"
+                      aria-label="Sınıf / Şube Filtresi"
                     >
-                      <option value="ALL">Tüm Sınıflar ({currentExamResults.length}{masterStudents.length > 0 ? ` / ${masterStudents.length} Kütük` : ''})</option>
-                      {availableClasses.map(cls => {
+                      <option value="ALL">
+                        {selectedGradeFilter === 'ALL' ? 'Tüm Şubeler' : `${selectedGradeFilter}. Sınıf Tüm Şubeler`} ({
+                          selectedGradeFilter === 'ALL'
+                            ? `${currentExamResults.length}${masterStudents.length > 0 ? ` / ${masterStudents.length} Kütük` : ''}`
+                            : `${gradeCounts[selectedGradeFilter] || 0}${gradeDbCounts[selectedGradeFilter] > 0 ? ` / ${gradeDbCounts[selectedGradeFilter]} Öğrenci` : ''}`
+                        })
+                      </option>
+                      {filteredAvailableClasses.map(cls => {
                         const examCount = classCounts[cls] || 0;
                         const dbCount = classDbCounts[cls] || 0;
                         return (
@@ -3516,22 +3984,36 @@ export function ResultsView() {
                 </div>
               )}
 
-              {/* Ders Detay Sütunları Aç/Kapa Toggle */}
-              {exam.subjects && exam.subjects.length > 0 && (
+              {/* Aktif Filtre Temizleme Butonu */}
+              {(selectedGradeFilter !== "ALL" || selectedClassFilter !== "ALL") && (
                 <button
                   type="button"
-                  onClick={() => setShowSubjectColumns(prev => !prev)}
-                  className={`w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
-                    showSubjectColumns
-                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200 ring-1 ring-indigo-200'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                  title="Tabloda ders bazlı Doğru/Yanlış/Net sütunlarını göster veya gizle"
+                  onClick={() => {
+                    setSelectedGradeFilter("ALL");
+                    setSelectedClassFilter("ALL");
+                  }}
+                  className="w-full sm:w-auto px-2.5 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl flex items-center justify-center gap-1 transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
+                  title="Filtreleri Temizle"
                 >
-                  <SlidersHorizontal className={`w-3.5 h-3.5 shrink-0 ${showSubjectColumns ? 'text-indigo-600' : 'text-slate-500'}`} />
-                  <span className="truncate">{showSubjectColumns ? 'Dersleri Daralt' : 'Ders Netleri'}</span>
+                  <X className="w-3.5 h-3.5" />
+                  <span>Temizle</span>
                 </button>
               )}
+
+              {/* Ders Detay Sütunları Aç/Kapa Toggle */}
+              <button
+                type="button"
+                onClick={() => setShowSubjectColumns(prev => !prev)}
+                className={`w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
+                  showSubjectColumns
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200 ring-1 ring-indigo-200'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+                title="Tabloda ders bazlı Doğru/Yanlış/Net sütunlarını göster veya gizle"
+              >
+                <SlidersHorizontal className={`w-3.5 h-3.5 shrink-0 ${showSubjectColumns ? 'text-indigo-600' : 'text-slate-500'}`} />
+                <span className="truncate">{showSubjectColumns ? 'Dersleri Daralt' : 'Ders Netleri'}</span>
+              </button>
             </div>
           </div>
 
@@ -3599,8 +4081,8 @@ export function ResultsView() {
                       <th className="p-3 text-center w-14 text-slate-400">Kit.</th>
 
                       {/* Ders Detay Sütunları (Opsiyonel) */}
-                      {showSubjectColumns && exam.subjects && exam.subjects.map(sub => (
-                        <th key={sub.id} className="p-3 text-center border-l border-slate-800 font-normal">
+                      {showSubjectColumns && canonicalSubjectsForFilter.map(sub => (
+                        <th key={sub.key} className="p-3 text-center border-l border-slate-800 font-normal">
                           <div className="text-[10px] text-indigo-300 font-bold">{sub.name}</div>
                           <div className="text-[9px] text-slate-400 font-mono">D / Y / Net</div>
                         </th>
@@ -3685,7 +4167,15 @@ export function ResultsView() {
                             )}
                           </td>
                           <td className="p-3 font-bold font-mono tabular-nums text-slate-700">
-                            {student.no || student.studentNo || "-"}
+                            <div className="flex items-center gap-1.5">
+                              <span>{student.no || student.studentNo || "-"}</span>
+                              {(student as any).isMatchedWithDb && (
+                                <span title="Uygulama öğrenci veritabanı kütüğü ile eşleşti" className="inline-flex items-center text-emerald-600 bg-emerald-50 border border-emerald-200/60 px-1 py-0.2 rounded text-[10px] font-bold">
+                                  <UserCheck className="w-3 h-3 mr-0.5" />
+                                  Kütük
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="p-3">
                             <button
@@ -3698,7 +4188,7 @@ export function ResultsView() {
                             </button>
                           </td>
                           <td className="p-3 text-center text-slate-700 font-bold font-mono tabular-nums">
-                            <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/80 text-[11px] text-slate-800">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/80 text-[11px] text-slate-800">
                               {formatDisplayClass(student)}
                             </span>
                           </td>
@@ -3707,18 +4197,18 @@ export function ResultsView() {
                           </td>
 
                           {/* Subject Breakdown Columns */}
-                          {showSubjectColumns && exam.subjects && exam.subjects.map(sub => {
-                            const ss = student.evaluatedScore?.subjectScores?.[sub.id] || 
-                                       student.evaluatedScore?.subjectScores?.[String(sub.id)] ||
-                                       student.evaluatedScore?.subjectScores?.[sub.name] || 
-                                       { correct: 0, wrong: 0, net: 0 };
+                          {showSubjectColumns && canonicalSubjectsForFilter.map(sub => {
+                            const studentSubScores = getStudentCanonicalSubjectScores(student, exam);
+                            const ss = studentSubScores.find(s => s.key === sub.key) || { correct: '-', wrong: '-', net: '-' };
                             return (
-                              <td key={sub.id} className="p-3 text-center border-l border-slate-100 font-mono tabular-nums">
-                                <span className="text-emerald-700 font-semibold">{ss.correct}</span>
+                              <td key={sub.key} className="p-3 text-center border-l border-slate-100 font-mono tabular-nums">
+                                <span className="text-emerald-700 font-semibold">{ss.correct !== '-' ? ss.correct : '-'}</span>
                                 <span className="text-slate-300 mx-0.5">/</span>
-                                <span className="text-rose-600">{ss.wrong}</span>
+                                <span className="text-rose-600">{ss.wrong !== '-' ? ss.wrong : '-'}</span>
                                 <span className="text-slate-300 mx-0.5">/</span>
-                                <span className="text-blue-700 font-black">{ss.net.toFixed(2).replace('.', ',')}</span>
+                                <span className="text-blue-700 font-black">
+                                  {typeof ss.net === 'number' ? ss.net.toFixed(2).replace('.', ',') : (ss.net !== '-' ? ss.net : '-')}
+                                </span>
                               </td>
                             );
                           })}
