@@ -20,9 +20,10 @@ import {
   isLgsExam, 
   isTytExam, 
   isAytExam,
-  calculateAtaLigPoints
+  calculateAtaLigPoints,
+  determineLeagueTeam
 } from '../lib/omrEngine';
-import { generateId, exportToExcel, exportAoaToExcel, importFromExcel } from '../lib/utils';
+import { generateId, exportToExcel, exportAoaToExcel, importFromExcel, parseDate } from '../lib/utils';
 import {
   BarChart3,
   Users,
@@ -462,167 +463,280 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
     });
   }, [state.students, currentStudent]);
 
-  // Sınavda kazanılan rozetler (hem sınav nesnesinden hem de ders bazlı netlerden tam tespit)
-  const examBadges = useMemo(() => {
-    const list: Array<{ name: string; desc: string; icon: string }> = [];
-    const added = new Set<string>();
+  // Rozet Meta Bilgileri (Akademi Arena - LeagueView ile %100 birebir uyumlu)
+  const ARENA_BADGES_INFO: Record<string, { label: string; icon: string; desc: string; bg: string; text: string; border: string }> = {
+    // Efsanevi
+    lgsFatihi: { label: 'LGS Fatihi', icon: '🏆', desc: 'Tüm soruları eksiksiz doğru cevaplama', bg: 'bg-amber-500', text: 'text-white font-extrabold', border: 'border-amber-400' },
+    ankaKusu: { label: 'Anka Kuşu', icon: '🔥', desc: 'Taktik Avcıları liginden üst lige sıçrama başarısı', bg: 'bg-gradient-to-r from-orange-500 to-amber-500', text: 'text-white font-extrabold', border: 'border-orange-400' },
 
-    const addBadge = (name: string, desc: string, icon = '✨') => {
-      if (!added.has(name)) {
-        added.add(name);
-        list.push({ name, desc, icon });
+    // Uzmanlık
+    zirveBekcisi: { label: 'Zirve Bekçisi', icon: '🏰', desc: 'Üst üste 3 sınav boyunca 400+ puan koruma', bg: 'bg-fuchsia-100', text: 'text-fuchsia-900 font-bold', border: 'border-fuchsia-200' },
+    ivmeSampiyonu: { label: 'İvme Şampiyonu', icon: '⚡', desc: 'Üst üste 3 sınav puanını en az 5 artırma', bg: 'bg-cyan-100', text: 'text-cyan-900 font-bold', border: 'border-cyan-200' },
+    barajYikici: { label: 'Baraj Yıkıcı', icon: '🔨', desc: 'Üst üste 3 sınav Matematikte 10+ net yapma', bg: 'bg-orange-100', text: 'text-orange-900 font-bold', border: 'border-orange-200' },
+    stratejiMuhendisi: { label: 'Strateji Mh.', icon: '🧠', desc: 'Üst üste 4 sınav Kalkan rozeti (Boş > Yanlış) alma', bg: 'bg-indigo-100', text: 'text-indigo-900 font-bold', border: 'border-indigo-200' },
+    istikrarElcisi: { label: 'İstikrar Elçisi', icon: '🕊️', desc: 'Üst üste 5 sınav hiç Kırmızı Kart görmeme', bg: 'bg-teal-100', text: 'text-teal-900 font-bold', border: 'border-teal-200' },
+
+    // Takım Hedef Rozetleri
+    sozelSovalyesi: { label: 'Sözel Şövalyesi', icon: '📜', desc: 'Kutup Yıldızları: Sözel branşlarda sıfır yanlış', bg: 'bg-amber-100', text: 'text-amber-900 font-bold', border: 'border-amber-200' },
+    sayisalKalesi: { label: 'Sayısal Kalesi', icon: '🏰', desc: 'Kutup Yıldızları: Sayısal derslerde en fazla 2 yanlış', bg: 'bg-amber-100', text: 'text-amber-900 font-bold', border: 'border-amber-200' },
+    matematikUyanisi: { label: 'Mat. Uyanışı', icon: '💡', desc: 'Sıçrama Ustaları: Matematikte 10 ve üzeri net', bg: 'bg-blue-100', text: 'text-blue-900 font-bold', border: 'border-blue-200' },
+    dengeCambazi: { label: 'Denge Cambazı', icon: '⚖️', desc: 'Sıçrama Ustaları: Türkçe ve Fen branşlarında 15+ net', bg: 'bg-blue-100', text: 'text-blue-900 font-bold', border: 'border-blue-200' },
+    keskinNisanci: { label: 'Keskin Nişancı', icon: '🎯', desc: 'Taktik Avcıları: %70 ve üzeri isabet oranı', bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' },
+    temelAtici: { label: 'Temel Atıcı', icon: '🧱', desc: 'Taktik Avcıları: Tüm derslerde pozitif net başarısı', bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' },
+
+    // Branş Efsaneleri
+    filozof: { label: 'Filozof', icon: '📚', desc: 'Türkçe dersinde 20 tam doğru ve 0 yanlış', bg: 'bg-rose-100', text: 'text-rose-900 font-bold', border: 'border-rose-200' },
+    newton: { label: 'Newton', icon: '🔭', desc: 'Fen Bilimlerinde 20 tam doğru ve 0 yanlış', bg: 'bg-sky-100', text: 'text-sky-900 font-bold', border: 'border-sky-200' },
+    pisagor: { label: 'Pisagor', icon: '📐', desc: 'Matematik dersinde 20 tam doğru ve 0 yanlış', bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' },
+
+    // Gizemli Rozetler
+    uyuyanDev: { label: 'Uyuyan Dev', icon: '🦁', desc: 'Önceki ortalamasına göre +40 puanlık dev sıçrama', bg: 'bg-violet-100', text: 'text-violet-900 font-bold', border: 'border-violet-200' },
+    sabirTasi: { label: 'Sabır Taşı', icon: '💎', desc: '15 ve üzeri boş bırakıp sıfır yanlışla net koruma', bg: 'bg-stone-100', text: 'text-stone-900 font-bold', border: 'border-stone-200' },
+    yinYang: { label: 'Yin Yang', icon: '☯️', desc: 'Matematik ve Türkçe derslerinde eşit ve 10+ net', bg: 'bg-zinc-100', text: 'text-zinc-900 font-bold', border: 'border-zinc-200' },
+
+    // Temel Rozetler
+    kalkan: { label: 'Kalkan', icon: '🛡️', desc: 'Boş sayısı yanlış sayısından fazla (Savunma başarısı)', bg: 'bg-amber-100', text: 'text-amber-900 font-bold', border: 'border-amber-200' },
+    zirve: { label: 'Zirve Koruma', icon: '👑', desc: '400 üzeri puan barajını aşma başarısı', bg: 'bg-purple-100', text: 'text-purple-900 font-bold', border: 'border-purple-200' },
+    ivme: { label: 'İvme', icon: '🚀', desc: 'Önceki ortalamasını en az 2 puan geçme başarısı', bg: 'bg-blue-100', text: 'text-blue-900 font-bold', border: 'border-blue-200' },
+    tamIsabet: { label: 'Tam İsabet', icon: '🎯', desc: 'Herhangi bir derste sıfır yanlış ve tam isabet', bg: 'bg-emerald-100', text: 'text-emerald-900 font-bold', border: 'border-emerald-200' },
+    kirmiziKart: { label: 'Kırmızı Kart', icon: '🟥', desc: '15 ve üzeri yanlış sayısı (Dikkat uyarısı)', bg: 'bg-rose-100', text: 'text-rose-900 font-bold', border: 'border-rose-200' },
+    takimRuhu: { label: 'Takım Ruhu', icon: '🤝', desc: 'Takım hedeflerine aktif katkı sağlama', bg: 'bg-teal-100', text: 'text-teal-900 font-bold', border: 'border-teal-200' },
+  };
+
+  const mapBadgeKey = (rawKey: string): string | null => {
+    const k = normalizeTurkish(rawKey).toLowerCase().replace(/[\s\.\-_]+/g, '');
+    if (k.includes('lgsfatih')) return 'lgsFatihi';
+    if (k.includes('ankakus')) return 'ankaKusu';
+    if (k.includes('zirvebekcisi')) return 'zirveBekcisi';
+    if (k.includes('ivmesampiyonu')) return 'ivmeSampiyonu';
+    if (k.includes('barajyikici')) return 'barajYikici';
+    if (k.includes('stratejimuhendisi') || k.includes('stratejimh')) return 'stratejiMuhendisi';
+    if (k.includes('istikrarelcisi')) return 'istikrarElcisi';
+    if (k.includes('sozelsovalye')) return 'sozelSovalyesi';
+    if (k.includes('sayisalkale')) return 'sayisalKalesi';
+    if (k.includes('matematikuyanis') || k.includes('matuyanis')) return 'matematikUyanisi';
+    if (k.includes('dengecambaz')) return 'dengeCambazi';
+    if (k.includes('keskinnisan')) return 'keskinNisanci';
+    if (k.includes('temelatici')) return 'temelAtici';
+    if (k.includes('filozof')) return 'filozof';
+    if (k.includes('newton')) return 'newton';
+    if (k.includes('pisagor')) return 'pisagor';
+    if (k.includes('uyuyandev')) return 'uyuyanDev';
+    if (k.includes('sabirtasi')) return 'sabirTasi';
+    if (k.includes('yinyang')) return 'yinYang';
+    if (k.includes('kalkan')) return 'kalkan';
+    if (k.includes('zirve')) return 'zirve';
+    if (k.includes('ivme')) return 'ivme';
+    if (k.includes('tamisabet')) return 'tamIsabet';
+    if (k.includes('kirmizikart')) return 'kirmiziKart';
+    if (k.includes('takimruhu')) return 'takimRuhu';
+    return null;
+  };
+
+  // Akademi Arena Lig Puanı ve Rozetlerini Lig & Rozetler (LeagueView) ile birebir aynı motorla hesapla
+  const arenaExamResult = useMemo(() => {
+    const sNo = currentStudent.no !== undefined 
+      ? Number(currentStudent.no) 
+      : (currentStudent.studentNo !== undefined ? Number(currentStudent.studentNo) : undefined);
+    const sNameNorm = normalizeTurkish(currentStudent.name || currentStudent.studentName || '').trim().toLowerCase();
+
+    // 1. Öğrencinin katıldığı tüm sınavları tarih sırasıyla topla
+    const allStudentExams = (state.exams || []).map(ex => {
+      const isCurrentExam = String(ex.id) === String(exam.id) || ex.name === exam.name;
+      const exRes = isCurrentExam 
+        ? currentStudent 
+        : (ex.results || []).find(r => {
+            const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : undefined);
+            if (sNo !== undefined && sNo > 0 && rNo !== undefined && rNo === sNo) return true;
+            if (r.name && normalizeTurkish(r.name).trim().toLowerCase() === sNameNorm) return true;
+            return false;
+          });
+
+      if (!exRes) return null;
+
+      const score = Number(
+        exRes?.evaluatedScore?.total?.lgsScore ?? 
+        exRes?.lgsScore ?? 
+        exRes?.evaluatedScore?.total?.net ?? 
+        exRes?.net ?? 
+        exRes?.average ?? 
+        0
+      );
+
+      const rawDetails = exRes?.evaluatedScore?.subjectScores || exRes?.scores;
+      let resolvedDetails = rawDetails;
+      if (rawDetails && ex.subjects && Array.isArray(ex.subjects)) {
+        const mapped: Record<string, any> = {};
+        Object.entries(rawDetails).forEach(([key, val]: [string, any]) => {
+          const sub = ex.subjects.find((s: any) => String(s.id) === String(key) || String(s.name) === String(key));
+          const subName = sub ? sub.name : key;
+          mapped[subName] = { ...(typeof val === 'object' ? val : {}), name: subName };
+        });
+        resolvedDetails = mapped;
       }
-    };
 
-    // 1. Varsa currentStudent.earnedBadges dizisindekileri al
+      return {
+        examId: ex.id,
+        name: ex.name,
+        date: ex.date,
+        score,
+        details: resolvedDetails,
+        examRes: exRes,
+        isCurrentExam
+      };
+    }).filter(Boolean) as { examId: string; name: string; date: string; score: number; details: any; examRes: any; isCurrentExam: boolean }[];
+
+    allStudentExams.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+
+    const currIndex = allStudentExams.findIndex(h => h.isCurrentExam || String(h.examId) === String(exam.id) || h.name === exam.name);
+    const pastExams = currIndex > 0 ? allStudentExams.slice(0, currIndex) : [];
+    const prevAverage = pastExams.length > 0 ? (pastExams.reduce((sum, p) => sum + p.score, 0) / pastExams.length) : 0;
+    let pastTeam = pastExams.length > 0 ? determineLeagueTeam(prevAverage) : (dbStudent?.leagueTeam || 'Taktik Avcıları');
+    if (pastTeam === 'Atanmadı') pastTeam = 'Taktik Avcıları';
+
+    const currItem = currIndex >= 0 ? allStudentExams[currIndex] : null;
+    const currScore = currItem ? currItem.score : Number(scoreData?.total?.lgsScore ?? scoreData?.total?.net ?? 0);
+    const currDetails = currItem?.details || scoreData?.subjectScores || {};
+
+    const { earnedLP: calculatedLP, badgeCounts } = calculateAtaLigPoints(
+      currScore,
+      prevAverage,
+      currDetails,
+      pastExams,
+      pastTeam
+    );
+
+    // Sınavda saklanmış earnedBadges varsa eksiksiz eşle (LeagueView ile tam uyumlu)
     if (Array.isArray(currentStudent.earnedBadges)) {
-      currentStudent.earnedBadges.forEach(b => {
-        if (b && typeof b === 'string') addBadge(b, 'Bu sınavda kazanıldı', '🏅');
+      currentStudent.earnedBadges.forEach((bName: string) => {
+        const mapped = mapBadgeKey(bName);
+        if (mapped && (badgeCounts as any)[mapped] !== undefined) {
+          (badgeCounts as any)[mapped] = Math.max((badgeCounts as any)[mapped] || 0, 1);
+        }
       });
     }
 
-    // 2. Ders bazlı başarılardan dinamik hesapla
-    let totalD = 0;
-    let totalY = 0;
-    let totalB = 0;
-    let mathNet = 0;
-    let turkNet = 0;
-    let fenNet = 0;
-    let inkY = 0, dinY = 0, ingY = 0;
-    let matY = 0, fenY = 0;
-    let allNetNonNegative = true;
+    // Transfer geçmişinden Anka Kuşu kontrolü
+    const transfer = dbStudent?.transferHistory?.find((th: any) => th.examName === exam.name);
+    if (transfer && transfer.from === 'Taktik Avcıları' && (transfer.to === 'Sıçrama Ustaları' || transfer.to === 'Kutup Yıldızları')) {
+      badgeCounts.ankaKusu = Math.max(badgeCounts.ankaKusu || 0, 1);
+    }
 
-    canonicalReportRows.forEach(r => {
-      const c = typeof r.correct === 'number' ? r.correct : 0;
-      const w = typeof r.wrong === 'number' ? r.wrong : 0;
-      const e = typeof r.empty === 'number' ? r.empty : 0;
-      const n = typeof r.net === 'number' ? r.net : 0;
+    const earnedLP = typeof currentStudent.earnedLP === 'number' && currentStudent.earnedLP > 0
+      ? currentStudent.earnedLP
+      : (transfer && transfer.from === 'Taktik Avcıları' ? calculatedLP + 100 : calculatedLP);
 
-      totalD += c;
-      totalY += w;
-      totalB += e;
-      if (n < 0) allNetNonNegative = false;
+    return {
+      earnedLP,
+      badgeCounts,
+      pastTeam
+    };
+  }, [currentStudent, exam, state.exams, dbStudent, scoreData]);
 
-      const lower = normalizeClean(r.name);
-      if (lower.includes('mat')) { mathNet = n; matY = w; }
-      if (lower.includes('tur')) { turkNet = n; }
-      if (lower.includes('fen')) { fenNet = n; }
-      if (lower.includes('ink') || lower.includes('tarih') || lower.includes('sosyal')) { inkY = w; }
-      if (lower.includes('din') || lower.includes('dkab')) { dinY = w; }
-      if (lower.includes('ing') || lower.includes('yabanci') || lower.includes('dil')) { ingY = w; }
+  // Bu sınavda kazanılan rozetler (Akademi Arena ile 1:1 uyumlu)
+  const examBadges = useMemo(() => {
+    const list: Array<{
+      key: string;
+      name: string;
+      desc: string;
+      icon: string;
+      count: number;
+      bg: string;
+      text: string;
+      border: string;
+      isExamBadge: boolean;
+    }> = [];
 
-      // Tam İsabet: 0 Yanlış ve en az 1 Doğru
-      if (w === 0 && c > 0) {
-        addBadge(`Tam İsabet (${r.name})`, `${r.name} dersinde sıfır yanlış`, '🎯');
+    Object.entries(arenaExamResult.badgeCounts).forEach(([k, count]: [string, any]) => {
+      if (typeof count === 'number' && count > 0) {
+        const meta = ARENA_BADGES_INFO[k] || {
+          label: k,
+          icon: '🏅',
+          desc: 'Bu sınavda kazanıldı',
+          bg: 'bg-amber-100',
+          text: 'text-amber-900',
+          border: 'border-amber-200'
+        };
+        list.push({
+          key: k,
+          name: meta.label,
+          desc: meta.desc,
+          icon: meta.icon,
+          count: count,
+          bg: meta.bg,
+          text: meta.text,
+          border: meta.border,
+          isExamBadge: true
+        });
       }
     });
 
-    const lgsScore = Number(scoreData?.total?.lgsScore) || (isLgs ? (totalD - totalY / 3) * 5 : 0);
-
-    // LGS Fatihi
-    if (totalD > 0 && totalY === 0 && totalB === 0) {
-      addBadge('LGS Fatihi', 'Tüm soruları eksiksiz doğru cevaplama', '👑');
-    }
-
-    // Kalkan (Savunma Rozeti): Boş sayısı yanlış sayısından fazla
-    if (totalB > totalY && totalB > 0) {
-      addBadge('Kalkan', 'Boş bırakarak netini koruma başarısı', '🛡️');
-    }
-
-    // Keskin Nişancı (%70+ doğruluk)
-    if (totalD + totalY > 0 && (totalD / (totalD + totalY)) >= 0.70) {
-      addBadge('Keskin Nişancı', '%70 üzeri yüksek isabet oranı', '🏹');
-    }
-
-    // Temel Atıcı (Eksi netsiz)
-    if (allNetNonNegative && totalD > 0) {
-      addBadge('Temel Atıcı', 'Tüm derslerde pozitif net başarısı', '🎯');
-    }
-
-    // Matematik Uyanışı (10+ Mat Net)
-    if (mathNet >= 10) {
-      addBadge('Matematik Uyanışı', 'Matematikte 10 ve üzeri net başarısı', '📐');
-    }
-
-    // Denge Cambazı (Türkçe >= 15 ve Fen >= 15)
-    if (turkNet >= 15 && fenNet >= 15) {
-      addBadge('Denge Cambazı', 'Türkçe ve Fende 15+ dengeli net', '⚖️');
-    }
-
-    // Sözel Şövalyesi (İnkılap, Din, İngilizce 0 yanlış)
-    if (inkY + dinY + ingY === 0 && totalD > 0) {
-      addBadge('Sözel Şövalyesi', 'Yan branşlarda sıfır yanlış başarısı', '⚔️');
-    }
-
-    // Sayısal Kalesi (Mat + Fen <= 2 yanlış)
-    if (matY + fenY <= 2 && totalD > 0 && (mathNet + fenNet >= 15)) {
-      addBadge('Sayısal Kalesi', 'Sayısal derslerde üstün başarı', '🏰');
-    }
-
-    // Zirve Koruma (400+ LGS Puanı)
-    if (lgsScore >= 400) {
-      addBadge('Zirve Koruma', '400 üzeri LGS puan barajı', '⭐');
-    }
-
     return list;
-  }, [currentStudent, canonicalReportRows, scoreData, isLgs]);
-
-  const BADGE_MAP: Record<string, string> = {
-    tamIsabet: 'Tam İsabet',
-    kalkan: 'Kalkan',
-    ivme: 'İvme',
-    zirve: 'Zirve Koruma',
-    kirmiziKart: 'Kırmızı Kart',
-    zirveBekcisi: 'Zirve Bekçisi',
-    ivmeSampiyonu: 'İvme Şampiyonu',
-    barajYikici: 'Baraj Yıkıcı',
-    stratejiMuhendisi: 'Strateji Mühendisi',
-    istikrarElcisi: 'İstikrar Elçisi',
-    lgsFatihi: 'LGS Fatihi',
-    ankaKusu: 'Anka Kuşu',
-    sozelSovalyesi: 'Sözel Şövalyesi',
-    sayisalKalesi: 'Sayısal Kalesi',
-    matematikUyanisi: 'Matematik Uyanışı',
-    dengeCambazi: 'Denge Cambazı',
-    keskinNisanci: 'Keskin Nişancı',
-    temelAtici: 'Temel Atıcı',
-    uyuyanDev: 'Uyuyan Dev',
-    sabirTasi: 'Sabır Taşı',
-    yinYang: 'Yin Yang',
-    filozof: 'Filozof',
-    newton: 'Newton',
-    pisagor: 'Pisagor'
-  };
+  }, [arenaExamResult]);
 
   // Öğrencinin kütükteki genel lig rozetleri
   const generalBadges = useMemo(() => {
     const bObj = dbStudent?.badges || {};
-    return Object.entries(bObj)
-      .filter(([_, count]) => typeof count === 'number' && count > 0)
-      .map(([key, count]) => ({
-        name: BADGE_MAP[key] || key,
-        count: Number(count)
-      }));
+    const list: Array<{
+      key: string;
+      name: string;
+      desc: string;
+      icon: string;
+      count: number;
+      bg: string;
+      text: string;
+      border: string;
+      isExamBadge: boolean;
+    }> = [];
+
+    Object.entries(bObj).forEach(([rawKey, val]) => {
+      const count = typeof val === 'number' ? val : (Number(val) || 0);
+      if (count <= 0) return;
+      const mapped = mapBadgeKey(rawKey) || rawKey;
+      const meta = ARENA_BADGES_INFO[mapped] || {
+        label: rawKey,
+        icon: '🏆',
+        desc: `Genel ligde ${count} kez kazanıldı`,
+        bg: 'bg-amber-100/60',
+        text: 'text-amber-900',
+        border: 'border-amber-300/80'
+      };
+      list.push({
+        key: mapped,
+        name: meta.label,
+        desc: meta.desc,
+        icon: meta.icon,
+        count: count,
+        bg: meta.bg,
+        text: meta.text,
+        border: meta.border,
+        isExamBadge: false
+      });
+    });
+
+    return list;
   }, [dbStudent]);
 
-  // Tüm rozetlerin birleştirilmiş listesi
+  // Tüm rozetlerin birleştirilmiş listesi:
+  // Sınavda kazanılan rozetler 'Yeni' rozetiyle öne çıkar, kariyerdeki toplam sayısı belirtilir
   const allBadgesList = useMemo(() => {
-    const combined: Array<{ name: string; desc?: string; icon?: string; count?: number; isExamBadge?: boolean }> = examBadges.map(b => ({
-      ...b,
-      isExamBadge: true
-    }));
-    const examBadgePrefixes = new Set(examBadges.map(b => b.name.split(' (')[0].toLowerCase()));
+    const combined: Array<{
+      key: string;
+      name: string;
+      desc: string;
+      icon: string;
+      count: number;
+      bg: string;
+      text: string;
+      border: string;
+      isExamBadge: boolean;
+    }> = [...examBadges];
+
+    const examKeys = new Set(examBadges.map(b => b.key));
 
     generalBadges.forEach(gb => {
-      const lower = gb.name.toLowerCase();
-      if (!examBadgePrefixes.has(lower)) {
-        combined.push({
-          name: gb.name,
-          desc: `Genel ligde ${gb.count} kez kazanıldı`,
-          icon: '🏆',
-          count: gb.count,
-          isExamBadge: false
-        });
+      if (!examKeys.has(gb.key)) {
+        combined.push(gb);
       }
     });
 
@@ -1072,10 +1186,10 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
                   <div className="text-xs sm:text-sm font-bold text-amber-950 flex items-center gap-2 flex-wrap">
                     <span>Akademi Arena Lig Puanı (LP)</span>
                     <span className="bg-amber-200 text-amber-950 px-2.5 py-0.5 rounded-full text-[11px] font-black shadow-2xs">
-                      +{currentStudent.earnedLP || Math.round((scoreData?.total?.net || 0) * 10)} LP
+                      +{arenaExamResult.earnedLP} LP
                     </span>
                     <span className="text-amber-800 text-[11px] font-semibold bg-amber-100/70 px-2 py-0.5 rounded-lg border border-amber-200/60">
-                      🛡️ {dbStudent?.leagueTeam || 'Taktik Avcıları'}
+                      🛡️ {arenaExamResult.pastTeam}
                     </span>
                   </div>
                   <p className="text-[11px] text-amber-700 mt-0.5">
@@ -1106,9 +1220,9 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
                 </span>
                 {allBadgesList.length > 0 && (
                   <span className="text-[10px] text-amber-700 font-medium">
-                    {examBadges.length > 0 ? `${examBadges.length} sınav rozeti` : ''} 
+                    {examBadges.length > 0 ? `${examBadges.length} bu sınavda` : ''} 
                     {examBadges.length > 0 && generalBadges.length > 0 ? ' • ' : ''}
-                    {generalBadges.length > 0 ? `${generalBadges.length} kariyer lig rozeti` : ''}
+                    {generalBadges.length > 0 ? `${generalBadges.length} kariyer rozeti` : ''}
                   </span>
                 )}
               </div>
@@ -1117,23 +1231,19 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
                 <div className="flex flex-wrap items-center gap-2">
                   {allBadgesList.map((badge, bIdx) => (
                     <div
-                      key={bIdx}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1.5 border transition-all ${
-                        badge.isExamBadge
-                          ? 'bg-white border-amber-300 text-amber-950 hover:border-amber-400 hover:shadow-xs'
-                          : 'bg-amber-100/60 border-amber-300/80 text-amber-900 hover:bg-amber-100'
-                      }`}
+                      key={badge.key || bIdx}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1.5 border transition-all ${badge.bg} ${badge.text} ${badge.border}`}
                       title={badge.desc || badge.name}
                     >
                       <span className="text-sm shrink-0">{badge.icon || '✨'}</span>
                       <span className="font-bold">{badge.name}</span>
                       {badge.count && badge.count > 1 ? (
-                        <span className="text-[10px] bg-amber-200 text-amber-950 px-1.5 py-0.2 rounded-full font-black">
+                        <span className="text-[10px] bg-black/10 px-1.5 py-0.2 rounded-full font-black">
                           x{badge.count}
                         </span>
                       ) : badge.isExamBadge ? (
                         <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">
-                          Yeni
+                          Bu Sınav
                         </span>
                       ) : null}
                     </div>

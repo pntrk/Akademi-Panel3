@@ -302,8 +302,11 @@ export const LeagueView = () => {
 
       studentExams.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
 
-      // Kütükteki mevcut rozetleri başlangıç olarak al
-      const allStudentBadges: Record<string, number> = { ...(s.badges || {}) };
+      // Sınav geçmişi varsa rozetleri sınavlardan topla; henüz sınav kaydı yoksa kütükteki mevcut rozetleri koru
+      const allStudentBadges: Record<string, number> = {};
+      if (studentExams.length === 0 && s.badges) {
+        Object.assign(allStudentBadges, s.badges);
+      }
       let calculatedTotalLP = 0;
       const monthlyLPAccum: Record<string, number> = {};
       const monthlyBadgesAccum: Record<string, Record<string, number>> = {};
@@ -2172,15 +2175,6 @@ export const LeagueView = () => {
 
             // Öğrencinin kazandığı tüm rozetleri birleştir (Kütük genel lig rozetleri + sınav bazlı rozetler)
             const aggregatedBadges: Record<string, number> = { ...(selectedStudent.allBadges || selectedStudent.badges || {}) };
-            rawHistory.forEach(h => {
-              if (h.badgeCounts) {
-                Object.entries(h.badgeCounts).forEach(([k, count]: [string, any]) => {
-                  if (typeof count === 'number' && count > 0) {
-                    aggregatedBadges[k] = (aggregatedBadges[k] || 0) + count;
-                  }
-                });
-              }
-            });
             const totalBadgesCount = Object.values(aggregatedBadges).reduce((sum, c) => sum + (typeof c === 'number' && c > 0 ? c : 0), 0);
 
             const studentRank = baseStudents.findIndex(s => s.no === selectedStudent.no) + 1;
