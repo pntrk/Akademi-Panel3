@@ -1729,8 +1729,12 @@ export const HallsView = () => {
                   setIsRefreshingDrive(true);
                   const res = await fetchTeacherDataNow();
                   setIsRefreshingDrive(false);
-                  if (res.success && res.data?.examHalls?.length) {
-                    showToast(`✓ Google Drive'dan ${res.data.examHalls.length} sınav salonu ve ${res.data.students?.length || 0} öğrenci başarıyla yüklendi!`);
+                  if (res.success && (res.data?.examHalls?.length || state.examHalls?.length)) {
+                    const hallCount = res.data?.examHalls?.length || state.examHalls?.length || 0;
+                    const studentCount = res.data?.students?.length || state.students?.length || 0;
+                    showToast(`✓ Google Drive'dan ${hallCount} sınav salonu ve ${studentCount} öğrenci başarıyla yüklendi!`);
+                  } else if (res.success) {
+                    showToast('✓ Google Drive kütüğü başarıyla senkronize edildi.');
                   } else {
                     showToast(res.error || 'Google Drive kütüğü indirilemedi', 'error');
                   }

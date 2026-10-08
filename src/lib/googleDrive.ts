@@ -750,6 +750,24 @@ export const syncLiveMasterToGoogleDrive = async (
           }).catch(() => {});
         } catch {}
 
+        // Also persist teacher broadcast to Firestore for mobile cross-device access
+        if (firebaseConfig.projectId) {
+          try {
+            const broadcastDocRef = doc(db, 'schools', 'main', 'modules', 'teacher_broadcast');
+            const teacherPayload = prepareTeacherBroadcastPayload(liveState, userEmail || 'admin');
+            setDoc(broadcastDocRef, {
+              fileId: patchData.id,
+              canonicalDriveFileId: patchData.id,
+              canonicalDriveFileLink: `https://drive.google.com/file/d/${patchData.id}/view`,
+              publishedDateFormatted: teacherPayload.publishedDateFormatted,
+              publishedAt: teacherPayload.publishedAt,
+              publishedBy: userEmail || 'admin',
+              summary: teacherPayload.summary,
+              data: teacherPayload.data
+            }, { merge: true }).catch(() => {});
+          } catch {}
+        }
+
         return {
           success: true,
           fileId: patchData.id,
@@ -1369,6 +1387,20 @@ export const fetchTeacherBroadcastData = async (
             publishedDate: bData.publishedDateFormatted || bData.data.lastTeacherPublishedDate,
             source: 'cloud'
           };
+        }
+      } else {
+        // 3b. Modular Firestore fallback (modules/students, modules/exams, modules/examHalls)
+        const modularState = await fetchModularSchoolState('main');
+        if (modularState && modularState.data) {
+          const cleanModular = unwrapSchoolStatePayload(modularState.data);
+          if (cleanModular && (Array.isArray(cleanModular.students) || Array.isArray(cleanModular.examHalls))) {
+            return {
+              success: true,
+              data: cleanModular,
+              publishedDate: cleanModular.lastPublishedAt || new Date().toISOString(),
+              source: 'cloud'
+            };
+          }
         }
       }
     } catch (fsErr) {
