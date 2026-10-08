@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 const CACHE_FILE = path.resolve('.teacher_broadcast_cache.json');
 const DEFAULT_CANONICAL_DRIVE_FILE_ID = '1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg';
 
@@ -20,24 +20,6 @@ try {
   }
 } catch (e) {
   console.warn('Could not read teacher broadcast cache from disk:', e);
-}
-
-// Atomic safe disk persistence for teacher broadcast cache
-function saveCacheToDisk(payload: any) {
-  try {
-    const tempFile = `${CACHE_FILE}.tmp`;
-    fs.writeFile(tempFile, JSON.stringify(payload, null, 2), (writeErr) => {
-      if (writeErr) {
-        console.warn('Could not write cache temp file:', writeErr);
-      } else {
-        fs.rename(tempFile, CACHE_FILE, (renameErr) => {
-          if (renameErr) console.warn('Could not replace cache file:', renameErr);
-        });
-      }
-    });
-  } catch (e) {
-    console.warn('saveCacheToDisk error:', e);
-  }
 }
 
 app.use(express.json({ limit: '50mb' }));
@@ -127,7 +109,7 @@ app.get('/api/teacher-data', async (req, res) => {
                   data: targetData
                 };
                 teacherBroadcastCache = payload;
-                saveCacheToDisk(payload);
+                fs.writeFile(CACHE_FILE, JSON.stringify(payload, null, 2), () => {});
                 return res.json({
                   success: true,
                   publishedAt: payload.publishedAt,
@@ -191,7 +173,7 @@ app.get('/api/drive-proxy', async (req, res) => {
                 data: cleanData
               };
               teacherBroadcastCache = payload;
-              saveCacheToDisk(payload);
+              fs.writeFile(CACHE_FILE, JSON.stringify(payload, null, 2), () => {});
               return res.json({ success: true, data: cleanData, raw: json });
             }
           }
@@ -215,8 +197,10 @@ app.post('/api/teacher-broadcast/update', (req, res) => {
 
     teacherBroadcastCache = payload;
 
-    // Persist to disk atomically
-    saveCacheToDisk(payload);
+    // Persist to disk asynchronously
+    fs.writeFile(CACHE_FILE, JSON.stringify(payload, null, 2), (err) => {
+      if (err) console.warn('Could not write cache file to disk:', err);
+    });
 
     console.log(`Teacher broadcast cache updated at ${payload.publishedDateFormatted || new Date().toISOString()}`);
     return res.json({
