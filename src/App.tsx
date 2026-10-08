@@ -181,7 +181,7 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
               Google Drive Canlı Kütük İndirme
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-5">
-              Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) doğrudan cihazınıza eksiksiz indirmek için yetkilendirmeyi onaylayın.
+              Google Drive üzerindeki ortak canlı kütüğü doğrudan cihazınıza eksiksiz indirmek için yetkilendirmeyi onaylayın.
             </p>
 
             <div className="w-full space-y-2.5">

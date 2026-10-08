@@ -58,7 +58,8 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     lastTeacherPublishedDate,
     publishToTeachersNow,
     lastDataSource,
-    activeMasterFileName
+    activeMasterFileName,
+    fetchTeacherDataNow
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<'sync' | 'archive'>('sync');
@@ -386,27 +387,38 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     }
   };
 
-  // 4. TEACHER / ADMIN ACTION: Pull Latest Published Data from Firebase
+  // 4. TEACHER / ADMIN ACTION: Pull Latest Published Data dynamically from Google Drive Master
   const handlePullFromFirebase = async () => {
     setIsPullingData(true);
     setFeedback(null);
     try {
+      // Direct pull from locked Google Drive master file
+      const driveRes = await fetchTeacherDataNow();
+      if (driveRes.success && driveRes.data) {
+        setFeedback({
+          type: 'success',
+          message: `✓ Google Drive kilitli kütüğü üzerinden en güncel veriler başarıyla eşitlendi! (${driveRes.data.students?.length || 0} Öğrenci, ${driveRes.data.exams?.length || 0} Sınav)`
+        });
+        return;
+      }
+
+      // Secondary fallback to Cloud Storage
       const ok = await syncFromCloudStorage(true);
       if (ok) {
         setFeedback({
           type: 'success',
-          message: 'Firebase üzerinden yönetim tarafından yayınlanmış en güncel kütük başarıyla çekildi!'
+          message: 'Bulut üzerinden yönetim tarafından yayınlanmış en güncel kütük başarıyla çekildi!'
         });
       } else {
         setFeedback({
           type: 'error',
-          message: 'Buluttan yeni kütük çekilemedi veya veriler zaten güncel.'
+          message: driveRes.error || 'Buluttan yeni kütük çekilemedi veya veriler zaten güncel.'
         });
       }
     } catch (err: any) {
       setFeedback({
         type: 'error',
-        message: err?.message || 'Bulut verisi çekilirken hata oluştu.'
+        message: err?.message || 'Kütük verisi çekilirken hata oluştu.'
       });
     } finally {
       setIsPullingData(false);
@@ -1390,7 +1402,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                       </span>
                     </div>
                     <p className="text-xs text-[#737265] mt-1 leading-relaxed">
-                      Okul idaresi tarafından sisteme yeni öğrenci kütüğü, deneme sınavı veya optik sonuç eklendiğinde ve <strong>"Öğretmenlere Yayınla"</strong> butonuna basıldığında paneliniz Firebase üzerinden otomatik olarak güncellenir.
+                      Okul idaresi tarafından sisteme yeni öğrenci kütüğü, deneme sınavı veya optik sonuç eklendiğinde ve <strong>"Öğretmene Yayınla"</strong> butonuna basıldığında paneliniz Google Drive üzerindeki kilitli kütükten dinamik ve otomatik olarak güncellenir.
                     </p>
                   </div>
                 </div>
@@ -1405,11 +1417,11 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                   </div>
                   <div className="bg-white p-3 rounded-xl border border-sky-200/60 shadow-2xs">
                     <span className="text-[10px] text-sky-700 font-semibold block">Son Yayın Zamanı</span>
-                    <span className="font-bold text-[#2d2c25] mt-0.5 block">{lastSyncedAt || 'Güncel'}</span>
+                    <span className="font-bold text-[#2d2c25] mt-0.5 block">{lastTeacherPublishedDate || lastSyncedAt || 'Güncel'}</span>
                   </div>
                   <div className="bg-white p-3 rounded-xl border border-sky-200/60 shadow-2xs col-span-2 sm:col-span-1">
                     <span className="text-[10px] text-sky-700 font-semibold block">Erişim Türü</span>
-                    <span className="font-bold text-sky-950 mt-0.5 block">Otomatik Dağıtım (Korumalı)</span>
+                    <span className="font-bold text-sky-950 mt-0.5 block">Canlı Kütük (Google Drive)</span>
                   </div>
                 </div>
 
@@ -1431,7 +1443,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                     className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isPullingData ? 'animate-spin' : ''}`} />
-                    <span>{isPullingData ? 'Buluttan İndiriliyor...' : 'Buluttan Verileri Yeniden Eşitle'}</span>
+                    <span>{isPullingData ? 'Kütük Güncelleniyor...' : 'Kilitli Kütükten Verileri Yenile'}</span>
                   </button>
                 </div>
               </div>

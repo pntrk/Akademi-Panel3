@@ -1,6 +1,6 @@
 {
-  "summary": "Birleştirilmiş Sınav Yoklama Raporu Modülü için detaylı uygulama ve mimari planı oluşturuldu. Plan, ekranda görsel filtreli özet tablo, salon ve sınıf bazlı devamsız gruplama, Excel dışa aktarma ve resmi MEB sınav yoklama tutanağı formatında yazdırma özelliklerini içermektedir.",
-  "updatedAt": "2026-10-07T04:19:29.112040915Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "Dinamik Google Drive kütük yayını ve öğretmen senkronizasyonu uygulama planı:\n1. .teacher_broadcast_cache.json disk yazımının tamamen kaldırılması ve disk dosyasının silinmesi.\n2. Admin 'Öğretmene Yayınla' işleminde doğrudan kilitli Google Drive dosyasının güncellenmesi ve Firestore meta senkronizasyonu.\n3. Öğretmen kullanıcıların panele girdiğinde kilitli Google Drive dosyasından otomatik ve dinamik olarak en güncel veriyi çekmesi.\n4. Öğretmen ekranında teknik Google Drive link ve ID detaylarının tamamen gizlenerek sade ve güvenli bir arayüz sunulması.",
+  "updatedAt":  "2026-10-08T13:50:42.641493549Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }

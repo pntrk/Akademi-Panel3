@@ -1237,7 +1237,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     const cachedToken = getCachedAccessToken();
 
     if (cachedToken) {
-      setDriveStartupStatusText('Google Drive üzerindeki ortak canlı okul kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indiriliyor...');
+      setDriveStartupStatusText('Google Drive üzerindeki ortak canlı okul kütüğü indiriliyor...');
       syncFromGoogleDriveOnStartup()
         .then((synced) => {
           if (!synced) {
@@ -1258,7 +1258,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           setSyncErrorMessage(null);
         });
     } else {
-      setDriveStartupStatusText('Google Drive üzerindeki canlı kütük (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) taranıyor...');
+      setDriveStartupStatusText('Google Drive üzerindeki canlı kütük taranıyor...');
       fetchTeacherDataNow()
         .then((res) => {
           if (res && res.success) {
@@ -1276,7 +1276,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             setLoading(false);
             if (initialComputedRole === 'admin') {
               setIsWaitingForDriveAuth(true);
-              setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
+              setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü indirmek için yetkilendirme bekleniyor.');
             } else {
               setIsWaitingForDriveAuth(false);
             }
@@ -1288,7 +1288,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           setLoading(false);
           if (initialComputedRole === 'admin') {
             setIsWaitingForDriveAuth(true);
-            setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) indirmek için yetkilendirme bekleniyor.');
+            setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü indirmek için yetkilendirme bekleniyor.');
           } else {
             setIsWaitingForDriveAuth(false);
           }

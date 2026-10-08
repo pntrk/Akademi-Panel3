@@ -1087,8 +1087,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     <span>Öğretmen Paneli</span>
                     <Lock className="w-3 h-3 text-emerald-600" title="Kilitli Google Drive Kütüğü" />
                   </span>
-                  <span className="text-[9.5px] text-emerald-700 dark:text-emerald-400 font-mono">
-                    {teacherRefreshFeedback || (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : (lastTeacherPublishedDate ? `Yayın: ${lastTeacherPublishedDate}` : '1g24DS...'))}
+                  <span className="text-[9.5px] text-emerald-700 dark:text-emerald-400 font-medium">
+                    {teacherRefreshFeedback || (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : (lastTeacherPublishedDate ? `Yayın: ${lastTeacherPublishedDate}` : 'Canlı Kütük'))}
                   </span>
                 </div>
                 <button
@@ -1111,7 +1111,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   }}
                   disabled={isTeacherRefreshing}
                   className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 disabled:opacity-50 ml-1"
-                  title="Google Drive üzerindeki kilitli kütükten (1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg) son verileri çek ve eşitle"
+                  title="Google Drive üzerindeki kilitli canlı kütükten son verileri dinamik çek ve eşitle"
                 >
                   <RefreshCw className={cn("w-3 h-3", isTeacherRefreshing && "animate-spin")} />
                   <span>Yenile</span>
