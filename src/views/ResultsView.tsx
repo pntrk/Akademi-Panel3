@@ -26,7 +26,6 @@ import { generateId, exportToExcel, exportAoaToExcel, importFromExcel } from '..
 import {
   BarChart3,
   Users,
-  UserCheck,
   UserX,
   UserPlus,
   Download,
@@ -4167,15 +4166,7 @@ export function ResultsView() {
                             )}
                           </td>
                           <td className="p-3 font-bold font-mono tabular-nums text-slate-700">
-                            <div className="flex items-center gap-1.5">
-                              <span>{student.no || student.studentNo || "-"}</span>
-                              {(student as any).isMatchedWithDb && (
-                                <span title="Uygulama öğrenci veritabanı kütüğü ile eşleşti" className="inline-flex items-center text-emerald-600 bg-emerald-50 border border-emerald-200/60 px-1 py-0.2 rounded text-[10px] font-bold">
-                                  <UserCheck className="w-3 h-3 mr-0.5" />
-                                  Kütük
-                                </span>
-                              )}
-                            </div>
+                            <span>{student.no || student.studentNo || "-"}</span>
                           </td>
                           <td className="p-3">
                             <button
