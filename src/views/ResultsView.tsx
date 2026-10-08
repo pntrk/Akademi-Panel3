@@ -1414,6 +1414,107 @@ export function findDatabaseStudent(
   return null;
 }
 
+export interface StudentLookupIndex {
+  byNo: Map<number, Student[]>;
+  byNormName: Map<string, Student[]>;
+}
+
+export function buildStudentLookupIndex(studentsList: Student[]): StudentLookupIndex {
+  const byNo = new Map<number, Student[]>();
+  const byNormName = new Map<string, Student[]>();
+
+  if (!studentsList) return { byNo, byNormName };
+
+  for (let i = 0; i < studentsList.length; i++) {
+    const s = studentsList[i];
+    const n = Number(s.no);
+    if (!isNaN(n) && n > 0) {
+      const arr = byNo.get(n);
+      if (arr) arr.push(s);
+      else byNo.set(n, [s]);
+    }
+    const cleanName = (s.name || '').trim();
+    if (cleanName) {
+      const norm = normalizeTurkish(cleanName).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (norm) {
+        const arr = byNormName.get(norm);
+        if (arr) arr.push(s);
+        else byNormName.set(norm, [s]);
+      }
+    }
+  }
+
+  return { byNo, byNormName };
+}
+
+export function findDatabaseStudentIndexed(
+  rawNo: any,
+  rawName: string,
+  rawClass: string,
+  index: StudentLookupIndex
+): Student | null {
+  const numNo = parseInt(String(rawNo || '').replace(/[^\d]/g, ''), 10);
+  const cleanName = (rawName || '').trim();
+  const normName = cleanName ? normalizeTurkish(cleanName).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const { cls: exGrade, sec: exSec } = formatClassSec(rawClass);
+
+  if (numNo > 0) {
+    const byNo = index.byNo.get(numNo);
+    if (byNo && byNo.length === 1) {
+      const cand = byNo[0];
+      const candCls = formatClassSec(cand.classStr || cand.className, cand.sectionStr);
+      if (!exGrade || !candCls.cls || exGrade === candCls.cls) {
+        return cand;
+      }
+    } else if (byNo && byNo.length > 1) {
+      const exactClass = byNo.find(s => {
+        const c = formatClassSec(s.classStr || s.className, s.sectionStr);
+        return exGrade && exSec && c.cls === exGrade && c.sec === exSec;
+      });
+      if (exactClass) return exactClass;
+
+      const exactGrade = byNo.find(s => {
+        const c = formatClassSec(s.classStr || s.className, s.sectionStr);
+        return exGrade && c.cls === exGrade;
+      });
+      if (exactGrade) return exactGrade;
+
+      if (normName) {
+        const nameMatch = byNo.find(s => {
+          const sNorm = normalizeTurkish(s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          return sNorm && (sNorm.includes(normName) || normName.includes(sNorm));
+        });
+        if (nameMatch) return nameMatch;
+      }
+
+      return byNo[0];
+    }
+  }
+
+  if (normName.length >= 3) {
+    const exactNameMatch = index.byNormName.get(normName);
+    if (exactNameMatch && exactNameMatch.length === 1) {
+      return exactNameMatch[0];
+    } else if (exactNameMatch && exactNameMatch.length > 1) {
+      const exactClass = exactNameMatch.find(s => {
+        const c = formatClassSec(s.classStr || s.className, s.sectionStr);
+        return exGrade && exSec && c.cls === exGrade && c.sec === exSec;
+      });
+      if (exactClass) return exactClass;
+
+      const exactGrade = exactNameMatch.find(s => {
+        const c = formatClassSec(s.classStr || s.className, s.sectionStr);
+        return exGrade && c.cls === exGrade;
+      });
+      if (exactGrade) return exactGrade;
+
+      return exactNameMatch[0];
+    }
+  }
+
+  return null;
+}
+
 /* =========================================================================
    3. MAIN RESULTS VIEW (3'lü Sekme: Sonuçlar | Devamsızlar | Öğrenci Kayıtları)
    ========================================================================= */
@@ -1506,7 +1607,7 @@ export function ResultsView() {
 
   // Search & Filters & Sorting
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGradeFilter, setSelectedGradeFilter] = useState("ALL");
+  const [selectedGradeFilter, setSelectedGradeFilter] = useState("8");
   const [selectedClassFilter, setSelectedClassFilter] = useState("ALL");
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
   const [classDropdownSearch, setClassDropdownSearch] = useState("");
@@ -1514,7 +1615,8 @@ export function ResultsView() {
   const [toastAlert, setToastAlert] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<'rank' | 'no' | 'name' | 'class' | 'net' | 'lgsScore' | 'correct' | 'wrong'>('rank');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [showSubjectColumns, setShowSubjectColumns] = useState(true);
+  const [showSubjectColumns, setShowSubjectColumns] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(50);
 
   const handleSort = (column: 'rank' | 'no' | 'name' | 'class' | 'net' | 'lgsScore' | 'correct' | 'wrong') => {
     if (sortColumn === column) {
@@ -1541,10 +1643,19 @@ export function ResultsView() {
     setTimeout(() => setToastAlert(null), 3500);
   };
 
-  // Central student roster
+  // Reset pagination to 50 when filters or sorting change
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [selectedGradeFilter, selectedClassFilter, searchQuery, sortColumn, sortDirection, exam.id]);
+
+  // Central student roster & O(1) indexed lookup map
   const masterStudents = useMemo(() => {
     return state.students || [];
   }, [state.students]);
+
+  const studentLookupIndex = useMemo(() => {
+    return buildStudentLookupIndex(masterStudents);
+  }, [masterStudents]);
 
   // Exam results: prefer exam.results, fallback to state.results
   const currentExamResults: ExamResult[] = useMemo(() => {
@@ -1606,12 +1717,12 @@ export function ResultsView() {
     }
 
     return filtered.map(res => {
-      // Veritabanımızdaki kayıtlı öğrenci bilgisiyle otomatik eşle
-      const dbStudent = findDatabaseStudent(
+      // Veritabanımızdaki kayıtlı öğrenci bilgisiyle O(1) indeksli otomatik eşle
+      const dbStudent = findDatabaseStudentIndexed(
         res.no || res.studentNo,
         res.name || res.studentName,
         res.studentClass || res.classStr,
-        masterStudents
+        studentLookupIndex
       );
 
       const effectiveNo = dbStudent ? dbStudent.no : (res.no || res.studentNo);
@@ -1708,7 +1819,7 @@ export function ResultsView() {
       }
       return b.evaluatedScore.total.net - a.evaluatedScore.total.net;
     });
-  }, [currentExamResults, exam, selectedGradeFilter, selectedClassFilter, searchQuery, isLgs, masterStudents]);
+  }, [currentExamResults, exam, selectedGradeFilter, selectedClassFilter, searchQuery, isLgs, studentLookupIndex]);
 
   // Evaluated results with ranking and sorting
   const evaluatedResultsWithRank = useMemo(() => {
@@ -1765,6 +1876,11 @@ export function ResultsView() {
       return a.naturalRank - b.naturalRank;
     });
   }, [evaluatedResults, sortColumn, sortDirection]);
+
+  // Kademeli DOM Render: İlk 50 öğrenciyle anında açılır, kaydırdıkça sonraki 50'lik gruplar eklenir
+  const visibleEvaluatedResults = useMemo(() => {
+    return evaluatedResultsWithRank.slice(0, visibleCount);
+  }, [evaluatedResultsWithRank, visibleCount]);
 
   // Statistical summary
   const summaryStats = useMemo(() => {
@@ -2572,8 +2688,8 @@ export function ResultsView() {
                   }
                 }
 
-                // Uygulama veritabanındaki öğrenci ve sınıf bilgileriyle akıllı eşleştir
-                const foundStudent = findDatabaseStudent(studentNo, studentName, rawClass, masterStudents);
+                // Uygulama veritabanındaki öğrenci ve sınıf bilgileriyle O(1) indeksli akıllı eşleştir
+                const foundStudent = findDatabaseStudentIndexed(studentNo, studentName, rawClass, studentLookupIndex);
                 if (foundStudent) {
                   matchedWithDbCount++;
                 }
@@ -2633,16 +2749,8 @@ export function ResultsView() {
                     net: cleanN
                   };
 
+                  // Mükerrer takma adlar (alias) yerine standart tekil ders ismiyle sakla
                   subjectScores[stdName] = subScoreObj;
-                  if (stdName === 'Tarih / Sosyal Bilgiler') {
-                    subjectScores['İnkılap Tarihi'] = subScoreObj;
-                    subjectScores['Sosyal Bilgiler'] = subScoreObj;
-                    subjectScores['Tarih'] = subScoreObj;
-                  }
-                  if (stdName === 'İngilizce') {
-                    subjectScores['ingilizce'] = subScoreObj;
-                    subjectScores['ing'] = subScoreObj;
-                  }
 
                   const matchingExamSub = exam.subjects?.find(es => {
                     const esl = normalizeClean(es.name);
@@ -2655,7 +2763,7 @@ export function ResultsView() {
                       (nll.includes('mat') && esl.includes('mat')) ||
                       (nll.includes('fen') && esl.includes('fen'));
                   });
-                  if (matchingExamSub) {
+                  if (matchingExamSub && String(matchingExamSub.id) !== stdName) {
                     subjectScores[String(matchingExamSub.id)] = subScoreObj;
                   }
 
@@ -2704,16 +2812,15 @@ export function ResultsView() {
                   totalWrong: totalY,
                   totalEmpty: Math.max(0, 90 - totalD - totalY),
                   lgsScore: isLgs ? lgsScore : undefined,
-                  earnedLP: ataLigResult.earnedLP,
-                  earnedBadges: ataLigResult.earnedBadges,
+                  earnedLP: ataLigResult.earnedLP || undefined,
+                  earnedBadges: ataLigResult.earnedBadges?.length ? ataLigResult.earnedBadges : undefined,
                   evaluatedScore: {
                     total: {
                       correct: totalD,
                       wrong: totalY,
                       empty: Math.max(0, 90 - totalD - totalY),
                       net: parsedTotalNet,
-                      lgsScore: isLgs ? lgsScore : undefined,
-                      percentile: undefined
+                      lgsScore: isLgs ? lgsScore : undefined
                     },
                     subjectScores
                   }
@@ -2744,7 +2851,7 @@ export function ResultsView() {
             const cls = String(normalizedRow["sınıf"] || normalizedRow["sinif"] || '').trim();
             const sec = String(normalizedRow["şube"] || normalizedRow["sube"] || '').trim().toUpperCase();
 
-            const foundStudent = findDatabaseStudent(studentNo, studentName, cls, masterStudents);
+            const foundStudent = findDatabaseStudentIndexed(studentNo, studentName, cls, studentLookupIndex);
             if (foundStudent) {
               matchedWithDbCount++;
             }
@@ -2806,16 +2913,8 @@ export function ResultsView() {
                     net: val
                   };
 
+                  // Mükerrer takma adlar (alias) yerine standart tekil ders ismiyle sakla
                   subjectScores[stdName] = subScoreObj;
-                  if (stdName === 'Tarih / Sosyal Bilgiler') {
-                    subjectScores['İnkılap Tarihi'] = subScoreObj;
-                    subjectScores['Sosyal Bilgiler'] = subScoreObj;
-                    subjectScores['Tarih'] = subScoreObj;
-                  }
-                  if (stdName === 'İngilizce') {
-                    subjectScores['ingilizce'] = subScoreObj;
-                    subjectScores['ing'] = subScoreObj;
-                  }
 
                   const matchingExamSub = exam.subjects?.find(es => {
                     const esl = normalizeClean(es.name);
@@ -2828,7 +2927,7 @@ export function ResultsView() {
                       (nll.includes('mat') && esl.includes('mat')) ||
                       (nll.includes('fen') && esl.includes('fen'));
                   });
-                  if (matchingExamSub) {
+                  if (matchingExamSub && String(matchingExamSub.id) !== stdName) {
                     subjectScores[String(matchingExamSub.id)] = subScoreObj;
                   }
                 }
@@ -2872,16 +2971,15 @@ export function ResultsView() {
               totalWrong: 0,
               totalEmpty: 0,
               lgsScore: isLgs ? lgsScore : undefined,
-              earnedLP: lp,
-              earnedBadges: badges,
+              earnedLP: lp || undefined,
+              earnedBadges: badges?.length ? badges : undefined,
               evaluatedScore: {
                 total: {
                   correct: Math.round(parsedTotalNet),
                   wrong: 0,
                   empty: 0,
                   net: parsedTotalNet,
-                  lgsScore: isLgs ? lgsScore : undefined,
-                  percentile: undefined
+                  lgsScore: isLgs ? lgsScore : undefined
                 },
                 subjectScores
               }
@@ -4138,7 +4236,7 @@ export function ResultsView() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {evaluatedResultsWithRank.map((student, idx) => {
+                    {visibleEvaluatedResults.map((student, idx) => {
                       const isTop1 = student.naturalRank === 1;
                       const isTop2 = student.naturalRank === 2;
                       const isTop3 = student.naturalRank === 3;
@@ -4259,6 +4357,31 @@ export function ResultsView() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Kademeli Yükleme Alt Çubuğu */}
+              {evaluatedResultsWithRank.length > visibleCount && (
+                <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <span className="text-slate-600 font-medium">
+                    Toplam <strong className="text-slate-900 font-bold">{evaluatedResultsWithRank.length}</strong> öğrenciden <strong className="text-indigo-600 font-bold">{Math.min(visibleCount, evaluatedResultsWithRank.length)}</strong> tanesi listeleniyor.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount(prev => prev + 50)}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>Sonraki 50 Öğrenciyi Yükle</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount(evaluatedResultsWithRank.length)}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold rounded-xl transition-all cursor-pointer"
+                    >
+                      Tümünü Göster ({evaluatedResultsWithRank.length})
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

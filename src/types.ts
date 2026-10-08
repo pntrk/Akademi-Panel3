@@ -138,8 +138,8 @@ export interface EvaluatedScore {
     wrong: number;
     empty: number;
     net: number;
-    lgsScore: number;
-    percentile: number;
+    lgsScore?: number;
+    percentile?: number;
     tytScore?: number;
     aytScore?: number;
     examType?: 'lgs' | 'tyt' | 'ayt' | 'standard';

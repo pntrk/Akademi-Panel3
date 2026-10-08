@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useRe
 import { Student, Exam, ExamResult, BudgetData, ExamHall, SeatingPlanItem, CloudBackupRecord, FullBackupData, FullBackupSummary, AppNotification, ExamKeys } from '../types';
 import { generateId, recalculateLeagueForStudents } from '../lib/utils';
 import { generateExamOmrMap, initialExam, HAZIRBULUNUSLUK_STUDENTS, HAZIRBULUNUSLUK_ANSWER_KEYS_A, normalizeTurkish } from '../lib/omrEngine';
+import { createOptimizedBackupPayload } from '../lib/backupOptimizer';
 import { 
   db, 
   firebaseConfig, 
@@ -433,10 +434,43 @@ export const sanitizeSchoolState = (data: any): AppState => {
     return e;
   });
 
+  // Ensure bidirectional consistency between safeExams[].results and global results
+  const allResultsMap = new Map<string, ExamResult>();
+  safeExams.forEach((e: any) => {
+    if (Array.isArray(e.results)) {
+      e.results.forEach((r: any) => {
+        const key = r.id || `${e.id}_${r.studentNo || r.no}`;
+        allResultsMap.set(key, r);
+      });
+    }
+  });
+
+  if (Array.isArray(data.results)) {
+    data.results.forEach((r: any) => {
+      const key = r.id || `${r.studentNo || r.no}`;
+      if (!allResultsMap.has(key)) {
+        allResultsMap.set(key, r);
+      }
+    });
+  }
+
+  const unifiedResults = Array.from(allResultsMap.values());
+
+  safeExams.forEach((e: any) => {
+    if (!Array.isArray(e.results) || e.results.length === 0) {
+      const matching = unifiedResults.filter(r => 
+        r.scores && (r.scores[String(e.id)] !== undefined || r.scores[e.name] !== undefined)
+      );
+      if (matching.length > 0) {
+        e.results = matching;
+      }
+    }
+  });
+
   const safeData: AppState = {
     students: data.students || [],
     exams: safeExams,
-    results: data.results || [],
+    results: unifiedResults,
     budget: data.budget || { incomes: [], expenses: [], debts: [] },
     examHalls: data.examHalls || [],
     leagueMentors: data.leagueMentors || {},
@@ -2372,28 +2406,80 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         })
       : (stateRef.current.exams || []);
 
-    // 3. Sanitize results
-    const cleanResults: ExamResult[] = Array.isArray(rawResults)
-      ? rawResults.map((r: any) => ({
-          id: String(r.id || generateId()),
-          studentId: r.studentId ? String(r.studentId) : undefined,
-          studentNo: r.studentNo !== undefined ? Number(r.studentNo) : (r.no !== undefined ? Number(r.no) : 0),
-          studentName: String(r.studentName || r.name || '').trim(),
-          studentClass: String(r.studentClass || r.classStr || '').trim(),
-          scores: r.scores && typeof r.scores === 'object' ? r.scores : {},
-          average: Number(r.average) || 0,
-          details: r.details && typeof r.details === 'object' ? r.details : undefined,
-          earnedLP: r.earnedLP !== undefined ? Number(r.earnedLP) : undefined,
-          earnedBadges: Array.isArray(r.earnedBadges) ? r.earnedBadges : undefined,
-          name: r.name ? String(r.name) : undefined,
-          no: r.no !== undefined ? r.no : undefined,
-          classStr: r.classStr ? String(r.classStr) : undefined,
-          sectionStr: r.sectionStr ? String(r.sectionStr) : undefined,
-          booklet: r.booklet ? String(r.booklet) : undefined,
-          answers: Array.isArray(r.answers) ? r.answers : undefined,
-          evaluatedScore: r.evaluatedScore && typeof r.evaluatedScore === 'object' ? r.evaluatedScore : undefined
-        }))
+    // 3. Sanitize results (support single-source of truth under exams or global list)
+    const combinedResultsMap = new Map<string, ExamResult>();
+
+    // A) Populate from exams first (primary single source of truth in modern backups)
+    cleanExams.forEach(e => {
+      if (Array.isArray(e.results)) {
+        e.results.forEach((r: any) => {
+          const key = r.id || `${e.id}_${r.studentNo || r.no}`;
+          combinedResultsMap.set(key, {
+            id: String(r.id || generateId()),
+            studentId: r.studentId ? String(r.studentId) : undefined,
+            studentNo: r.studentNo !== undefined ? Number(r.studentNo) : (r.no !== undefined ? Number(r.no) : 0),
+            studentName: String(r.studentName || r.name || '').trim(),
+            studentClass: String(r.studentClass || r.classStr || '').trim(),
+            scores: r.scores && typeof r.scores === 'object' ? r.scores : {},
+            average: Number(r.average) || 0,
+            details: r.details && typeof r.details === 'object' ? r.details : undefined,
+            earnedLP: r.earnedLP !== undefined ? Number(r.earnedLP) : undefined,
+            earnedBadges: Array.isArray(r.earnedBadges) ? r.earnedBadges : undefined,
+            name: r.name ? String(r.name) : undefined,
+            no: r.no !== undefined ? r.no : undefined,
+            classStr: r.classStr ? String(r.classStr) : undefined,
+            sectionStr: r.sectionStr ? String(r.sectionStr) : undefined,
+            booklet: r.booklet ? String(r.booklet) : undefined,
+            answers: Array.isArray(r.answers) ? r.answers : undefined,
+            evaluatedScore: r.evaluatedScore && typeof r.evaluatedScore === 'object' ? r.evaluatedScore : undefined
+          });
+        });
+      }
+    });
+
+    // B) Populate from rawResults if any exist (legacy backups or unattached results)
+    if (Array.isArray(rawResults)) {
+      rawResults.forEach((r: any) => {
+        const key = r.id || `${r.studentNo || r.no}`;
+        if (!combinedResultsMap.has(key)) {
+          combinedResultsMap.set(key, {
+            id: String(r.id || generateId()),
+            studentId: r.studentId ? String(r.studentId) : undefined,
+            studentNo: r.studentNo !== undefined ? Number(r.studentNo) : (r.no !== undefined ? Number(r.no) : 0),
+            studentName: String(r.studentName || r.name || '').trim(),
+            studentClass: String(r.studentClass || r.classStr || '').trim(),
+            scores: r.scores && typeof r.scores === 'object' ? r.scores : {},
+            average: Number(r.average) || 0,
+            details: r.details && typeof r.details === 'object' ? r.details : undefined,
+            earnedLP: r.earnedLP !== undefined ? Number(r.earnedLP) : undefined,
+            earnedBadges: Array.isArray(r.earnedBadges) ? r.earnedBadges : undefined,
+            name: r.name ? String(r.name) : undefined,
+            no: r.no !== undefined ? r.no : undefined,
+            classStr: r.classStr ? String(r.classStr) : undefined,
+            sectionStr: r.sectionStr ? String(r.sectionStr) : undefined,
+            booklet: r.booklet ? String(r.booklet) : undefined,
+            answers: Array.isArray(r.answers) ? r.answers : undefined,
+            evaluatedScore: r.evaluatedScore && typeof r.evaluatedScore === 'object' ? r.evaluatedScore : undefined
+          });
+        }
+      });
+    }
+
+    const cleanResults: ExamResult[] = combinedResultsMap.size > 0 
+      ? Array.from(combinedResultsMap.values()) 
       : (stateRef.current.results || []);
+
+    // Ensure all exams have their results array populated for instant ResultsView rendering
+    cleanExams.forEach(e => {
+      if (!Array.isArray(e.results) || e.results.length === 0) {
+        const matching = cleanResults.filter(r => 
+          r.scores && (r.scores[String(e.id)] !== undefined || r.scores[e.name] !== undefined)
+        );
+        if (matching.length > 0) {
+          e.results = matching;
+        }
+      }
+    });
 
     // 4. Sanitize halls
     const cleanHalls: ExamHall[] = Array.isArray(rawHalls)
@@ -2545,7 +2631,12 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       const currentUserEmail = (currentAuthUser?.email || user?.email || '').trim().toLowerCase();
       
       const s = stateRef.current;
-      const summary: FullBackupSummary = {
+      const now = new Date();
+      const backupId = `backup_${now.getTime()}`;
+      const defaultName = backupName?.trim() || `AkademiPanel Yedeği (${now.toLocaleDateString('tr-TR')} ${now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })})`;
+      
+      const optimizedData = createOptimizedBackupPayload(s);
+      const summary: FullBackupSummary = optimizedData.summary || {
         studentCount: s.students?.length || 0,
         examCount: s.exams?.length || 0,
         resultCount: s.results?.length || 0,
@@ -2558,10 +2649,6 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         approvedTransferCount: s.approvedTransfers?.length || 0
       };
 
-      const now = new Date();
-      const backupId = `backup_${now.getTime()}`;
-      const defaultName = backupName?.trim() || `AkademiPanel Yedeği (${now.toLocaleDateString('tr-TR')} ${now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })})`;
-      
       const backupPayload: CloudBackupRecord = {
         id: backupId,
         name: defaultName,
@@ -2569,34 +2656,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         createdByEmail: currentUserEmail,
         createdByName: currentAuthUser?.displayName || (currentUserEmail ? currentUserEmail.split('@')[0] : 'Yönetici'),
         summary,
-        data: {
-          appName: "Akademi Panel 2",
-          version: "2.0",
-          backupDate: now.toISOString(),
-          school: "Kırklareli Atatürk Ortaokulu",
-          summary,
-          students: s.students || [],
-          exams: s.exams || [],
-          results: s.results || [],
-          examHalls: s.examHalls || [],
-          budget: s.budget || { incomes: [], expenses: [], debts: [] },
-          leagueMentors: s.leagueMentors || {},
-          leagueTeamPoints: s.leagueTeamPoints || {},
-          approvedTransfers: s.approvedTransfers || [],
-          admins: s.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
-          teachers: s.teachers || [],
-          canonicalDriveFileId: s.canonicalDriveFileId || getLiveMasterFileId() || undefined,
-          canonicalDriveFileLink: s.canonicalDriveFileLink || getLiveMasterFileLink() || undefined,
-          isDriveFileLocked: s.isDriveFileLocked !== undefined ? s.isDriveFileLocked : isLiveMasterFileLocked(),
-          examCalendarPrintSettings: (() => {
-            try {
-              const cfg = localStorage.getItem('akademi_exam_calendar_print_config');
-              return cfg ? JSON.parse(cfg) : undefined;
-            } catch {
-              return undefined;
-            }
-          })()
-        },
+        data: optimizedData,
         note: note?.trim() || undefined
       };
 

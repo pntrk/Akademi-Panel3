@@ -659,6 +659,9 @@ export function recalculateLeagueForStudents(students: any[], results: any[], ex
     
     if (currentTeam === 'Atanmadı') currentTeam = 'Taktik Avcıları';
 
+    const hasAnyBadge = Object.values(badges).some(v => v > 0);
+    const hasAnyMonthlyData = Object.keys(monthlyLeagueData).length > 0;
+
     return {
       ...student,
       leaguePoints: totalLP,
@@ -666,8 +669,8 @@ export function recalculateLeagueForStudents(students: any[], results: any[], ex
       lastTransfer,
       transferHistory,
       pendingTransfer,
-      badges,
-      monthlyLeagueData
+      badges: hasAnyBadge ? badges : (student.badges && Object.values(student.badges).some((v: any) => Number(v) > 0) ? student.badges : undefined),
+      monthlyLeagueData: hasAnyMonthlyData ? monthlyLeagueData : (student.monthlyLeagueData && Object.keys(student.monthlyLeagueData).length > 0 ? student.monthlyLeagueData : undefined)
     };
   });
   

@@ -19,6 +19,7 @@ import { NotificationModal } from './NotificationModal';
 import { InstructionModal } from './InstructionModal';
 import { auth, onAuthStateChanged, User, FIRESTORE_UPGRADE_URL } from '../lib/firebase';
 import { FullBackupData } from '../types';
+import { createOptimizedBackupPayload } from '../lib/backupOptimizer';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -230,55 +231,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
 
   const handleBackup = () => {
     if (userRole !== 'admin') return;
-    const backupData: FullBackupData = {
-      appName: "AkademiPanel",
-      version: "2.0",
-      backupDate: new Date().toISOString(),
-      school: "Kırklareli Atatürk Ortaokulu",
-      modules: [
-        "Öğrenci Kayıtları",
-        "Deneme Sınavları",
-        "Sınav Sonuçları",
-        "Akademi Arena",
-        "Sınav Salonları",
-        "Bütçe Takibi"
-      ],
-      summary: {
-        studentCount: state.students?.length || 0,
-        examCount: state.exams?.length || 0,
-        resultCount: state.results?.length || 0,
-        hallCount: state.examHalls?.length || 0,
-        budgetIncomesCount: state.budget?.incomes?.length || 0,
-        budgetExpensesCount: state.budget?.expenses?.length || 0,
-        budgetDebtsCount: state.budget?.debts?.length || 0,
-        arenaMentorsCount: Object.keys(state.leagueMentors || {}).length,
-        arenaBonusCount: Object.keys(state.leagueTeamPoints || {}).length,
-        approvedTransferCount: state.approvedTransfers?.length || 0
-      },
-      students: state.students || [],
-      exams: state.exams || [],
-      results: state.results || [],
-      examHalls: state.examHalls || [],
-      budget: {
-        incomes: state.budget?.incomes || [],
-        expenses: state.budget?.expenses || [],
-        debts: state.budget?.debts || []
-      },
-      leagueMentors: state.leagueMentors || {},
-      leagueTeamPoints: state.leagueTeamPoints || {},
-      approvedTransfers: state.approvedTransfers || [],
-      admins: state.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
-      teachers: state.teachers || [],
-      examCalendarPrintSettings: (() => {
-        try {
-          const cfg = localStorage.getItem('akademi_exam_calendar_print_config');
-          return cfg ? JSON.parse(cfg) : undefined;
-        } catch {
-          return undefined;
-        }
-      })()
-    };
-
+    const backupData = createOptimizedBackupPayload(state);
     const stateStr = JSON.stringify(backupData, null, 2);
     const blob = new Blob([stateStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -290,7 +243,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setSaveFeedback("Tüm sistem yedeği indirildi (JSON)");
+    setSaveFeedback("Optimize sistem yedeği indirildi (JSON)");
     setTimeout(() => setSaveFeedback(null), 3500);
   };
 

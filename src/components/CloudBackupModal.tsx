@@ -28,6 +28,7 @@ import {
   lockToCanonicalDriveFile
 } from '../lib/googleDrive';
 import { CloudBackupRecord } from '../types';
+import { createOptimizedBackupPayload } from '../lib/backupOptimizer';
 
 interface CloudBackupModalProps {
   isOpen: boolean;
@@ -514,19 +515,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     try {
       const now = new Date();
       const dateStr = now.toISOString().slice(0, 10);
-      const payload = {
-        appName: 'AkademiPanel',
-        version: '1.0',
-        backupDate: now.toISOString(),
-        school: 'Kırklareli Atatürk Ortaokulu',
-        summary: {
-          studentCount: state.students?.length || 0,
-          examCount: state.exams?.length || 0,
-          resultCount: state.results?.length || 0,
-          hallCount: state.examHalls?.length || 0
-        },
-        data: state
-      };
+      const payload = createOptimizedBackupPayload(state);
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
