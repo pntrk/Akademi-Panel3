@@ -35,17 +35,62 @@ export function exportToExcel(data: any[], filename: string) {
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
 
-export function importFromExcel(file: File, callback: (data: any[]) => void) {
+export function exportAoaToExcel(
+  aoa: any[][],
+  filename: string,
+  options?: {
+    sheetName?: string;
+    merges?: any[];
+    cols?: any[];
+  }
+) {
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  if (options?.merges) ws['!merges'] = options.merges;
+  if (options?.cols) ws['!cols'] = options.cols;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, options?.sheetName || "Kurum Net Listesi");
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
+export function importFromExcel(file: File, callback: (data: any[], rawRows?: any[][]) => void) {
   const reader = new FileReader();
   reader.onload = (e) => {
-    const data = e.target?.result;
-    const workbook = XLSX.read(data, { type: "binary" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const parsedData = XLSX.utils.sheet_to_json(sheet);
-    callback(parsedData);
+    try {
+      const buffer = e.target?.result as ArrayBuffer;
+      let workbook: XLSX.WorkBook;
+      const fileName = file.name.toLowerCase();
+
+      if (fileName.endsWith('.xml')) {
+        const textDecoder = new TextDecoder('utf-8');
+        const text = textDecoder.decode(buffer);
+        workbook = XLSX.read(text, { type: "string" });
+      } else {
+        workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
+      }
+
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const parsedData = XLSX.utils.sheet_to_json(sheet);
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as any[][];
+      callback(parsedData, rawRows);
+    } catch (err) {
+      console.warn('importFromExcel primary read notice, trying fallback:', err);
+      try {
+        const binReader = new FileReader();
+        binReader.onload = (be) => {
+          const bData = be.target?.result;
+          const wb = XLSX.read(bData, { type: "binary" });
+          const sn = wb.SheetNames[0];
+          const sh = wb.Sheets[sn];
+          callback(XLSX.utils.sheet_to_json(sh), XLSX.utils.sheet_to_json(sh, { header: 1, raw: false }) as any[][]);
+        };
+        binReader.readAsBinaryString(file);
+      } catch (e2) {
+        callback([], []);
+      }
+    }
   };
-  reader.readAsBinaryString(file);
+  reader.readAsArrayBuffer(file);
 }
 
 export function generateId() {

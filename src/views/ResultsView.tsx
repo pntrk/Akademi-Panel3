@@ -21,7 +21,7 @@ import {
   isAytExam,
   calculateAtaLigPoints
 } from '../lib/omrEngine';
-import { generateId, exportToExcel, importFromExcel } from '../lib/utils';
+import { generateId, exportToExcel, exportAoaToExcel, importFromExcel } from '../lib/utils';
 import {
   BarChart3,
   Users,
@@ -1686,38 +1686,126 @@ export function ResultsView() {
   const publisherFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const handleDownloadPublisherTemplate = () => {
-    const data = [
-      {
-        "Okul No": 101,
-        "Adı Soyadı": "AHMET YILMAZ",
-        "Sınıf": "8",
-        "Şube": "A",
-        "Türkçe": 18,
-        "Matematik": 15,
-        "Fen Bilimleri": 17,
-        "İnkılap Tarihi": 9,
-        "Din Kültürü": 10,
-        "İngilizce": 9,
-        "Toplam Net": 78.00,
-        "Puan": 450.25
-      },
-      {
-        "Okul No": 102,
-        "Adı Soyadı": "AYŞE DEMİR",
-        "Sınıf": "8",
-        "Şube": "B",
-        "Türkçe": 20,
-        "Matematik": 18,
-        "Fen Bilimleri": 19,
-        "İnkılap Tarihi": 10,
-        "Din Kültürü": 10,
-        "İngilizce": 10,
-        "Toplam Net": 87.00,
-        "Puan": 485.50
-      }
+    const institutionTitle = "ATATÜRK ORTAOKULU (KIRKLARELİ/KIRKLARELİ MERKEZ)";
+    const examTitle = exam.name ? `${exam.name.toUpperCase()}` : "ULTİ 8. SINIF SÜREÇ TARAMA SERİSİ 1";
+
+    const aoa: any[][] = [
+      // Satır 1: Kurum Başlığı & Bölüm Başlıkları
+      [
+        institutionTitle, null, null,
+        "Sözel (TÜR)", null, null,
+        "Sözel (TAR)", null, null,
+        "Sözel (DİN)", null, null,
+        "Sözel (İNG)", null, null,
+        "Sayısal (MAT)", null, null,
+        "Sayısal (FEN)", null, null,
+        "Toplam", null, null,
+        "LGS", null, null, null, null, null
+      ],
+      // Satır 2: Sınav Adı & Dersler
+      [
+        examTitle, null, null,
+        "Türkçe", null, null,
+        "Tarih", null, null,
+        "Din K.ve A.B.", null, null,
+        "İngilizce", null, null,
+        "Matematik", null, null,
+        "Fen", null, null,
+        null, null, null,
+        "Puan",
+        "Dereceler", null, null, null, null
+      ],
+      // Satır 3: Detaylı Sütun Başlıkları
+      [
+        "Öğr.No", "Ad, Soyad", "Sınıf",
+        "D", "Y", "N",
+        "D", "Y", "N",
+        "D", "Y", "N",
+        "D", "Y", "N",
+        "D", "Y", "N",
+        "D", "Y", "N",
+        "D", "Y", "N",
+        "Puan",
+        "Sınıf", "Kurum", "İlçe", "İl", "Genel"
+      ],
+      // Satır 4: Genel Ortalama
+      [
+        "Genel Ortalama: ", null, null,
+        13.08, 5.98, 11.09,
+        6.45, 3.08, 5.42,
+        7.46, 2.04, 6.78,
+        6.25, 2.81, 5.32,
+        9.55, 5.76, 7.63,
+        13.48, 5.09, 11.78,
+        56.27, 24.76, 48.02,
+        352.68, null, null, null, null, null
+      ],
+      // Satır 5: Kurum Ortalaması
+      [
+        "Kurum Ortalaması: ", null, null,
+        11.74, 7.11, 9.37,
+        5.47, 3.80, 4.20,
+        6.91, 2.53, 6.06,
+        5.71, 3.28, 4.61,
+        7.14, 6.35, 5.02,
+        10.11, 7.39, 7.64,
+        47.07, 30.46, 36.92,
+        313.47, null, null, null, null, null
+      ],
+      // Gerçekçi Örnek Öğrenci Satırları (Kullanıcının yüklediği örnekten)
+      [8, "ALP KARA", "8-A", 19, 1, 18.67, 9, 1, 8.67, 9, 1, 8.67, 9, 1, 8.67, 19, 1, 18.67, 20, 0, 20.00, 85, 5, 83.33, 481.58, 1, 1, 3, 3, 516],
+      [89, "SERKAN ALTUN", "8-A", 19, 1, 18.67, 9, 1, 8.67, 8, 2, 7.33, 7, 3, 6.00, 18, 2, 17.33, 20, 0, 20.00, 81, 9, 78.00, 468.89, 2, 2, 6, 6, 1491],
+      [45, "EMİR MEYDAN", "8-B", 15, 5, 13.33, 7, 3, 6.00, 9, 1, 8.67, 10, 0, 10.00, 20, 0, 20.00, 20, 0, 20.00, 81, 9, 78.00, 463.27, 1, 3, 9, 9, 2006],
+      [60, "MELİS ÖZTÜRK", "8-A", 16, 4, 14.67, 7, 3, 6.00, 9, 1, 8.67, 7, 3, 6.00, 18, 2, 17.33, 20, 0, 20.00, 77, 13, 72.67, 450.28, 3, 4, 14, 14, 3392],
+      [70, "MİNEL DARCANLI", "8-B", 14, 5, 12.33, 7, 2, 6.33, 10, 0, 10.00, 10, 0, 10.00, 15, 3, 14.00, 19, 1, 18.67, 75, 11, 71.33, 429.19, 2, 5, 28, 28, 5849],
+      [129, "CEYLİN SU GÖK", "8-B", 17, 3, 16.00, 7, 3, 6.00, 9, 1, 8.67, 8, 2, 7.33, 12, 8, 9.33, 20, 0, 20.00, 73, 17, 67.33, 420.73, 3, 6, 32, 32, 6900],
+      [542, "YİĞİT TUĞRUL IŞIKLAR", "8-A", 17, 3, 16.00, 7, 3, 6.00, 7, 3, 6.00, 9, 1, 8.67, 15, 2, 14.33, 16, 4, 14.67, 71, 16, 65.67, 420.34, 4, 7, 33, 33, 6955],
+      [122, "BERK POLATOĞLU", "8-B", 14, 6, 12.00, 10, 0, 10.00, 9, 1, 8.67, 9, 1, 8.67, 15, 4, 13.67, 17, 3, 16.00, 74, 15, 69.00, 417.78, 4, 8, 34, 34, 7258],
+      [123, "CEMRE SÖZENER", "8-B", 14, 6, 12.00, 4, 6, 2.00, 9, 1, 8.67, 9, 1, 8.67, 17, 2, 16.33, 17, 3, 16.00, 70, 19, 63.67, 416.30, 5, 9, 35, 35, 7446],
+      [20, "BADE UMAN", "8-A", 15, 2, 14.33, 8, 1, 7.67, 9, 1, 8.67, 6, 2, 5.33, 14, 1, 13.67, 16, 2, 15.33, 68, 9, 65.00, 415.63, 5, 10, 36, 36, 7532]
     ];
-    exportToExcel(data, `${exam.name}_Sonuc_Sablonu`);
-    showAlert("Yayıncı denemesi Excel örnek şablonu indirildi.");
+
+    const merges = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+      { s: { r: 0, c: 3 }, e: { r: 0, c: 5 } },
+      { s: { r: 0, c: 6 }, e: { r: 0, c: 8 } },
+      { s: { r: 0, c: 9 }, e: { r: 0, c: 11 } },
+      { s: { r: 0, c: 12 }, e: { r: 0, c: 14 } },
+      { s: { r: 0, c: 15 }, e: { r: 0, c: 17 } },
+      { s: { r: 0, c: 18 }, e: { r: 0, c: 20 } },
+      { s: { r: 0, c: 21 }, e: { r: 0, c: 23 } },
+      { s: { r: 0, c: 24 }, e: { r: 0, c: 29 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
+      { s: { r: 1, c: 3 }, e: { r: 1, c: 5 } },
+      { s: { r: 1, c: 6 }, e: { r: 1, c: 8 } },
+      { s: { r: 1, c: 9 }, e: { r: 1, c: 11 } },
+      { s: { r: 1, c: 12 }, e: { r: 1, c: 14 } },
+      { s: { r: 1, c: 15 }, e: { r: 1, c: 17 } },
+      { s: { r: 1, c: 18 }, e: { r: 1, c: 20 } },
+      { s: { r: 1, c: 25 }, e: { r: 1, c: 29 } }
+    ];
+
+    const cols = [
+      { wch: 10 }, // Öğr.No
+      { wch: 25 }, // Ad, Soyad
+      { wch: 8 },  // Sınıf
+      { wch: 6 }, { wch: 6 }, { wch: 7 }, // TÜR D, Y, N
+      { wch: 6 }, { wch: 6 }, { wch: 7 }, // TAR D, Y, N
+      { wch: 6 }, { wch: 6 }, { wch: 7 }, // DİN D, Y, N
+      { wch: 6 }, { wch: 6 }, { wch: 7 }, // İNG D, Y, N
+      { wch: 6 }, { wch: 6 }, { wch: 7 }, // MAT D, Y, N
+      { wch: 6 }, { wch: 6 }, { wch: 7 }, // FEN D, Y, N
+      { wch: 6 }, { wch: 6 }, { wch: 8 }, // TOPLAM D, Y, N
+      { wch: 12 }, // Puan
+      { wch: 7 }, { wch: 7 }, { wch: 7 }, { wch: 7 }, { wch: 8 } // Sınıf, Kurum, İlçe, İl, Genel
+    ];
+
+    exportAoaToExcel(aoa, `${exam.name || 'Yayin'}_Kurum_Net_Listesi_Sablonu`, {
+      sheetName: 'Kurum Net Listesi',
+      merges,
+      cols
+    });
+    showAlert("Kurum Net Listesi Excel örnek şablonu başarıyla indirildi.");
   };
 
   const handlePublisherExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1725,8 +1813,8 @@ export function ResultsView() {
     if (!file) return;
 
     try {
-      importFromExcel(file, (data) => {
-        if (!data || !Array.isArray(data) || data.length === 0) {
+      importFromExcel(file, (data, rawRows) => {
+        if ((!data || data.length === 0) && (!rawRows || rawRows.length === 0)) {
           showAlert("Yüklenen dosyada geçerli veri bulunamadı.");
           return;
         }
@@ -1734,110 +1822,358 @@ export function ResultsView() {
         const newResults: ExamResult[] = [];
         const newStudentsToAdd: Student[] = [];
 
-        data.forEach((row: any) => {
-          const normalizedRow: Record<string, any> = {};
-          Object.keys(row).forEach(k => {
-            normalizedRow[k.trim().toLowerCase()] = row[k];
-          });
+        // 1. ÖNCE: Kurum Net Listesi (Çok satırlı başlık içeren resmi yayıncı formatı) Denemesi
+        let processedWithKurumNetListesi = false;
 
-          const rawNo = normalizedRow["okul no"] || normalizedRow["no"] || normalizedRow["numara"] || normalizedRow["öğrenci no"];
-          const rawName = normalizedRow["adı soyadı"] || normalizedRow["ad soyad"] || normalizedRow["öğrenci adı"] || normalizedRow["isim"];
-          if (!rawNo && !rawName) return;
+        if (rawRows && Array.isArray(rawRows) && rawRows.length >= 3) {
+          let headerRowIdx = -1;
 
-          const studentNo = parseInt(String(rawNo).replace(/[^\d]/g, ''), 10) || 0;
-          const studentName = String(rawName || '').trim().toUpperCase();
-          const cls = String(normalizedRow["sınıf"] || normalizedRow["sinif"] || '').trim();
-          const sec = String(normalizedRow["şube"] || normalizedRow["sube"] || '').trim().toUpperCase();
-
-          const foundStudent = masterStudents.find(s => String(s.no).trim() === String(studentNo).trim());
-          const classStr = foundStudent?.classStr || foundStudent?.className || cls || '';
-          const sectionStr = foundStudent?.sectionStr || sec || '';
-
-          if (!foundStudent && studentNo > 0 && studentName) {
-            newStudentsToAdd.push({
-              id: generateId(),
-              no: studentNo,
-              name: studentName,
-              className: classStr,
-              classStr: classStr,
-              sectionStr: sectionStr
-            });
+          for (let i = 0; i < Math.min(10, rawRows.length); i++) {
+            const row = rawRows[i] || [];
+            const rowStr = row.map(c => String(c || '').trim().toLowerCase()).join(' ');
+            if (
+              (rowStr.includes('öğr.no') || rowStr.includes('okul no') || rowStr.includes('numara') || rowStr.includes('öğrenci no') || rowStr.includes('ogr.no') || rowStr.includes('no')) &&
+              (rowStr.includes('ad') || rowStr.includes('soyad') || rowStr.includes('isim'))
+            ) {
+              headerRowIdx = i;
+              break;
+            }
           }
 
-          const subjectScores: Record<string, { correct: number; wrong: number; empty: number; net: number }> = {};
-          let parsedTotalNet = 0;
+          if (headerRowIdx >= 0) {
+            const headerRow = rawRows[headerRowIdx] || [];
+            const prevRow = headerRowIdx > 0 ? (rawRows[headerRowIdx - 1] || []) : [];
+            const prevPrevRow = headerRowIdx > 1 ? (rawRows[headerRowIdx - 2] || []) : [];
 
-          Object.keys(row).forEach(key => {
-            const lKey = key.trim().toLowerCase();
-            const val = parseFloat(String(row[key]).replace(',', '.'));
-            if (!isNaN(val)) {
-              if (lKey.includes("toplam net") || lKey === "net") {
-                parsedTotalNet = val;
-              } else if (
-                lKey.includes("türk") || lKey.includes("turk") || 
-                lKey.includes("mat") || 
-                lKey.includes("fen") || 
-                lKey.includes("ink") || lKey.includes("tarih") || 
-                lKey.includes("din") || 
-                lKey.includes("ing") || lKey.includes("yabancı")
-              ) {
-                subjectScores[key.trim()] = {
-                  correct: Math.round(val),
-                  wrong: 0,
-                  empty: 0,
-                  net: val
-                };
+            let noCol = -1;
+            let nameCol = -1;
+            let classCol = -1;
+            let puanCol = -1;
+            let totalNetCol = -1;
+            let totalDCol = -1;
+            let totalYCol = -1;
+
+            const subjectsMap: Record<string, { name: string; dCol: number; yCol: number; nCol: number }> = {};
+            let currentSub = '';
+
+            for (let c = 0; c < headerRow.length; c++) {
+              const h = String(headerRow[c] || '').trim();
+              const hl = h.toLowerCase();
+              const p = String(prevRow[c] || '').trim();
+              const pl = p.toLowerCase();
+              const pp = String(prevPrevRow[c] || '').trim();
+              const ppl = pp.toLowerCase();
+
+              if (p && !['puan', 'dereceler', 'toplam', 'lgs'].includes(pl)) {
+                currentSub = p;
+              } else if (pp && (ppl.includes('toplam') || pl.includes('toplam'))) {
+                currentSub = 'Toplam';
+              } else if ((p && pl.includes('puan')) || hl === 'puan') {
+                currentSub = 'Puan';
+              }
+
+              // Kimlik Sütunları
+              if (noCol === -1 && (hl === 'öğr.no' || hl === 'okul no' || hl === 'no' || hl === 'numara' || hl === 'öğrenci no' || hl === 'ogr.no')) {
+                noCol = c;
+              } else if (nameCol === -1 && (hl.includes('ad') || hl.includes('soyad') || hl.includes('isim'))) {
+                nameCol = c;
+              } else if (classCol === -1 && (hl === 'sınıf' || hl === 'sinif' || hl === 'şube')) {
+                classCol = c;
+              } else if (hl === 'puan' || hl === 'lgs puanı' || pl === 'puan') {
+                puanCol = c;
+              } else if (currentSub === 'Toplam') {
+                if (hl === 'd') totalDCol = c;
+                else if (hl === 'y') totalYCol = c;
+                else if (hl === 'n' || hl === 'net') totalNetCol = c;
+              } else if (currentSub && currentSub !== 'Puan' && !['sınıf', 'kurum', 'ilçe', 'il', 'genel'].includes(hl)) {
+                if (!subjectsMap[currentSub]) {
+                  subjectsMap[currentSub] = { name: currentSub, dCol: -1, yCol: -1, nCol: -1 };
+                }
+                if (hl === 'd') subjectsMap[currentSub].dCol = c;
+                else if (hl === 'y') subjectsMap[currentSub].yCol = c;
+                else if (hl === 'n' || hl === 'net') subjectsMap[currentSub].nCol = c;
               }
             }
-          });
 
-          if (parsedTotalNet === 0 && Object.keys(subjectScores).length > 0) {
-            parsedTotalNet = Object.values(subjectScores).reduce((acc, curr) => acc + curr.net, 0);
-          }
+            // Başlık gibi geçersiz eşleşmeleri temizle
+            Object.keys(subjectsMap).forEach(k => {
+              if (subjectsMap[k].dCol === -1 && subjectsMap[k].yCol === -1 && subjectsMap[k].nCol === -1) {
+                delete subjectsMap[k];
+              }
+            });
 
-          const rawScore = normalizedRow["puan"] || normalizedRow["lgs puanı"] || normalizedRow["lgs puani"] || normalizedRow["tyt puanı"];
-          const lgsScore = parseFloat(String(rawScore).replace(',', '.')) || (isLgs ? (parsedTotalNet * 5) : 0);
+            if (noCol >= 0 && nameCol >= 0) {
+              for (let r = headerRowIdx + 1; r < rawRows.length; r++) {
+                const row = rawRows[r] || [];
+                if (!row || row.length === 0) continue;
 
-          const ataLigResult = calculateAtaLigPoints(
-            lgsScore || parsedTotalNet,
-            parsedTotalNet,
-            subjectScores,
-            [],
-            ''
-          );
-          const lp = ataLigResult.earnedLP;
-          const badges = ataLigResult.earnedBadges;
+                const cell0 = String(row[noCol] || '').trim().toLowerCase();
+                const cell1 = String(row[nameCol] || '').trim().toLowerCase();
 
-          newResults.push({
-            id: generateId(),
-            studentNo,
-            studentName,
-            studentClass: `${classStr}/${sectionStr}`,
-            no: studentNo,
-            name: studentName,
-            classStr,
-            sectionStr,
-            booklet: 'A',
-            scores: {
-              [String(exam.id)]: parsedTotalNet,
-              ...Object.fromEntries(Object.entries(subjectScores).map(([k, v]) => [k, v.net]))
-            },
-            average: parsedTotalNet,
-            earnedLP: lp,
-            earnedBadges: badges,
-            evaluatedScore: {
-              total: {
-                correct: Math.round(parsedTotalNet),
-                wrong: 0,
-                empty: 0,
-                net: parsedTotalNet,
-                lgsScore: isLgs ? lgsScore : undefined,
-                percentile: undefined
-              },
-              subjectScores
+                // Özet ve ortalama satırlarını atla
+                if (
+                  cell0.includes('ortalama') || cell1.includes('ortalama') ||
+                  cell0.includes('toplam') || cell1.includes('toplam') ||
+                  cell0.includes('genel') || cell1.includes('genel') ||
+                  cell0.includes('kurum') || cell1.includes('kurum')
+                ) {
+                  continue;
+                }
+
+                const rawNo = row[noCol];
+                const rawName = row[nameCol];
+                const rawClass = classCol >= 0 ? row[classCol] : '';
+
+                const studentNo = parseInt(String(rawNo || '').replace(/[^\d]/g, ''), 10);
+                const studentName = String(rawName || '').trim().toUpperCase();
+
+                if (!studentNo || !studentName || studentName.length < 2) continue;
+
+                let classStr = '';
+                let sectionStr = '';
+                if (rawClass) {
+                  const cStr = String(rawClass).trim();
+                  const match = cStr.match(/^(\d+)[\s\-_/]*([A-Za-zÇĞİÖŞÜçğıöşü]?)/);
+                  if (match) {
+                    classStr = match[1];
+                    sectionStr = (match[2] || '').toUpperCase();
+                  } else {
+                    classStr = cStr;
+                  }
+                }
+
+                const foundStudent = masterStudents.find(s => String(s.no).trim() === String(studentNo).trim());
+                if (foundStudent) {
+                  if (!classStr) classStr = foundStudent.classStr || foundStudent.className || '';
+                  if (!sectionStr) sectionStr = foundStudent.sectionStr || '';
+                } else if (studentNo > 0 && studentName) {
+                  newStudentsToAdd.push({
+                    id: generateId(),
+                    no: studentNo,
+                    name: studentName,
+                    className: sectionStr ? `${classStr}/${sectionStr}` : classStr,
+                    classStr,
+                    sectionStr
+                  });
+                }
+
+                const subjectScores: Record<string, { correct: number; wrong: number; empty: number; net: number }> = {};
+                let sumNets = 0;
+                let sumCorrect = 0;
+                let sumWrong = 0;
+
+                for (const [subKey, mapping] of Object.entries(subjectsMap)) {
+                  const dVal = mapping.dCol >= 0 ? parseFloat(String(row[mapping.dCol] || '').replace(',', '.')) : 0;
+                  const yVal = mapping.yCol >= 0 ? parseFloat(String(row[mapping.yCol] || '').replace(',', '.')) : 0;
+                  const nVal = mapping.nCol >= 0 ? parseFloat(String(row[mapping.nCol] || '').replace(',', '.')) : (dVal - (yVal / 3));
+
+                  const cleanD = isNaN(dVal) ? 0 : Math.max(0, Math.round(dVal));
+                  const cleanY = isNaN(yVal) ? 0 : Math.max(0, Math.round(yVal));
+                  const cleanN = isNaN(nVal) ? 0 : parseFloat(nVal.toFixed(2));
+
+                  let stdName = mapping.name;
+                  const nl = mapping.name.toLowerCase();
+                  if (nl.includes('türk')) stdName = 'Türkçe';
+                  else if (nl.includes('tarih') || nl.includes('ink')) stdName = 'T.C. İnkılap Tarihi ve Atatürkçülük';
+                  else if (nl.includes('din')) stdName = 'Din Kültürü ve Ahlak Bilgisi';
+                  else if (nl.includes('ing') || nl.includes('yabancı')) stdName = 'İngilizce';
+                  else if (nl.includes('mat')) stdName = 'Matematik';
+                  else if (nl.includes('fen')) stdName = 'Fen Bilimleri';
+
+                  subjectScores[stdName] = {
+                    correct: cleanD,
+                    wrong: cleanY,
+                    empty: 0,
+                    net: cleanN
+                  };
+                  sumNets += cleanN;
+                  sumCorrect += cleanD;
+                  sumWrong += cleanY;
+                }
+
+                let totalD = totalDCol >= 0 ? parseInt(String(row[totalDCol] || '').replace(/[^\d]/g, ''), 10) : sumCorrect;
+                if (isNaN(totalD)) totalD = sumCorrect;
+
+                let totalY = totalYCol >= 0 ? parseInt(String(row[totalYCol] || '').replace(/[^\d]/g, ''), 10) : sumWrong;
+                if (isNaN(totalY)) totalY = sumWrong;
+
+                let parsedTotalNet = totalNetCol >= 0 ? parseFloat(String(row[totalNetCol] || '').replace(',', '.')) : sumNets;
+                if (isNaN(parsedTotalNet) || parsedTotalNet === 0) parsedTotalNet = parseFloat(sumNets.toFixed(2));
+
+                const rawScore = puanCol >= 0 ? parseFloat(String(row[puanCol] || '').replace(',', '.')) : 0;
+                const lgsScore = !isNaN(rawScore) && rawScore > 0 ? rawScore : (isLgs ? (parsedTotalNet * 5) : 0);
+
+                const ataLigResult = calculateAtaLigPoints(
+                  lgsScore || parsedTotalNet,
+                  parsedTotalNet,
+                  subjectScores,
+                  [],
+                  ''
+                );
+
+                newResults.push({
+                  id: generateId(),
+                  studentNo,
+                  studentName,
+                  studentClass: sectionStr ? `${classStr}/${sectionStr}` : classStr,
+                  no: studentNo,
+                  name: studentName,
+                  classStr,
+                  sectionStr,
+                  booklet: 'A',
+                  scores: {
+                    [String(exam.id)]: parsedTotalNet,
+                    ...Object.fromEntries(Object.entries(subjectScores).map(([k, v]) => [k, v.net]))
+                  },
+                  average: parsedTotalNet,
+                  net: parsedTotalNet,
+                  totalCorrect: totalD,
+                  totalWrong: totalY,
+                  totalEmpty: Math.max(0, 90 - totalD - totalY),
+                  lgsScore: isLgs ? lgsScore : undefined,
+                  earnedLP: ataLigResult.earnedLP,
+                  earnedBadges: ataLigResult.earnedBadges,
+                  evaluatedScore: {
+                    total: {
+                      correct: totalD,
+                      wrong: totalY,
+                      empty: Math.max(0, 90 - totalD - totalY),
+                      net: parsedTotalNet,
+                      lgsScore: isLgs ? lgsScore : undefined,
+                      percentile: undefined
+                    },
+                    subjectScores
+                  }
+                });
+              }
+
+              if (newResults.length > 0) {
+                processedWithKurumNetListesi = true;
+              }
             }
+          }
+        }
+
+        // 2. EĞER Kurum Net Listesi değilse: Düz tek satırlı tablo formatını çözümle
+        if (!processedWithKurumNetListesi && data && Array.isArray(data) && data.length > 0) {
+          data.forEach((row: any) => {
+            const normalizedRow: Record<string, any> = {};
+            Object.keys(row).forEach(k => {
+              normalizedRow[k.trim().toLowerCase()] = row[k];
+            });
+
+            const rawNo = normalizedRow["okul no"] || normalizedRow["no"] || normalizedRow["numara"] || normalizedRow["öğrenci no"] || normalizedRow["öğr.no"];
+            const rawName = normalizedRow["adı soyadı"] || normalizedRow["ad soyad"] || normalizedRow["ad, soyad"] || normalizedRow["öğrenci adı"] || normalizedRow["isim"];
+            if (!rawNo && !rawName) return;
+
+            const studentNo = parseInt(String(rawNo).replace(/[^\d]/g, ''), 10) || 0;
+            const studentName = String(rawName || '').trim().toUpperCase();
+            const cls = String(normalizedRow["sınıf"] || normalizedRow["sinif"] || '').trim();
+            const sec = String(normalizedRow["şube"] || normalizedRow["sube"] || '').trim().toUpperCase();
+
+            const foundStudent = masterStudents.find(s => String(s.no).trim() === String(studentNo).trim());
+            const classStr = foundStudent?.classStr || foundStudent?.className || cls || '';
+            const sectionStr = foundStudent?.sectionStr || sec || '';
+
+            if (!foundStudent && studentNo > 0 && studentName) {
+              newStudentsToAdd.push({
+                id: generateId(),
+                no: studentNo,
+                name: studentName,
+                className: sectionStr ? `${classStr}/${sectionStr}` : classStr,
+                classStr: classStr,
+                sectionStr: sectionStr
+              });
+            }
+
+            const subjectScores: Record<string, { correct: number; wrong: number; empty: number; net: number }> = {};
+            let parsedTotalNet = 0;
+
+            Object.keys(row).forEach(key => {
+              const lKey = key.trim().toLowerCase();
+              const val = parseFloat(String(row[key]).replace(',', '.'));
+              if (!isNaN(val)) {
+                if (lKey.includes("toplam net") || lKey === "net") {
+                  parsedTotalNet = val;
+                } else if (
+                  lKey.includes("türk") || lKey.includes("turk") || 
+                  lKey.includes("mat") || 
+                  lKey.includes("fen") || 
+                  lKey.includes("ink") || lKey.includes("tarih") || 
+                  lKey.includes("din") || 
+                  lKey.includes("ing") || lKey.includes("yabancı")
+                ) {
+                  let stdName = key.trim();
+                  if (lKey.includes("türk")) stdName = "Türkçe";
+                  else if (lKey.includes("tarih") || lKey.includes("ink")) stdName = "T.C. İnkılap Tarihi ve Atatürkçülük";
+                  else if (lKey.includes("din")) stdName = "Din Kültürü ve Ahlak Bilgisi";
+                  else if (lKey.includes("ing") || lKey.includes("yabancı")) stdName = "İngilizce";
+                  else if (lKey.includes("mat")) stdName = "Matematik";
+                  else if (lKey.includes("fen")) stdName = "Fen Bilimleri";
+
+                  subjectScores[stdName] = {
+                    correct: Math.round(val),
+                    wrong: 0,
+                    empty: 0,
+                    net: val
+                  };
+                }
+              }
+            });
+
+            if (parsedTotalNet === 0 && Object.keys(subjectScores).length > 0) {
+              parsedTotalNet = Object.values(subjectScores).reduce((acc, curr) => acc + curr.net, 0);
+            }
+
+            const rawScore = normalizedRow["puan"] || normalizedRow["lgs puanı"] || normalizedRow["lgs puani"] || normalizedRow["tyt puanı"];
+            const lgsScore = parseFloat(String(rawScore).replace(',', '.')) || (isLgs ? (parsedTotalNet * 5) : 0);
+
+            const ataLigResult = calculateAtaLigPoints(
+              lgsScore || parsedTotalNet,
+              parsedTotalNet,
+              subjectScores,
+              [],
+              ''
+            );
+            const lp = ataLigResult.earnedLP;
+            const badges = ataLigResult.earnedBadges;
+
+            newResults.push({
+              id: generateId(),
+              studentNo,
+              studentName,
+              studentClass: sectionStr ? `${classStr}/${sectionStr}` : classStr,
+              no: studentNo,
+              name: studentName,
+              classStr,
+              sectionStr,
+              booklet: 'A',
+              scores: {
+                [String(exam.id)]: parsedTotalNet,
+                ...Object.fromEntries(Object.entries(subjectScores).map(([k, v]) => [k, v.net]))
+              },
+              average: parsedTotalNet,
+              net: parsedTotalNet,
+              totalCorrect: Math.round(parsedTotalNet),
+              totalWrong: 0,
+              totalEmpty: 0,
+              lgsScore: isLgs ? lgsScore : undefined,
+              earnedLP: lp,
+              earnedBadges: badges,
+              evaluatedScore: {
+                total: {
+                  correct: Math.round(parsedTotalNet),
+                  wrong: 0,
+                  empty: 0,
+                  net: parsedTotalNet,
+                  lgsScore: isLgs ? lgsScore : undefined,
+                  percentile: undefined
+                },
+                subjectScores
+              }
+            });
           });
-        });
+        }
 
         if (newResults.length === 0) {
           showAlert("Excel dosyasında öğrenci net verisi okunamadı. Lütfen şablonu inceleyiniz.");
@@ -1856,7 +2192,7 @@ export function ResultsView() {
           setStudents([...masterStudents, ...newStudentsToAdd]);
         }
 
-        showAlert(`${newResults.length} öğrencinin sınav sonuçları başarıyla aktarıldı.`);
+        showAlert(`✓ ${newResults.length} öğrencinin sınav sonuçları ve ders netleri başarıyla aktarıldı.`);
       });
     } catch (err: any) {
       console.error(err);
@@ -2600,7 +2936,7 @@ export function ResultsView() {
                     <input
                       ref={publisherFileInputRef}
                       type="file"
-                      accept=".xlsx,.xls,.csv"
+                      accept=".xlsx,.xls,.csv,.xml"
                       className="hidden"
                       onChange={handlePublisherExcelUpload}
                     />
@@ -2616,9 +2952,9 @@ export function ResultsView() {
                       type="button"
                       onClick={handleDownloadPublisherTemplate}
                       className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
-                      title="Örnek Excel Şablonu İndir"
+                      title="Örnek Kurum Net Listesi Excel Şablonu İndir"
                     >
-                      <Download className="w-3.5 h-3.5" />
+                      <Download className="w-3.5 h-3.5 text-slate-600" />
                       <span>Örnek Şablon</span>
                     </button>
                   </>
@@ -2693,14 +3029,25 @@ export function ResultsView() {
                       <span>Optik Tara</span>
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => publisherFileInputRef.current?.click()}
-                      className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-emerald-500 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-2xs active:scale-95 transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-white shrink-0" />
-                      <span>Excel Yükle</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => publisherFileInputRef.current?.click()}
+                        className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-emerald-500 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-2xs active:scale-95 transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-white shrink-0" />
+                        <span>Excel Yükle</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadPublisherTemplate}
+                        className="h-8 px-2 text-[11px] font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 active:scale-95 shadow-2xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1 cursor-pointer"
+                        title="Örnek Kurum Net Listesi Excel Şablonu İndir"
+                      >
+                        <Download className="w-3 h-3 text-slate-600 shrink-0" />
+                        <span>Şablon</span>
+                      </button>
+                    </>
                   )
                 )}
 
