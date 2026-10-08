@@ -22,6 +22,24 @@ try {
   console.warn('Could not read teacher broadcast cache from disk:', e);
 }
 
+// Atomic safe disk persistence for teacher broadcast cache
+function saveCacheToDisk(payload: any) {
+  try {
+    const tempFile = `${CACHE_FILE}.tmp`;
+    fs.writeFile(tempFile, JSON.stringify(payload, null, 2), (writeErr) => {
+      if (writeErr) {
+        console.warn('Could not write cache temp file:', writeErr);
+      } else {
+        fs.rename(tempFile, CACHE_FILE, (renameErr) => {
+          if (renameErr) console.warn('Could not replace cache file:', renameErr);
+        });
+      }
+    });
+  } catch (e) {
+    console.warn('saveCacheToDisk error:', e);
+  }
+}
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -109,7 +127,7 @@ app.get('/api/teacher-data', async (req, res) => {
                   data: targetData
                 };
                 teacherBroadcastCache = payload;
-                fs.writeFile(CACHE_FILE, JSON.stringify(payload, null, 2), () => {});
+                saveCacheToDisk(payload);
                 return res.json({
                   success: true,
                   publishedAt: payload.publishedAt,
@@ -173,7 +191,7 @@ app.get('/api/drive-proxy', async (req, res) => {
                 data: cleanData
               };
               teacherBroadcastCache = payload;
-              fs.writeFile(CACHE_FILE, JSON.stringify(payload, null, 2), () => {});
+              saveCacheToDisk(payload);
               return res.json({ success: true, data: cleanData, raw: json });
             }
           }
@@ -197,10 +215,8 @@ app.post('/api/teacher-broadcast/update', (req, res) => {
 
     teacherBroadcastCache = payload;
 
-    // Persist to disk asynchronously
-    fs.writeFile(CACHE_FILE, JSON.stringify(payload, null, 2), (err) => {
-      if (err) console.warn('Could not write cache file to disk:', err);
-    });
+    // Persist to disk atomically
+    saveCacheToDisk(payload);
 
     console.log(`Teacher broadcast cache updated at ${payload.publishedDateFormatted || new Date().toISOString()}`);
     return res.json({

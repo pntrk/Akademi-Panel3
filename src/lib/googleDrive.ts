@@ -739,6 +739,17 @@ export const syncLiveMasterToGoogleDrive = async (
         // Keep revisions safe below 30
         cleanOldDriveRevisions(patchData.id, token, 30).catch(() => {});
 
+        // Automatically update server teacher broadcast cache so teachers instantly have fresh data
+        try {
+          const teacherPayload = prepareTeacherBroadcastPayload(liveState, userEmail || 'admin');
+          (teacherPayload.data as any).canonicalDriveFileId = patchData.id;
+          fetch('/api/teacher-broadcast/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(teacherPayload)
+          }).catch(() => {});
+        } catch {}
+
         return {
           success: true,
           fileId: patchData.id,
@@ -1265,30 +1276,36 @@ export const fetchTeacherBroadcastData = async (
     }
   }
 
-  // 1. ABSOLUTE TOP PRIORITY: Direct Authenticated Google Drive API Download
-  // Guarantees 100% live Google Drive data (with all 288 students) directly from the master JSON!
+  // 1. ABSOLUTE TOP PRIORITY & INSTANT (0 Google Drive OAuth, 0 403 Errors, 0 Firebase Quota):
+  // Server-side Express in-memory cache and disk backup (/api/teacher-data)
+  try {
+    const res = await fetch('/api/teacher-data');
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success && json.data) {
+        const cleanData = unwrapSchoolStatePayload(json.data);
+        if (cleanData && (Array.isArray(cleanData.students) || Array.isArray(cleanData.exams) || Array.isArray(cleanData.examHalls))) {
+          const publishedDate = json.publishedDateFormatted || cleanData.lastTeacherPublishedDate || json.publishedAt || 'Güncel';
+          setLastTeacherPublishedDate(publishedDate);
+          if (cleanData.canonicalDriveFileId) {
+            setLiveMasterFileId(cleanData.canonicalDriveFileId);
+          }
+          return {
+            success: true,
+            data: cleanData,
+            publishedDate,
+            source: 'server'
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Teacher broadcast /api/teacher-data note:', e);
+  }
+
+  // 2. Second Priority: Server-side Drive Proxy (Zero client OAuth needed, works for all teachers)
   const targetId = knownDriveId || getLiveMasterFileId() || DEFAULT_CANONICAL_DRIVE_FILE_ID;
   if (targetId) {
-    // 1a. Try direct authenticated Google Drive API download first
-    try {
-      const directRaw = await downloadBackupFromGoogleDrive(targetId);
-      const targetData = unwrapSchoolStatePayload(directRaw);
-      if (targetData && (Array.isArray(targetData.students) || Array.isArray(targetData.exams) || Array.isArray(targetData.examHalls) || Array.isArray(targetData.results))) {
-        const publishedDate = directRaw.publishedDateFormatted || directRaw.data?.publishedDateFormatted || targetData.lastTeacherPublishedDate || targetData.lastPublishedAt || new Date().toISOString();
-        if (publishedDate) setLastTeacherPublishedDate(publishedDate);
-        setLiveMasterFileId(targetId);
-        return {
-          success: true,
-          data: targetData,
-          publishedDate,
-          source: 'drive'
-        };
-      }
-    } catch (directDriveErr) {
-      console.warn('Teacher direct drive API fetch attempt notice:', directDriveErr);
-    }
-
-    // 1b. Fallback: Authenticated or direct proxy URLs
     try {
       const activeToken = getCachedAccessToken();
       const isValidToken = activeToken && activeToken !== 'undefined' && activeToken !== 'null' && activeToken.length > 5;
@@ -1298,7 +1315,6 @@ export const fetchTeacherBroadcastData = async (
         `/api/drive-proxy?fileId=${targetId}`,
         `/api/teacher-data?fileId=${targetId}`,
         `/api/drive-proxy?fileId=${DEFAULT_CANONICAL_DRIVE_FILE_ID}`,
-        `https://www.googleapis.com/drive/v3/files/${targetId}?alt=media&supportsAllDrives=true`,
         `https://drive.usercontent.google.com/download?id=${targetId}&export=download`,
         `https://drive.google.com/uc?export=download&id=${targetId}`
       ];
@@ -1330,29 +1346,6 @@ export const fetchTeacherBroadcastData = async (
     } catch (driveErr) {
       console.warn('Direct Google Drive teacher download note:', driveErr);
     }
-  }
-
-  // 2. Second priority: Server-side Express in-memory cache (/api/teacher-data)
-  try {
-    const res = await fetch('/api/teacher-data');
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.success && json.data) {
-        const publishedDate = json.publishedDateFormatted || json.data.lastTeacherPublishedDate || json.publishedAt;
-        if (publishedDate) setLastTeacherPublishedDate(publishedDate);
-        if (json.data.canonicalDriveFileId) {
-          setLiveMasterFileId(json.data.canonicalDriveFileId);
-        }
-        return {
-          success: true,
-          data: json.data,
-          publishedDate,
-          source: 'server'
-        };
-      }
-    }
-  } catch (e) {
-    console.warn('Server /api/teacher-data fetch note:', e);
   }
 
   // 3. Third priority: Cloud broadcast document fallback
