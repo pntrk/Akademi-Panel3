@@ -74,17 +74,31 @@ import { generateBatchReportCardsPdf, StudentEvaluatedData } from '../lib/pdfRep
    ========================================================================= */
 
 /**
- * Veritabanı ve arayüzdeki sınıfları tutarlı ve resmi formatta (örn. 8-A) gösterir.
+ * Veritabanı ve arayüzdeki sınıfları 8B formatında (örn. 8B, 7A) gösterir.
  */
 export const formatDisplayClass = (record: any): string => {
   if (!record) return '-';
+  if (typeof record === 'string') {
+    const { cls, sec } = formatClassSec(record);
+    if (cls && sec) return `${cls}${sec}`;
+    if (cls) return `${cls}. Sınıf`;
+    return record || '-';
+  }
   const { cls, sec } = formatClassSec(
     record.className || record.studentClass || record.classStr,
     record.sectionStr
   );
-  if (cls && sec) return `${cls}-${sec}`;
-  if (record.className && record.className !== '-') return record.className;
-  if (record.studentClass && record.studentClass !== '-') return record.studentClass;
+  if (cls && sec) return `${cls}${sec}`;
+  if (record.className && record.className !== '-') {
+    const parsed = formatClassSec(record.className);
+    if (parsed.cls && parsed.sec) return `${parsed.cls}${parsed.sec}`;
+    return record.className;
+  }
+  if (record.studentClass && record.studentClass !== '-') {
+    const parsed = formatClassSec(record.studentClass);
+    if (parsed.cls && parsed.sec) return `${parsed.cls}${parsed.sec}`;
+    return record.studentClass;
+  }
   if (cls) return `${cls}. Sınıf`;
   return '-';
 };
@@ -620,7 +634,7 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
       <div class="info">
         <div>Adı Soyadı: <span>${currentStudent.name}</span></div>
         <div>Öğrenci No: <span>${currentStudent.no}</span></div>
-        <div>Sınıf/Şube: <span>${currentStudent.classStr || '-'} / ${currentStudent.sectionStr || '-'}</span></div>
+        <div>Sınıf/Şube: <span>${formatDisplayClass(currentStudent)}</span></div>
         <div>Kitapçık: <span>${currentStudent.booklet || 'A'}</span></div>
       </div>
       <div class="summary">
@@ -762,7 +776,7 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
             </div>
             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Sınıf / Şube</div>
-              <div className="font-bold text-slate-800 text-sm">{currentStudent.classStr || '-'} / {currentStudent.sectionStr || '-'}</div>
+              <div className="font-bold text-slate-800 text-sm">{formatDisplayClass(currentStudent)}</div>
             </div>
             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Kitapçık</div>
@@ -2036,9 +2050,11 @@ export function ResultsView() {
     masterStudents.forEach(s => {
       const { cls, sec } = formatClassSec(s.classStr || s.className, s.sectionStr);
       if (cls && sec) {
-        classMap.set(`${cls}-${sec}`, `${cls}-${sec}`);
+        classMap.set(`${cls}${sec}`, `${cls}${sec}`);
       } else if (s.className && s.className.trim() && s.className !== '-') {
-        classMap.set(s.className.trim(), s.className.trim());
+        const parsed = formatClassSec(s.className);
+        if (parsed.cls && parsed.sec) classMap.set(`${parsed.cls}${parsed.sec}`, `${parsed.cls}${parsed.sec}`);
+        else classMap.set(s.className.trim(), s.className.trim());
       }
     });
 
@@ -2046,15 +2062,17 @@ export function ResultsView() {
     currentExamResults.forEach(r => {
       const { cls, sec } = formatClassSec(r.studentClass || r.classStr, r.sectionStr);
       if (cls && sec) {
-        classMap.set(`${cls}-${sec}`, `${cls}-${sec}`);
+        classMap.set(`${cls}${sec}`, `${cls}${sec}`);
       } else if (r.studentClass && r.studentClass.trim() && r.studentClass !== '-') {
-        classMap.set(r.studentClass.trim(), r.studentClass.trim());
+        const parsed = formatClassSec(r.studentClass);
+        if (parsed.cls && parsed.sec) classMap.set(`${parsed.cls}${parsed.sec}`, `${parsed.cls}${parsed.sec}`);
+        else classMap.set(r.studentClass.trim(), r.studentClass.trim());
       }
     });
 
     // 3. Veritabanında sınıf yoksa standart 8. sınıf şubelerini ekle
     if (classMap.size === 0) {
-      ['8-A', '8-B', '8-C', '8-D'].forEach(c => classMap.set(c, c));
+      ['8A', '8B', '8C', '8D'].forEach(c => classMap.set(c, c));
     }
 
     const allSorted = Array.from(classMap.values()).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
@@ -3715,7 +3733,7 @@ export function ResultsView() {
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block">
                     {exam.examType === 'internal' 
-                      ? 'Optik kamera tarama & kütük eşleştirmeli anlık sonuç değerlendirmesi' 
+                      ? 'Optik kamera tarama ve anlık sonuç değerlendirmesi' 
                       : 'Yayıncı veri aktarımı ve öğrenci gelişim takip karnesi'}
                   </p>
                 </div>
@@ -4033,7 +4051,7 @@ export function ResultsView() {
                     className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs w-full appearance-none truncate"
                     aria-label="Kademe Seviyesi Filtresi"
                   >
-                    <option value="ALL">Tüm Kademeler ({currentExamResults.length}{masterStudents.length > 0 ? ` / ${masterStudents.length} Kütük` : ''})</option>
+                    <option value="ALL">Tüm Kademeler ({currentExamResults.length}{masterStudents.length > 0 ? ` / ${masterStudents.length} Kayıtlı` : ''})</option>
                     {availableGrades.map(grade => {
                       const examCount = gradeCounts[grade] || 0;
                       const dbCount = gradeDbCounts[grade] || 0;
@@ -4062,7 +4080,7 @@ export function ResultsView() {
                       <option value="ALL">
                         {selectedGradeFilter === 'ALL' ? 'Tüm Şubeler' : `${selectedGradeFilter}. Sınıf Tüm Şubeler`} ({
                           selectedGradeFilter === 'ALL'
-                            ? `${currentExamResults.length}${masterStudents.length > 0 ? ` / ${masterStudents.length} Kütük` : ''}`
+                            ? `${currentExamResults.length}${masterStudents.length > 0 ? ` / ${masterStudents.length} Kayıtlı` : ''}`
                             : `${gradeCounts[selectedGradeFilter] || 0}${gradeDbCounts[selectedGradeFilter] > 0 ? ` / ${gradeDbCounts[selectedGradeFilter]} Öğrenci` : ''}`
                         })
                       </option>

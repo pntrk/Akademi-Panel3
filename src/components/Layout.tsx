@@ -1041,7 +1041,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                     <Lock className="w-3 h-3 text-emerald-600" title="Kilitli Google Drive Kütüğü" />
                   </span>
                   <span className="text-[9.5px] text-emerald-700 dark:text-emerald-400 font-medium">
-                    {teacherRefreshFeedback || (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : (lastTeacherPublishedDate ? `Yayın: ${lastTeacherPublishedDate}` : 'Canlı Kütük'))}
+                    {teacherRefreshFeedback || (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : (lastTeacherPublishedDate ? `Yayın: ${lastTeacherPublishedDate}` : 'Canlı Senkron'))}
                   </span>
                 </div>
                 <button

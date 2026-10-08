@@ -1360,7 +1360,7 @@ export function createUnifiedExamResult(
   const rawSec = scanData.sectionStr || matchedStudent?.sectionStr || "";
   const { cls, sec } = formatClassSec(rawCls, rawSec);
   const studentClassFormatted = cls && cls !== '-'
-    ? (sec && sec !== '-' ? `${cls}/${sec}` : cls)
+    ? (sec && sec !== '-' ? `${cls}${sec}` : cls)
     : ((matchedStudent && 'className' in matchedStudent ? matchedStudent.className : '') || '-');
 
   // Kitapçık cevap anahtarını al

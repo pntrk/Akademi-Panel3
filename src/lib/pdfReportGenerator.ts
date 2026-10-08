@@ -1,7 +1,7 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { Exam, ExamResult } from '../types';
-import { normalizeTurkish } from './omrEngine';
+import { normalizeTurkish, formatClassSec } from './omrEngine';
 
 // Register vfs fonts for pdfMake
 try {
@@ -184,7 +184,18 @@ export async function generateBatchReportCardsPdf(
               margin: [4, 4, 4, 4],
               stack: [
                 { text: 'SINIF / ŞUBE', fontSize: 6.5, color: '#64748b', bold: true },
-                { text: `${student.classStr || '-'}/${student.sectionStr || '-'}`, fontSize: 9.5, bold: true, color: '#1e293b', margin: [0, 1, 0, 0] }
+                {
+                  text: (() => {
+                    const { cls, sec } = formatClassSec(student.classStr || (student as any).className || (student as any).studentClass, student.sectionStr);
+                    if (cls && sec) return `${cls}${sec}`;
+                    if (cls) return `${cls}. Sınıf`;
+                    return student.classStr || (student as any).className || '-';
+                  })(),
+                  fontSize: 9.5,
+                  bold: true,
+                  color: '#1e293b',
+                  margin: [0, 1, 0, 0]
+                }
               ]
             },
             {

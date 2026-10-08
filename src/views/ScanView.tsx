@@ -2353,7 +2353,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
         if (isCameraActive) {
           let successMsg = `✅ ${finalName} kaydedildi! (${finalBk} Kit.) - ${evaluatedScore.total.net.toFixed(2)} Net`;
-          if (autoCorrected) successMsg = `✨ ${finalName} (Kütükten Doğrulandı) - ${evaluatedScore.total.net.toFixed(2)} Net`;
+          if (autoCorrected) successMsg = `✨ ${finalName} (Kayıttan Doğrulandı) - ${evaluatedScore.total.net.toFixed(2)} Net`;
 
           setStatus(successMsg);
           showAlert(successMsg, 'success');

@@ -1499,7 +1499,12 @@ export const StudentsView = () => {
                       {/* Class */}
                       <td className="py-2 px-3">
                         <span className="font-bold text-[11px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
-                          {student.className || '-'}
+                          {(() => {
+                            if (!student.className) return '-';
+                            const m = student.className.match(/(\d+)\s*(?:\.|\/|-|\s)*\s*([A-ZÇĞİÖŞÜ])/i);
+                            if (m) return `${m[1]}${m[2].toUpperCase()}`;
+                            return student.className;
+                          })()}
                         </span>
                       </td>
 
