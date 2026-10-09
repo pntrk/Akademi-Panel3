@@ -7,6 +7,7 @@ import {
   ChevronLeft, Printer, RefreshCw, Star, Layers, ArrowRight
 } from 'lucide-react';
 import { determineLeagueTeam, calculateAtaLigPoints, parseDate, normalizeTurkish } from '../lib/utils';
+import { ALL_BADGE_DEFINITIONS, getBadgeDefinition, BadgeDefinition, BADGE_POINTS, normalizeBadgeKey } from '../lib/badgeDefinitions';
 import RulesView from './RulesView';
 
 export const LeagueView = () => {
@@ -16,6 +17,17 @@ export const LeagueView = () => {
   const [showTactics, setShowTactics] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [modalShowAllExams, setModalShowAllExams] = useState(false);
+  const [modalBadgeScope, setModalBadgeScope] = useState<'period' | 'all'>('period');
+  
+  const handleSelectStudent = (st: any) => {
+    setSelectedStudent(st);
+    setModalBadgeScope('period');
+    setModalShowAllExams(false);
+  };
+  
+  // Rozet Bilgilendirme ve Kılavuz Modalları
+  const [selectedBadgeModal, setSelectedBadgeModal] = useState<BadgeDefinition | null>(null);
+  const [showBadgesGuideModal, setShowBadgesGuideModal] = useState<boolean>(false);
   
   // Current month key (YYYY-MM format based on local calendar)
   const currentMonthKey = useMemo(() => {
@@ -224,7 +236,11 @@ export const LeagueView = () => {
         list = [];
         map.set(key, list);
       }
-      if (!list.some(e => e.examId === item.examId)) {
+      const existingIdx = list.findIndex(e => e.examId === item.examId || (item.name && e.name === item.name));
+      if (existingIdx >= 0) {
+        // Son yüklenen sınav sonucu geçerli kabul edilir (mükerrerliği önleme)
+        list[existingIdx] = item;
+      } else {
         list.push(item);
       }
     };
@@ -261,6 +277,9 @@ export const LeagueView = () => {
       });
     });
 
+    const activeExamNames = new Set((state.exams || []).map(e => e.name));
+    const activeExamIds = new Set((state.exams || []).map(e => String(e.id)));
+
     (state.results || []).forEach((r: any) => {
       const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
       const rId = r.studentId || r.id;
@@ -268,11 +287,18 @@ export const LeagueView = () => {
 
       if (r.scores && typeof r.scores === 'object') {
         Object.entries(r.scores).forEach(([examKey, scoreVal]) => {
+          // Sadece aktif sınavlar havuzunda yer alan sınavları dahil et (silinen sınavların skoru sızmaz)
+          if (!activeExamNames.has(examKey) && !activeExamIds.has(examKey)) return;
           if (typeof scoreVal === 'number' && scoreVal > 0) {
+            const matchingExam = (state.exams || []).find(e => String(e.id) === examKey || e.name === examKey);
+            const canonicalId = matchingExam ? String(matchingExam.id) : examKey;
+            const canonicalName = matchingExam ? matchingExam.name : examKey;
+            const canonicalDate = matchingExam?.date || r.date || '';
+
             const item = {
-              examId: examKey,
-              name: examKey,
-              date: r.date || '',
+              examId: canonicalId,
+              name: canonicalName,
+              date: canonicalDate,
               score: Number(scoreVal),
               details: r.details?.[examKey]?.lessons || r.details?.lessons || r.evaluatedScore?.subjectScores,
               examRes: r
@@ -302,8 +328,16 @@ export const LeagueView = () => {
 
       const examListMap = new Map<string, any>();
       for (const e of [...fromNo, ...fromId, ...fromName]) {
-        if (!examListMap.has(e.examId)) {
-          examListMap.set(e.examId, e);
+        // Find canonical exam in state.exams
+        const matched = (state.exams || []).find(ex => String(ex.id) === String(e.examId) || ex.name === e.name);
+        const canonKey = matched ? String(matched.id) : (e.examId || e.name);
+        if (!examListMap.has(canonKey)) {
+          examListMap.set(canonKey, e);
+        } else {
+          const existing = examListMap.get(canonKey);
+          if ((!existing.date && e.date) || (!existing.details && e.details)) {
+            examListMap.set(canonKey, e);
+          }
         }
       }
       const studentExams = Array.from(examListMap.values());
@@ -325,8 +359,8 @@ export const LeagueView = () => {
 
       if (!matchesGrade || !hasExams) return null;
 
-      // Kütükteki mevcut rozetleri başlangıç olarak al
-      const allStudentBadges: Record<string, number> = { ...(s.badges || {}) };
+      // Rozetler ve LP puanları sadece aktif sınavlardan dinamik olarak türetilir
+      const allStudentBadges: Record<string, number> = {};
       let calculatedTotalLP = 0;
       const monthlyLPAccum: Record<string, number> = {};
       const monthlyBadgesAccum: Record<string, Record<string, number>> = {};
@@ -334,43 +368,42 @@ export const LeagueView = () => {
       studentExams.forEach((h, i) => {
         const pastExams = studentExams.slice(0, i);
         const prevAverage = pastExams.length > 0 ? (pastExams.reduce((sum, p) => sum + p.score, 0) / pastExams.length) : 0;
-        let pastTeam = pastExams.length > 0 ? determineLeagueTeam(prevAverage) : (s.leagueTeam || 'Taktik Avcıları');
+        let pastTeam = pastExams.length > 0 ? determineLeagueTeam(prevAverage) : 'Taktik Avcıları';
         if (pastTeam === 'Atanmadı') pastTeam = 'Taktik Avcıları';
 
         const { earnedLP: calculatedLP, badgeCounts } = calculateAtaLigPoints(h.score, prevAverage, h.details, pastExams, pastTeam);
 
-        // Sınavda saklanmış earnedBadges varsa eksiksiz ekle
+        // Sınavda saklanmış earnedBadges varsa eksiksiz dahil et
         if (Array.isArray(h.examRes?.earnedBadges)) {
           h.examRes.earnedBadges.forEach((bName: string) => {
-            const norm = normalizeTurkish(bName).toLowerCase().replace(/[\s\.]+/g, '');
-            if (norm.includes('tamisabet')) badgeCounts.tamIsabet = Math.max(badgeCounts.tamIsabet || 0, 1);
-            else if (norm.includes('kalkan')) badgeCounts.kalkan = Math.max(badgeCounts.kalkan || 0, 1);
-            else if (norm.includes('zirvebekcisi')) badgeCounts.zirveBekcisi = Math.max(badgeCounts.zirveBekcisi || 0, 1);
-            else if (norm.includes('zirve')) badgeCounts.zirve = Math.max(badgeCounts.zirve || 0, 1);
-            else if (norm.includes('ivmesampiyonu')) badgeCounts.ivmeSampiyonu = Math.max(badgeCounts.ivmeSampiyonu || 0, 1);
-            else if (norm.includes('ivme')) badgeCounts.ivme = Math.max(badgeCounts.ivme || 0, 1);
-            else if (norm.includes('lgsfatih')) badgeCounts.lgsFatihi = Math.max(badgeCounts.lgsFatihi || 0, 1);
-            else if (norm.includes('ankakus')) badgeCounts.ankaKusu = Math.max(badgeCounts.ankaKusu || 0, 1);
-            else if (norm.includes('kirmizikart')) badgeCounts.kirmiziKart = Math.max(badgeCounts.kirmiziKart || 0, 1);
-            else if (norm.includes('barajyikici')) badgeCounts.barajYikici = Math.max(badgeCounts.barajYikici || 0, 1);
-            else if (norm.includes('stratejimuhendisi')) badgeCounts.stratejiMuhendisi = Math.max(badgeCounts.stratejiMuhendisi || 0, 1);
-            else if (norm.includes('istikrarelcisi')) badgeCounts.istikrarElcisi = Math.max(badgeCounts.istikrarElcisi || 0, 1);
-            else if (norm.includes('sozelsovalye')) badgeCounts.sozelSovalyesi = Math.max(badgeCounts.sozelSovalyesi || 0, 1);
-            else if (norm.includes('sayisalkale')) badgeCounts.sayisalKalesi = Math.max(badgeCounts.sayisalKalesi || 0, 1);
-            else if (norm.includes('matematikuyanis') || norm.includes('matuyanis')) badgeCounts.matematikUyanisi = Math.max(badgeCounts.matematikUyanisi || 0, 1);
-            else if (norm.includes('dengecambaz')) badgeCounts.dengeCambazi = Math.max(badgeCounts.dengeCambazi || 0, 1);
-            else if (norm.includes('keskinnisan')) badgeCounts.keskinNisanci = Math.max(badgeCounts.keskinNisanci || 0, 1);
-            else if (norm.includes('temelatici')) badgeCounts.temelAtici = Math.max(badgeCounts.temelAtici || 0, 1);
-            else if (norm.includes('filozof')) badgeCounts.filozof = Math.max(badgeCounts.filozof || 0, 1);
-            else if (norm.includes('newton')) badgeCounts.newton = Math.max(badgeCounts.newton || 0, 1);
-            else if (norm.includes('pisagor')) badgeCounts.pisagor = Math.max(badgeCounts.pisagor || 0, 1);
-            else if (norm.includes('uyuyandev')) badgeCounts.uyuyanDev = Math.max(badgeCounts.uyuyanDev || 0, 1);
-            else if (norm.includes('sabirtasi')) badgeCounts.sabirTasi = Math.max(badgeCounts.sabirTasi || 0, 1);
-            else if (norm.includes('yinyang')) badgeCounts.yinYang = Math.max(badgeCounts.yinYang || 0, 1);
+            const norm = normalizeBadgeKey(bName) || normalizeTurkish(bName).toLowerCase().replace(/[\s\.]+/g, '');
+            if (norm in badgeCounts) {
+              (badgeCounts as any)[norm] = Math.max((badgeCounts as any)[norm] || 0, 1);
+            }
           });
         }
 
-        const finalLP = typeof h.examRes?.earnedLP === 'number' && h.examRes.earnedLP > 0 ? h.examRes.earnedLP : calculatedLP;
+        // Transfer geçmişinden Anka Kuşu kontrolü (Bu sınava özel)
+        const transfer = s.transferHistory?.find((th: any) => th.examName === h.name);
+        if (transfer && transfer.from === 'Taktik Avcıları' && (transfer.to === 'Sıçrama Ustaları' || transfer.to === 'Kutup Yıldızları')) {
+          badgeCounts.ankaKusu = 1;
+        }
+
+        // Bu sınavda kazanılan tüm rozetlerin standart LP puanlarını topla
+        let badgeLP = 0;
+        Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
+          if (typeof count === 'number' && count > 0) {
+            const pts = BADGE_POINTS[k] || 0;
+            badgeLP += pts * count;
+          }
+        });
+
+        // finalLP: Hesaplanmış LP, rozet LP toplamı ve saklanan LP'den en güvenilir olanı
+        let finalLP = Math.max(calculatedLP, badgeLP);
+        if (typeof h.examRes?.earnedLP === 'number' && h.examRes.earnedLP > 0) {
+          finalLP = Math.max(finalLP, h.examRes.earnedLP);
+        }
+
         calculatedTotalLP += finalLP;
 
         // Toplam rozet havuzuna ekle
@@ -380,52 +413,52 @@ export const LeagueView = () => {
           }
         });
 
-        // Aylık biriktir
+        // Aylık biriktir (Sınav tarihine göre)
         if (h.date) {
           const dObj = parseDate(h.date);
-          const mKey = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}`;
-          monthlyLPAccum[mKey] = (monthlyLPAccum[mKey] || 0) + finalLP;
-          if (!monthlyBadgesAccum[mKey]) monthlyBadgesAccum[mKey] = {};
-          Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
-            if (typeof count === 'number' && count > 0) {
-              monthlyBadgesAccum[mKey][k] = (monthlyBadgesAccum[mKey][k] || 0) + count;
-            }
-          });
+          if (!isNaN(dObj.getTime())) {
+            const mKey = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}`;
+            monthlyLPAccum[mKey] = (monthlyLPAccum[mKey] || 0) + finalLP;
+            if (!monthlyBadgesAccum[mKey]) monthlyBadgesAccum[mKey] = {};
+            Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
+              if (typeof count === 'number' && count > 0) {
+                monthlyBadgesAccum[mKey][k] = (monthlyBadgesAccum[mKey][k] || 0) + count;
+              }
+            });
+          }
         }
       });
 
-      // Transfer geçmişinden Anka Kuşu kontrolü
+      // Transfer geçmişinden Anka Kuşu kontrolü (Genel)
       if (s.transferHistory && Array.isArray(s.transferHistory)) {
         s.transferHistory.forEach((th: any) => {
           if (th.from === 'Taktik Avcıları' && (th.to === 'Sıçrama Ustaları' || th.to === 'Kutup Yıldızları')) {
-            allStudentBadges.ankaKusu = (allStudentBadges.ankaKusu || 0) + 1;
+            allStudentBadges.ankaKusu = Math.max(allStudentBadges.ankaKusu || 0, 1);
           }
         });
       }
 
-      let displayPoints = (s.leaguePoints !== undefined && s.leaguePoints > 0) ? s.leaguePoints : calculatedTotalLP;
-      let displayBadges = allStudentBadges;
+      // Dinamik lig puanı ve rozetler: Sadece öğrencinin aktif sınavlarına duyarlı saf türetilmiş durum
+      let displayPoints = 0;
+      let displayBadges: Record<string, number> = {};
 
-      if (selectedMonth !== 'all') {
-        const partitionData = state.arenaMonthlyData?.[selectedMonth];
-        const studentPartition = partitionData?.studentsSummary?.find((ps: any) => ps.studentNo === s.no);
-        if (studentPartition) {
-          displayPoints = studentPartition.monthlyLP !== undefined ? studentPartition.monthlyLP : (monthlyLPAccum[selectedMonth] || 0);
-        } else if (monthlyLPAccum[selectedMonth] !== undefined) {
-          displayPoints = monthlyLPAccum[selectedMonth];
+      if (studentExams.length > 0) {
+        if (selectedMonth === 'all') {
+          displayPoints = calculatedTotalLP;
+          displayBadges = allStudentBadges;
         } else {
-          const monthlyData = (s as any).monthlyLeagueData;
-          if (monthlyData && monthlyData[selectedMonth]) {
-            displayPoints = monthlyData[selectedMonth].points || 0;
+          // Seçili ay için sınavları doğrudan topla (Varsa o ayın puanı, yoksa kesinlikle 0 LP)
+          if (monthlyLPAccum[selectedMonth] !== undefined) {
+            displayPoints = monthlyLPAccum[selectedMonth];
+            displayBadges = monthlyBadgesAccum[selectedMonth] || {};
           } else {
-            displayPoints = s.leaguePoints || 0;
+            displayPoints = 0;
+            displayBadges = {};
           }
         }
-
-        const mBadges = monthlyBadgesAccum[selectedMonth];
-        const hasMonthBadges = mBadges && Object.values(mBadges).some((v: any) => Number(v) > 0);
-        // Seçili ayda rozet varsa göster, yoksa öğrencinin genel rozetlerini göster (böylece eksik kalmaz)
-        displayBadges = hasMonthBadges ? mBadges : allStudentBadges;
+      } else {
+        displayPoints = 0;
+        displayBadges = {};
       }
 
       return { 
@@ -437,7 +470,7 @@ export const LeagueView = () => {
         examCount: studentExams.length 
       };
     }).filter(Boolean).sort((a: any, b: any) => (b.displayPoints || 0) - (a.displayPoints || 0)) as any[];
-  }, [state.students, studentExamsMap, selectedGrade, selectedMonth, state.arenaMonthlyData]);
+  }, [state.students, studentExamsMap, selectedGrade, selectedMonth, state.exams]);
 
   // Filtered by search and team tab
   const filteredStudents = useMemo(() => {
@@ -463,12 +496,13 @@ export const LeagueView = () => {
   const taktik = useMemo(() => baseStudents.filter(s => s.leagueTeam === 'Taktik Avcıları'), [baseStudents]);
 
   const calcAvg = (teamName: string, team: any[]) => {
-    const activeMembers = team.filter(s => {
-      const p = (s.displayPoints !== undefined ? s.displayPoints : s.leaguePoints) || 0;
-      return p !== 0;
-    });
+    const getStudentPoints = (s: any) => selectedMonth === 'all'
+      ? ((s.displayPoints !== undefined ? s.displayPoints : s.leaguePoints) || 0)
+      : (s.displayPoints || 0);
+
+    const activeMembers = team.filter(s => getStudentPoints(s) !== 0);
     if (activeMembers.length === 0) return (selectedMonth === 'all' ? (bonusPoints[teamName] || 0) : 0);
-    const total = activeMembers.reduce((acc, s) => acc + ((s.displayPoints !== undefined ? s.displayPoints : s.leaguePoints) || 0), 0);
+    const total = activeMembers.reduce((acc, s) => acc + getStudentPoints(s), 0);
     return Math.round(total / activeMembers.length) + (selectedMonth === 'all' ? (bonusPoints[teamName] || 0) : 0);
   };
 
@@ -632,34 +666,56 @@ export const LeagueView = () => {
     if (compact) {
       return (
         <div className="flex flex-wrap items-center gap-1 max-w-full">
-          {list.map(b => (
-            <span 
-              key={b.key} 
-              title={`${b.label} (x${b.count})`}
-              className={`${b.bg} ${b.text} border ${b.border} text-[10px] px-1.5 py-0.5 rounded-md shadow-2xs inline-flex items-center gap-1 shrink-0 transition-transform hover:scale-105`}
-            >
-              <span>{b.icon}</span>
-              <span className="font-bold text-[9.5px] leading-none">{b.label}</span>
-              {b.count > 1 && <span className="opacity-90 font-black text-[8.5px]">x{b.count}</span>}
-            </span>
-          ))}
+          {list.map(b => {
+            const def = getBadgeDefinition(b.label) || getBadgeDefinition(b.key);
+            const tooltip = def 
+              ? `${def.label} (${def.lp > 0 ? '+' : ''}${def.lp} LP)\nŞart: ${def.condition}\nKazanılan: ${b.count} adet\n(Detaylar için tıklayın)` 
+              : `${b.label} (x${b.count})`;
+            return (
+              <span 
+                key={b.key} 
+                title={tooltip}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (def) setSelectedBadgeModal(def);
+                  else setShowBadgesGuideModal(true);
+                }}
+                className={`${b.bg} ${b.text} border ${b.border} text-[10px] px-1.5 py-0.5 rounded-md shadow-2xs inline-flex items-center gap-1 shrink-0 transition-transform hover:scale-105 active:scale-95 cursor-pointer`}
+              >
+                <span>{b.icon}</span>
+                <span className="font-bold text-[9.5px] leading-none">{b.label}</span>
+                {b.count > 1 && <span className="opacity-90 font-black text-[8.5px]">x{b.count}</span>}
+              </span>
+            );
+          })}
         </div>
       );
     }
 
     return (
       <div className="flex flex-wrap gap-1.5 items-center">
-        {list.map(b => (
-          <span 
-            key={b.key} 
-            title={`${b.label} x${b.count}`}
-            className={`${b.bg} ${b.text} border ${b.border} text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md shadow-2xs inline-flex items-center gap-1 shrink-0 transition-transform hover:scale-105`}
-          >
-            <span>{b.icon}</span>
-            <span>{b.label}</span>
-            {b.count > 1 && <span className="opacity-90 font-extrabold text-[9px]">x{b.count}</span>}
-          </span>
-        ))}
+        {list.map(b => {
+          const def = getBadgeDefinition(b.label) || getBadgeDefinition(b.key);
+          const tooltip = def 
+            ? `${def.label} (${def.lp > 0 ? '+' : ''}${def.lp} LP)\nŞart: ${def.condition}\nKazanılan: ${b.count} adet\n(Detaylar için tıklayın)` 
+            : `${b.label} x${b.count}`;
+          return (
+            <span 
+              key={b.key} 
+              title={tooltip}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (def) setSelectedBadgeModal(def);
+                else setShowBadgesGuideModal(true);
+              }}
+              className={`${b.bg} ${b.text} border ${b.border} text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md shadow-2xs inline-flex items-center gap-1 shrink-0 transition-transform hover:scale-105 active:scale-95 cursor-pointer`}
+            >
+              <span>{b.icon}</span>
+              <span>{b.label}</span>
+              {b.count > 1 && <span className="opacity-90 font-extrabold text-[9px]">x{b.count}</span>}
+            </span>
+          );
+        })}
       </div>
     );
   };
@@ -709,6 +765,16 @@ export const LeagueView = () => {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              onClick={() => setShowBadgesGuideModal(true)}
+              title="Tüm Güncel 25 Rozet ve Kazanım Şartları"
+              className="flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/90 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
+            >
+              <Medal className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="sm:hidden text-[11px]">Rozetler</span>
+              <span className="hidden sm:inline">25 Rozet Kılavuzu</span>
+            </button>
+
             <button
               onClick={() => setShowTactics(true)}
               title="Aylık Taktikler"
@@ -871,7 +937,7 @@ export const LeagueView = () => {
                     <div className="flex items-center gap-2 truncate">
                       <Layers className="w-3.5 h-3.5 text-brand-ink/50 shrink-0" />
                       <span className="truncate">
-                        {selectedGrade === 'all' ? '������ Tüm Sınıflar' : selectedGrade === 'Diğer' ? '🎒 Diğer Sınıflar' : `🎓 ${selectedGrade}. Sınıflar`}
+                        {selectedGrade === 'all' ? '📚 Tüm Sınıflar' : selectedGrade === 'Diğer' ? '🎒 Diğer Sınıflar' : `🎓 ${selectedGrade}. Sınıflar`}
                       </span>
                     </div>
                     <ChevronDown className={`w-3.5 h-3.5 text-brand-ink/50 transition-transform duration-200 shrink-0 ${isGradeDropdownOpen ? 'rotate-180' : ''}`} />
@@ -1396,7 +1462,7 @@ export const LeagueView = () => {
                   return (
                     <div 
                       key={s.id ? `transfer-${s.id}` : `transfer-${s.no || (s as any).name}-${idx}`} 
-                      onClick={() => setSelectedStudent(s)} 
+                      onClick={() => handleSelectStudent(s)} 
                       className="cursor-pointer bg-white border border-orange-200/80 rounded-xl px-3.5 py-2.5 flex-shrink-0 flex items-center space-x-3 min-w-[270px] sm:min-w-[300px] hover:bg-orange-50/50 shadow-2xs transition-all active:scale-[0.99]"
                     >
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${isUp ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
@@ -1445,7 +1511,7 @@ export const LeagueView = () => {
                 
                 {/* 2. Sıra (Gümüş) */}
                 <div 
-                  onClick={() => setSelectedStudent(top3Students[1])}
+                  onClick={() => handleSelectStudent(top3Students[1])}
                   className="cursor-pointer flex flex-col items-center text-center p-2.5 sm:p-3.5 bg-white/5 hover:bg-white/10 rounded-2xl border border-slate-300/30 transition-all active:scale-95 group"
                 >
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-300 text-slate-900 font-extrabold flex items-center justify-center text-sm shadow-md mb-2 group-hover:scale-110 transition-transform">
@@ -1458,13 +1524,13 @@ export const LeagueView = () => {
                     {top3Students[1].className || 'Öğrenci'}
                   </p>
                   <div className="mt-2 font-serif font-extrabold text-sm sm:text-base text-amber-300 tabular-nums">
-                    {(top3Students[1].displayPoints !== undefined ? top3Students[1].displayPoints : top3Students[1].leaguePoints) || 0} LP
+                    {(top3Students[1].displayPoints !== undefined ? top3Students[1].displayPoints : (selectedMonth === 'all' ? top3Students[1].leaguePoints : 0)) || 0} LP
                   </div>
                 </div>
 
                 {/* 1. Sıra (Altın / Şampiyon) */}
                 <div 
-                  onClick={() => setSelectedStudent(top3Students[0])}
+                  onClick={() => handleSelectStudent(top3Students[0])}
                   className="cursor-pointer flex flex-col items-center text-center p-3.5 sm:p-5 bg-gradient-to-b from-amber-500/20 to-amber-500/5 hover:from-amber-500/30 rounded-2xl sm:rounded-3xl border-2 border-amber-400 shadow-lg transition-all active:scale-95 group -translate-y-2 sm:-translate-y-3"
                 >
                   <div className="relative mb-2">
@@ -1483,13 +1549,13 @@ export const LeagueView = () => {
                     {top3Students[0].className || 'Öğrenci'}
                   </p>
                   <div className="mt-2 font-serif font-black text-base sm:text-xl text-amber-300 tabular-nums">
-                    {(top3Students[0].displayPoints !== undefined ? top3Students[0].displayPoints : top3Students[0].leaguePoints) || 0} LP
+                    {(top3Students[0].displayPoints !== undefined ? top3Students[0].displayPoints : (selectedMonth === 'all' ? top3Students[0].leaguePoints : 0)) || 0} LP
                   </div>
                 </div>
 
                 {/* 3. Sıra (Bronz) */}
                 <div 
-                  onClick={() => setSelectedStudent(top3Students[2])}
+                  onClick={() => handleSelectStudent(top3Students[2])}
                   className="cursor-pointer flex flex-col items-center text-center p-2.5 sm:p-3.5 bg-white/5 hover:bg-white/10 rounded-2xl border border-amber-700/40 transition-all active:scale-95 group"
                 >
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-amber-800 text-amber-100 font-extrabold flex items-center justify-center text-sm shadow-md mb-2 group-hover:scale-110 transition-transform">
@@ -1502,7 +1568,7 @@ export const LeagueView = () => {
                     {top3Students[2].className || 'Öğrenci'}
                   </p>
                   <div className="mt-2 font-serif font-extrabold text-sm sm:text-base text-amber-300 tabular-nums">
-                    {(top3Students[2].displayPoints !== undefined ? top3Students[2].displayPoints : top3Students[2].leaguePoints) || 0} LP
+                    {(top3Students[2].displayPoints !== undefined ? top3Students[2].displayPoints : (selectedMonth === 'all' ? top3Students[2].leaguePoints : 0)) || 0} LP
                   </div>
                 </div>
 
@@ -1559,7 +1625,7 @@ export const LeagueView = () => {
                     <tr 
                       key={s.id ? `table-${s.id}` : `table-${s.no || (s as any).name}-${idx}`} 
                       className="hover:bg-[#FAF9F6] cursor-pointer transition-colors group"
-                      onClick={() => setSelectedStudent(s)}
+                      onClick={() => handleSelectStudent(s)}
                     >
                       <td className="py-3 px-3 text-center">
                         <span className={`inline-flex items-center justify-center w-7 h-7 rounded-xl text-xs font-bold font-mono ${
@@ -1600,7 +1666,7 @@ export const LeagueView = () => {
                         </span>
                       </td>
                       <td className="py-3 px-3 text-center font-serif font-bold text-emerald-800 text-base tabular-nums">
-                        {(s.displayPoints !== undefined ? s.displayPoints : s.leaguePoints) || 0} LP
+                        {(s.displayPoints !== undefined ? s.displayPoints : (selectedMonth === 'all' ? s.leaguePoints : 0)) || 0} LP
                       </td>
                       <td className="py-3 px-3">
                         {renderBadges((s.displayBadges || s.allBadges || s.badges), s.leagueTeam)}
@@ -1630,7 +1696,7 @@ export const LeagueView = () => {
             {/* Mobile Modern Cards View - Touch-optimized & Team Color-Coded */}
             <div className="md:hidden flex flex-col gap-2">
               {displayedStudents.map((s, idx) => {
-                const lpPoints = (s.displayPoints !== undefined ? s.displayPoints : s.leaguePoints) || 0;
+                const lpPoints = (s.displayPoints !== undefined ? s.displayPoints : (selectedMonth === 'all' ? s.leaguePoints : 0)) || 0;
                 const teamBorder = s.leagueTeam === 'Kutup Yıldızları' ? 'border-l-4 border-l-amber-500' :
                   s.leagueTeam === 'Sıçrama Ustaları' ? 'border-l-4 border-l-blue-500' :
                   s.leagueTeam === 'Taktik Avcıları' ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-gray-300';
@@ -1638,7 +1704,7 @@ export const LeagueView = () => {
                 return (
                   <div 
                     key={s.id ? `card-${s.id}` : `card-${s.no || (s as any).name}-${idx}`}
-                    onClick={() => setSelectedStudent(s)}
+                    onClick={() => handleSelectStudent(s)}
                     className={`bg-[#FAF9F6] rounded-2xl p-3 border border-brand-border/80 shadow-2xs flex flex-col gap-1.5 active:scale-[0.98] transition-all cursor-pointer hover:border-brand-border ${teamBorder}`}
                   >
                     {/* Üst Satır: Sıra, İsim, Sınıf ve LP Puanı */}
@@ -1784,7 +1850,7 @@ export const LeagueView = () => {
                             className="hover:bg-[#FAF9F6] transition-colors cursor-pointer"
                             onClick={() => {
                               setSelectedTeam(null);
-                              setSelectedStudent(s);
+                              handleSelectStudent(s);
                             }}
                           >
                             <td className="py-3 font-bold text-brand-ink">
@@ -1794,7 +1860,7 @@ export const LeagueView = () => {
                               </div>
                             </td>
                             <td className="py-3 text-center font-serif font-bold text-emerald-800 tabular-nums">
-                              {(s.displayPoints !== undefined ? s.displayPoints : s.leaguePoints) || 0} LP
+                              {(s.displayPoints !== undefined ? s.displayPoints : (selectedMonth === 'all' ? s.leaguePoints : 0)) || 0} LP
                             </td>
                             <td className="py-3">
                               {renderBadges((s.allBadges || s.badges || s.displayBadges), s.leagueTeam, true)}
@@ -2102,8 +2168,15 @@ export const LeagueView = () => {
 
             const examListMap = new Map<string, any>();
             for (const e of [...fromNo, ...fromId, ...fromName]) {
-              if (!examListMap.has(e.examId)) {
-                examListMap.set(e.examId, e);
+              const matched = (state.exams || []).find(ex => String(ex.id) === String(e.examId) || ex.name === e.name);
+              const canonKey = matched ? String(matched.id) : (e.examId || e.name);
+              if (!examListMap.has(canonKey)) {
+                examListMap.set(canonKey, e);
+              } else {
+                const existing = examListMap.get(canonKey);
+                if ((!existing.date && e.date) || (!existing.details && e.details)) {
+                  examListMap.set(canonKey, e);
+                }
               }
             }
             const allHistory = Array.from(examListMap.values());
@@ -2117,46 +2190,33 @@ export const LeagueView = () => {
               
               const { earnedLP: calculatedLP, badgeCounts } = calculateAtaLigPoints(h.score, prevAverage, h.details, pastExams, pastTeam);
 
-              // Sınav sonucunda önceden saklanmış rozetler varsa eksiksiz eşle
+              // Sınav sonucunda saklanan rozetler varsa eksiksiz dahil et
               if (Array.isArray(h.examRes?.earnedBadges)) {
                 h.examRes.earnedBadges.forEach((bName: string) => {
-                  const norm = normalizeTurkish(bName).toLowerCase().replace(/[\s\.]+/g, '');
-                  if (norm.includes('tamisabet')) badgeCounts.tamIsabet = Math.max(badgeCounts.tamIsabet || 0, 1);
-                  else if (norm.includes('kalkan')) badgeCounts.kalkan = Math.max(badgeCounts.kalkan || 0, 1);
-                  else if (norm.includes('zirvebekcisi')) badgeCounts.zirveBekcisi = Math.max(badgeCounts.zirveBekcisi || 0, 1);
-                  else if (norm.includes('zirve')) badgeCounts.zirve = Math.max(badgeCounts.zirve || 0, 1);
-                  else if (norm.includes('ivmesampiyonu')) badgeCounts.ivmeSampiyonu = Math.max(badgeCounts.ivmeSampiyonu || 0, 1);
-                  else if (norm.includes('ivme')) badgeCounts.ivme = Math.max(badgeCounts.ivme || 0, 1);
-                  else if (norm.includes('lgsfatih')) badgeCounts.lgsFatihi = Math.max(badgeCounts.lgsFatihi || 0, 1);
-                  else if (norm.includes('ankakus')) badgeCounts.ankaKusu = Math.max(badgeCounts.ankaKusu || 0, 1);
-                  else if (norm.includes('kirmizikart')) badgeCounts.kirmiziKart = Math.max(badgeCounts.kirmiziKart || 0, 1);
-                  else if (norm.includes('barajyikici')) badgeCounts.barajYikici = Math.max(badgeCounts.barajYikici || 0, 1);
-                  else if (norm.includes('stratejimuhendisi')) badgeCounts.stratejiMuhendisi = Math.max(badgeCounts.stratejiMuhendisi || 0, 1);
-                  else if (norm.includes('istikrarelcisi')) badgeCounts.istikrarElcisi = Math.max(badgeCounts.istikrarElcisi || 0, 1);
-                  else if (norm.includes('sozelsovalye')) badgeCounts.sozelSovalyesi = Math.max(badgeCounts.sozelSovalyesi || 0, 1);
-                  else if (norm.includes('sayisalkale')) badgeCounts.sayisalKalesi = Math.max(badgeCounts.sayisalKalesi || 0, 1);
-                  else if (norm.includes('matematikuyanis') || norm.includes('matuyanis')) badgeCounts.matematikUyanisi = Math.max(badgeCounts.matematikUyanisi || 0, 1);
-                  else if (norm.includes('dengecambaz')) badgeCounts.dengeCambazi = Math.max(badgeCounts.dengeCambazi || 0, 1);
-                  else if (norm.includes('keskinnisan')) badgeCounts.keskinNisanci = Math.max(badgeCounts.keskinNisanci || 0, 1);
-                  else if (norm.includes('temelatici')) badgeCounts.temelAtici = Math.max(badgeCounts.temelAtici || 0, 1);
-                  else if (norm.includes('filozof')) badgeCounts.filozof = Math.max(badgeCounts.filozof || 0, 1);
-                  else if (norm.includes('newton')) badgeCounts.newton = Math.max(badgeCounts.newton || 0, 1);
-                  else if (norm.includes('pisagor')) badgeCounts.pisagor = Math.max(badgeCounts.pisagor || 0, 1);
-                  else if (norm.includes('uyuyandev')) badgeCounts.uyuyanDev = Math.max(badgeCounts.uyuyanDev || 0, 1);
-                  else if (norm.includes('sabirtasi')) badgeCounts.sabirTasi = Math.max(badgeCounts.sabirTasi || 0, 1);
-                  else if (norm.includes('yinyang')) badgeCounts.yinYang = Math.max(badgeCounts.yinYang || 0, 1);
+                  const norm = normalizeBadgeKey(bName) || normalizeTurkish(bName).toLowerCase().replace(/[\s\.]+/g, '');
+                  if (norm in badgeCounts) {
+                    (badgeCounts as any)[norm] = Math.max((badgeCounts as any)[norm] || 0, 1);
+                  }
                 });
               }
 
-              let finalEarnedLP = typeof h.examRes?.earnedLP === 'number' && h.examRes.earnedLP > 0
-                ? h.examRes.earnedLP
-                : calculatedLP;
-              
-              // Re-calculate Anka Kusu for this specific exam
+              // Transfer geçmişinden Anka Kuşu kontrolü (Bu sınava özel)
               const transfer = selectedStudent.transferHistory?.find((th: any) => th.examName === h.name);
               if (transfer && transfer.from === 'Taktik Avcıları' && (transfer.to === 'Sıçrama Ustaları' || transfer.to === 'Kutup Yıldızları')) {
-                finalEarnedLP += 100;
                 badgeCounts.ankaKusu = 1;
+              }
+
+              let badgeLP = 0;
+              Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
+                if (typeof count === 'number' && count > 0) {
+                  const pts = BADGE_POINTS[k] || 0;
+                  badgeLP += pts * count;
+                }
+              });
+
+              let finalEarnedLP = Math.max(calculatedLP, badgeLP);
+              if (typeof h.examRes?.earnedLP === 'number' && h.examRes.earnedLP > 0) {
+                finalEarnedLP = Math.max(finalEarnedLP, h.examRes.earnedLP);
               }
               
               return {
@@ -2182,20 +2242,58 @@ export const LeagueView = () => {
             const isShowingAll = modalShowAllExams || selectedMonth === 'all' || periodHistory.length === 0;
             const history = isShowingAll ? rawHistory : periodHistory;
 
-            // Öğrencinin kazandığı tüm rozetleri birleştir (Kütük genel lig rozetleri + sınav bazlı rozetler)
-            const aggregatedBadges: Record<string, number> = { ...(selectedStudent.allBadges || selectedStudent.badges || {}) };
-            rawHistory.forEach(h => {
+            // Öğrencinin aktif sınavlarından dinamik rozet türetimi (Kütük hayalet rozetleri ve mükerrer sayımlar engellenir)
+            const periodBadges: Record<string, number> = {};
+            periodHistory.forEach(h => {
               if (h.badgeCounts) {
                 Object.entries(h.badgeCounts).forEach(([k, count]: [string, any]) => {
                   if (typeof count === 'number' && count > 0) {
-                    aggregatedBadges[k] = (aggregatedBadges[k] || 0) + count;
+                    periodBadges[k] = (periodBadges[k] || 0) + count;
                   }
                 });
               }
             });
-            const totalBadgesCount = Object.values(aggregatedBadges).reduce((sum, c) => sum + (typeof c === 'number' && c > 0 ? c : 0), 0);
+
+            const allTimeBadges: Record<string, number> = {};
+            rawHistory.forEach(h => {
+              if (h.badgeCounts) {
+                Object.entries(h.badgeCounts).forEach(([k, count]: [string, any]) => {
+                  if (typeof count === 'number' && count > 0) {
+                    allTimeBadges[k] = (allTimeBadges[k] || 0) + count;
+                  }
+                });
+              }
+            });
+
+            // Transfer geçmişinden Anka Kuşu kontrolü
+            if (selectedStudent.transferHistory && Array.isArray(selectedStudent.transferHistory)) {
+              selectedStudent.transferHistory.forEach((th: any) => {
+                if (th.from === 'Taktik Avcıları' && (th.to === 'Sıçrama Ustaları' || th.to === 'Kutup Yıldızları')) {
+                  allTimeBadges.ankaKusu = (allTimeBadges.ankaKusu || 0) + 1;
+                  if (selectedMonth !== 'all' && th.date) {
+                    const dateObj = parseDate(th.date);
+                    const mKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+                    if (mKey === selectedMonth) {
+                      periodBadges.ankaKusu = (periodBadges.ankaKusu || 0) + 1;
+                    }
+                  }
+                }
+              });
+            }
+
+            const periodBadgesCount = Object.values(periodBadges).reduce((sum, c) => sum + (typeof c === 'number' && c > 0 ? c : 0), 0);
+            const allTimeBadgesCount = Object.values(allTimeBadges).reduce((sum, c) => sum + (typeof c === 'number' && c > 0 ? c : 0), 0);
+
+            // Seçili ay aktifken varsayılan olarak dönemsel rozetler gösterilir (kullanıcı isterse tüm zamanlara geçebilir)
+            const isPeriodScope = selectedMonth !== 'all' && modalBadgeScope === 'period';
+            const activeBadges = isPeriodScope ? periodBadges : allTimeBadges;
+            const activeBadgesCount = isPeriodScope ? periodBadgesCount : allTimeBadgesCount;
 
             const studentRank = baseStudents.findIndex(s => s.no === selectedStudent.no) + 1;
+
+            const periodLP = periodHistory.reduce((sum, h) => sum + (h.earnedLP || 0), 0);
+            const allTimeLP = rawHistory.reduce((sum, h) => sum + (h.earnedLP || 0), 0);
+            const displayModalLP = selectedMonth === 'all' ? allTimeLP : periodLP;
 
             return (
               <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs transition-all" onClick={() => setSelectedStudent(null)}>
@@ -2238,10 +2336,10 @@ export const LeagueView = () => {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                       <div className="bg-[#FAF9F6] p-3 rounded-2xl border border-brand-border/70 text-center">
                         <p className="text-[10px] uppercase font-bold text-brand-ink/50 tracking-wider">
-                          {selectedMonth === 'all' ? 'Toplam LP' : 'Aylık LP'}
+                          {selectedMonth === 'all' ? 'Toplam LP' : `Aylık LP (${selectedMonthLabel})`}
                         </p>
                         <p className="text-xl sm:text-2xl font-serif font-black text-emerald-800 tabular-nums mt-0.5">
-                          {(selectedStudent.displayPoints !== undefined ? selectedStudent.displayPoints : selectedStudent.leaguePoints) || 0} LP
+                          {displayModalLP} LP
                         </p>
                       </div>
 
@@ -2267,23 +2365,58 @@ export const LeagueView = () => {
 
                     {/* Öğrencinin Kazandığı Rozetler Vitrini */}
                     <div className="bg-[#FAF9F6] border border-brand-border/70 rounded-2xl p-4 shadow-2xs space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-brand-ink/70 flex items-center gap-1.5">
-                          <span>🏅</span>
-                          <span>Öğrencinin Kazandığı Rozetler</span>
-                        </h4>
-                        <span className="text-[11px] font-bold text-brand-ink/70 bg-white px-2.5 py-0.5 rounded-full border border-brand-border/60">
-                          {totalBadgesCount > 0 ? `${totalBadgesCount} Rozet Kazanıldı` : 'Henüz Rozet Yok'}
-                        </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-brand-ink/70 flex items-center gap-1.5">
+                            <span>🏅</span>
+                            <span>
+                              {selectedMonth !== 'all'
+                                ? (isPeriodScope ? `Öğrencinin Kazandığı Rozetler (${selectedMonthLabel})` : 'Öğrencinin Kazandığı Rozetler (Tüm Zamanlar)')
+                                : 'Öğrencinin Kazandığı Rozetler'}
+                            </span>
+                          </h4>
+                          <span className="text-[11px] font-bold text-brand-ink/70 bg-white px-2.5 py-0.5 rounded-full border border-brand-border/60">
+                            {activeBadgesCount > 0 ? `${activeBadgesCount} Rozet` : 'Henüz Rozet Yok'}
+                          </span>
+                        </div>
+
+                        {selectedMonth !== 'all' && (
+                          <div className="flex items-center bg-white p-0.5 rounded-lg border border-brand-border/70 text-[11px] self-start sm:self-auto shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => setModalBadgeScope('period')}
+                              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                                isPeriodScope
+                                  ? 'bg-[#FAF9F6] text-brand-ink font-bold shadow-2xs border border-brand-border/60'
+                                  : 'text-brand-ink/60 hover:text-brand-ink'
+                              }`}
+                            >
+                              {selectedMonthLabel} ({periodBadgesCount})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModalBadgeScope('all')}
+                              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                                !isPeriodScope
+                                  ? 'bg-[#FAF9F6] text-brand-ink font-bold shadow-2xs border border-brand-border/60'
+                                  : 'text-brand-ink/60 hover:text-brand-ink'
+                              }`}
+                            >
+                              Tüm Zamanlar ({allTimeBadgesCount})
+                            </button>
+                          </div>
+                        )}
                       </div>
                       
-                      {totalBadgesCount > 0 ? (
+                      {activeBadgesCount > 0 ? (
                         <div className="bg-white p-3 rounded-xl border border-brand-border/50">
-                          {renderBadges(aggregatedBadges, selectedStudent.leagueTeam)}
+                          {renderBadges(activeBadges, selectedStudent.leagueTeam)}
                         </div>
                       ) : (
                         <p className="text-xs text-brand-ink/50 italic py-2">
-                          Öğrencinin henüz kazanılmış bir rozeti bulunmuyor. Herhangi bir derste 0 yanlış yaparak "Tam İsabet" veya boş bırakarak "Kalkan" kazanabilirsiniz.
+                          {selectedMonth !== 'all' && isPeriodScope
+                            ? `Öğrencinin ${selectedMonthLabel} dönemindeki sınavında henüz kazanılmış bir rozeti bulunmuyor.`
+                            : 'Öğrencinin henüz kazanılmış bir rozeti bulunmuyor. Herhangi bir derste 0 yanlış yaparak "Tam İsabet" veya boş bırakarak "Kalkan" kazanabilirsiniz.'}
                         </p>
                       )}
                     </div>
@@ -2408,6 +2541,103 @@ export const LeagueView = () => {
             );
           })()}
         </>
+      )}
+
+      {/* 10. Tekil Rozet Bilgilendirme Modalı (Spotlight) */}
+      {selectedBadgeModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-all animate-fade-in"
+          onClick={() => setSelectedBadgeModal(null)}
+        >
+          <div 
+            className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-brand-border/80 p-5 sm:p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-4xl p-2.5 rounded-2xl bg-amber-50 border border-amber-200/80 shadow-2xs">
+                  {selectedBadgeModal.icon}
+                </span>
+                <div>
+                  <h3 className="text-lg font-serif font-bold text-brand-ink">
+                    {selectedBadgeModal.label}
+                  </h3>
+                  <span className="text-xs font-semibold text-brand-ink/50">
+                    {selectedBadgeModal.categoryLabel}
+                  </span>
+                </div>
+              </div>
+
+              <span className={`text-xs font-extrabold px-3 py-1 rounded-xl shadow-2xs ${
+                selectedBadgeModal.lp > 0 
+                  ? 'bg-amber-100 text-amber-900 border border-amber-300' 
+                  : 'bg-rose-100 text-rose-900 border border-rose-300'
+              }`}>
+                {selectedBadgeModal.lp > 0 ? `+${selectedBadgeModal.lp}` : selectedBadgeModal.lp} LP
+              </span>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 space-y-1.5">
+              <span className="text-[10px] font-bold text-amber-900/60 uppercase tracking-wider block">
+                Kazanma Şartı
+              </span>
+              <p className="text-xs font-bold text-amber-950">
+                🎯 {selectedBadgeModal.condition}
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-brand-ink/50 uppercase tracking-wider block">
+                Açıklama & Strateji
+              </span>
+              <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
+                {selectedBadgeModal.description}
+              </p>
+            </div>
+
+            <div className="pt-2 border-t border-brand-border/40 flex items-center justify-between text-xs">
+              <span className="text-brand-ink/60 font-medium">
+                Takım Kısıtlaması:
+              </span>
+              <span className="font-bold text-brand-ink px-2 py-0.5 bg-stone-100 rounded-lg">
+                {selectedBadgeModal.teamRestriction || 'Tüm Takımlar'}
+              </span>
+            </div>
+
+            <div className="pt-2 flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setSelectedBadgeModal(null);
+                  setShowBadgesGuideModal(true);
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-all shadow-2xs cursor-pointer text-center"
+              >
+                Tüm Rozetleri İncele (25 Rozet)
+              </button>
+              <button
+                onClick={() => setSelectedBadgeModal(null)}
+                className="py-2.5 px-4 rounded-xl border border-brand-border/80 hover:bg-stone-50 text-brand-ink font-bold text-xs transition-all cursor-pointer"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 11. 25 Güncel Rozet Kılavuzu Modalı */}
+      {showBadgesGuideModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs transition-all animate-fade-in"
+          onClick={() => setShowBadgesGuideModal(false)}
+        >
+          <div 
+            className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl overflow-y-auto border border-brand-border/80 p-3 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <RulesView onClose={() => setShowBadgesGuideModal(false)} />
+          </div>
+        </div>
       )}
 
     </div>

@@ -2,6 +2,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import * as XLSX from "xlsx";
 import { normalizeTurkish } from './omrEngine';
+import { BADGE_POINTS } from './badgeDefinitions';
 export { normalizeTurkish };
 
 export function cn(...inputs: ClassValue[]) {
@@ -567,13 +568,16 @@ export function recalculateLeagueForStudents(students: any[], results: any[] = [
     let count = 0;
     
     for (const exam of sortedExams) {
-      // 1. Sınavın kendi altındaki results listesinde öğrenciyi ara (Birincil kaynak)
-      const examRes = (exam.results || []).find((r: any) => {
+      // 1. Sınavın kendi altındaki results listesinde öğrenciyi ara (Son yüklenen geçerli kabul edilir - Tekilleştirme)
+      const matchingExamResults = (exam.results || []).filter((r: any) => {
         const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : undefined);
         if (sNo > 0 && rNo !== undefined && rNo === sNo) return true;
+        if (student.id && r.studentId && String(r.studentId) === String(student.id)) return true;
         if (sNameNorm && r.name && normalizeTurkish(r.name).trim().toLowerCase() === sNameNorm) return true;
+        if (sNameNorm && r.studentName && normalizeTurkish(r.studentName).trim().toLowerCase() === sNameNorm) return true;
         return false;
       });
+      const examRes = matchingExamResults.length > 0 ? matchingExamResults[matchingExamResults.length - 1] : undefined;
 
       // 2. Global sonuç listesinde skor kontrolü
       const scoreInGlobal = globalResult?.scores 
@@ -650,7 +654,17 @@ export function recalculateLeagueForStudents(students: any[], results: any[] = [
           });
         }
 
-        const earnedLP = typeof examRes?.earnedLP === 'number' && examRes.earnedLP > 0 ? examRes.earnedLP : calcLP;
+        let badgeLP = 0;
+        Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
+          if (typeof count === 'number' && count > 0) {
+            badgeLP += (BADGE_POINTS[k] || 0) * count;
+          }
+        });
+
+        let earnedLP = Math.max(calcLP, badgeLP);
+        if (typeof examRes?.earnedLP === 'number' && examRes.earnedLP > 0) {
+          earnedLP = Math.max(earnedLP, examRes.earnedLP);
+        }
         
         totalLP += earnedLP;
         Object.keys(badgeCounts).forEach(k => {
@@ -760,12 +774,12 @@ export function recalculateLeagueForStudents(students: any[], results: any[] = [
     return {
       ...student,
       leaguePoints: totalLP,
-      leagueTeam: currentTeam,
-      lastTransfer,
-      transferHistory,
-      pendingTransfer,
-      badges: hasAnyBadge ? badges : (student.badges && Object.values(student.badges).some((v: any) => Number(v) > 0) ? student.badges : undefined),
-      monthlyLeagueData: hasAnyMonthlyData ? monthlyLeagueData : (student.monthlyLeagueData && Object.keys(student.monthlyLeagueData).length > 0 ? student.monthlyLeagueData : undefined)
+      leagueTeam: count > 0 ? currentTeam : (student.leagueTeam || 'Taktik Avcıları'),
+      lastTransfer: count > 0 ? lastTransfer : '',
+      transferHistory: count > 0 ? transferHistory : (student.transferHistory || []),
+      pendingTransfer: count > 0 ? pendingTransfer : null,
+      badges: hasAnyBadge ? badges : undefined,
+      monthlyLeagueData: hasAnyMonthlyData ? monthlyLeagueData : undefined
     };
   });
   

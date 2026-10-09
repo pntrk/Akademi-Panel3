@@ -412,6 +412,7 @@ export default function App() {
   };
 
   const handleLogin = async () => {
+    if (isLoggingIn) return;
     setLoginError(null);
     setUnauthorizedDomain(null);
     setIsLoggingIn(true);
@@ -433,11 +434,13 @@ export default function App() {
       if (err?.code === 'auth/unauthorized-domain') {
         const hostname = window.location.hostname;
         setUnauthorizedDomain(hostname);
-        setLoginError(`Bu alan adı (${hostname}) için yetki doğrulaması gerekiyor.`);
+        setLoginError(`Bu alan adı (${hostname}) için Firebase yetki doğrulaması gerekiyor.`);
       } else if (err?.code === 'auth/popup-closed-by-user') {
         setLoginError('Giriş penceresi kapatıldı. Lütfen tekrar deneyiniz.');
       } else if (err?.code === 'auth/cancelled-popup-request') {
         // Ignored
+      } else if (err?.message?.includes('Pending promise was never set')) {
+        setLoginError('Pencere geçişi tamamlanamadı. Lütfen birkaç saniye sonra tekrar deneyiniz.');
       } else {
         setLoginError(err?.message || 'Google ile giriş yapılamadı.');
       }
@@ -747,6 +750,7 @@ export default function App() {
                         <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-lg border border-rose-200 font-mono text-[11px]">
                           <span className="flex-1 truncate select-all">{unauthorizedDomain}</span>
                           <button
+                            type="button"
                             onClick={() => handleCopyDomain(unauthorizedDomain)}
                             className="px-2 py-0.5 bg-rose-100 hover:bg-rose-200 rounded text-rose-800 text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
                           >
@@ -756,6 +760,13 @@ export default function App() {
                         </div>
                       </div>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => handlePreviewLogin('kirklareliataturkortaokulu@gmail.com', 'Kırklareli Atatürk Ortaokulu')}
+                      className="mt-2.5 w-full py-2 px-3 bg-white hover:bg-rose-100/70 border border-rose-300 rounded-lg text-rose-900 font-bold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                    >
+                      <span>Yönetici Hesabı ile Doğrudan Giriş Yap →</span>
+                    </button>
                   </div>
                 </div>
               </div>

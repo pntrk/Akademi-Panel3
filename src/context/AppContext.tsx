@@ -1985,16 +1985,55 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     
     const newBudget = syncFinancials(s.students, ensuredExams, s.budget);
     
-    // Clean up student registrations for exams that no longer exist
+    // Clean up student registrations and results for exams that no longer exist
     const newExamIds = ensuredExams.map(e => e.id);
+    const previousExamIds = (s.exams || []).map(e => e.id);
+    const deletedExamIds = previousExamIds.filter(id => !newExamIds.includes(id));
+    const deletedExamNames = (s.exams || []).filter(e => deletedExamIds.includes(e.id)).map(e => e.name);
+
     const studentsWithCleanRegs = s.students.map(st => {
       const regs = st.examRegistrations || [];
       const filtered = regs.filter(r => newExamIds.includes(r.examId));
       if (filtered.length !== regs.length) { return { ...st, examRegistrations: filtered }; }
       return st;
     });
-    const updatedStudents = recalculateLeagueForStudents(studentsWithCleanRegs, s.results, ensuredExams, s.approvedTransfers || []);
-    updateFirebase({ ...s, exams: ensuredExams, examHalls: updatedHalls, budget: newBudget, students: updatedStudents });
+
+    let cleanedResults = s.results || [];
+    if (deletedExamIds.length > 0 || deletedExamNames.length > 0) {
+      cleanedResults = cleanedResults.map(r => {
+        if (!r.scores && !r.details) return r;
+        let modified = false;
+        const newScores = { ...(r.scores || {}) };
+        let newDetails = r.details ? { ...r.details } : undefined;
+
+        deletedExamIds.forEach(delId => {
+          if (newScores[delId] !== undefined) {
+            delete newScores[delId];
+            modified = true;
+          }
+        });
+        deletedExamNames.forEach(delName => {
+          if (newScores[delName] !== undefined) {
+            delete newScores[delName];
+            modified = true;
+          }
+          if (newDetails && newDetails[delName] !== undefined) {
+            delete newDetails[delName];
+            modified = true;
+          }
+        });
+
+        if (modified) {
+          const values = Object.values(newScores).filter((v): v is number => typeof v === 'number');
+          const average = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+          return { ...r, scores: newScores, details: newDetails, average };
+        }
+        return r;
+      });
+    }
+
+    const updatedStudents = recalculateLeagueForStudents(studentsWithCleanRegs, cleanedResults, ensuredExams, s.approvedTransfers || []);
+    updateFirebase({ ...s, exams: ensuredExams, examHalls: updatedHalls, budget: newBudget, students: updatedStudents, results: cleanedResults });
   };
 
   const setResults = (results: ExamResult[]) => { if (userRole !== 'admin') return; _setResults(results); };

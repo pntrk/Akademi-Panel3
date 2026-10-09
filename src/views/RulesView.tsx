@@ -1,22 +1,29 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Crown, TrendingUp, Shield, Sparkles, BookOpen, Award, Target, 
-  Flame, Compass, Search, X, CheckCircle2, Zap, Star
+  Flame, Compass, Search, X, CheckCircle2, Zap, Star, HelpCircle
 } from 'lucide-react';
+import { ALL_BADGE_DEFINITIONS, BADGE_CATEGORIES, BadgeDefinition } from '../lib/badgeDefinitions';
 
-export default function RulesView() {
+export default function RulesView({ onClose }: { onClose?: () => void }) {
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const categories = [
-    { id: 'all', label: 'Tüm Kurallar & Rozetler' },
-    { id: 'teams', label: 'Takım Barajları' },
-    { id: 'basic', label: 'Temel Rozetler' },
-    { id: 'team_specific', label: 'Takıma Özel Rozetler' },
-    { id: 'mastery', label: 'Uzmanlık Rozetleri' },
-    { id: 'legendary', label: 'Efsanevi Rozetler' },
-    { id: 'branch', label: 'Branş Efsaneleri' },
-  ];
+  const filteredBadges = useMemo(() => {
+    return ALL_BADGE_DEFINITIONS.filter(b => {
+      const matchCat = activeCategory === 'all' || b.category === activeCategory;
+      if (!matchCat) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        b.label.toLowerCase().includes(q) ||
+        b.condition.toLowerCase().includes(q) ||
+        b.description.toLowerCase().includes(q) ||
+        b.categoryLabel.toLowerCase().includes(q) ||
+        (b.teamRestriction && b.teamRestriction.toLowerCase().includes(q))
+      );
+    });
+  }, [activeCategory, searchQuery]);
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in font-sans">
@@ -31,30 +38,41 @@ export default function RulesView() {
               </div>
               <div>
                 <h2 className="text-lg sm:text-xl font-serif font-bold text-brand-ink">
-                  Akademi Arena Kılavuzu & Rozet Rehberi
+                  Akademi Arena Kılavuzu & Güncel Rozet Rehberi
                 </h2>
                 <p className="text-xs sm:text-sm text-brand-ink/60 mt-0.5">
-                  Öğrenci puanlama barajları, lig puanı (LP) dinamikleri ve kazanılabilir rozet kriterleri.
+                  Öğrenci puanlama barajları, lig puanı (LP) dinamikleri ve sistemdeki 25 rozetin kazanım şartları.
                 </p>
               </div>
             </div>
 
-            {/* Arama */}
-            <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-brand-ink/40 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Rozet veya kural ara..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 bg-[#FAF9F6] border border-brand-border/80 rounded-xl text-xs font-medium text-brand-ink placeholder:text-brand-ink/40 focus:outline-none focus:border-brand-accent shadow-2xs transition-all"
-              />
-              {searchQuery && (
+            {/* Arama ve Kapat Butonu */}
+            <div className="flex items-center gap-2">
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-brand-ink/40 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Rozet, ders veya kural ara..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 bg-[#FAF9F6] border border-brand-border/80 rounded-xl text-xs font-medium text-brand-ink placeholder:text-brand-ink/40 focus:outline-none focus:border-brand-accent shadow-2xs transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-brand-ink/40 hover:text-brand-ink cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {onClose && (
                 <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-brand-ink/40 hover:text-brand-ink"
+                  onClick={onClose}
+                  className="p-2 rounded-xl border border-brand-border/80 bg-[#FAF9F6] hover:bg-[#F2EFE9] text-brand-ink/70 hover:text-brand-ink cursor-pointer transition-all"
+                  title="Kapat"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -62,34 +80,35 @@ export default function RulesView() {
 
           {/* Kategori Filtreleri */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar mt-4 pt-3 border-t border-brand-border/40">
-            {categories.map((c) => (
+            {BADGE_CATEGORIES.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setActiveCategory(c.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
                   activeCategory === c.id
                     ? 'bg-[#151618] text-white shadow-2xs'
                     : 'bg-[#FAF9F6] text-brand-ink/70 hover:bg-[#F2EFE9] border border-brand-border/60'
                 }`}
               >
-                {c.label}
+                <span>{c.icon}</span>
+                <span>{c.label}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* 1. Takım Kriterleri */}
-        {(activeCategory === 'all' || activeCategory === 'teams') && (
+        {/* 1. Takım Barajları Bilgilendirmesi */}
+        {(activeCategory === 'all' || activeCategory === 'team') && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Award className="w-4 h-4 text-brand-ink/60" />
               <h3 className="text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
-                Takım Kriterleri (Ortalama Puan Barajları)
+                Takım Barajları & Lig Seviyeleri
               </h3>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="flex items-center gap-3 bg-amber-50/70 p-4 rounded-2xl border border-amber-200/80 shadow-2xs hover:shadow-xs transition-shadow">
+              <div className="flex items-center gap-3 bg-amber-50/70 p-4 rounded-2xl border border-amber-200/80 shadow-2xs">
                 <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs font-bold">
                   <Crown className="w-5 h-5" />
                 </div>
@@ -100,7 +119,7 @@ export default function RulesView() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 bg-blue-50/70 p-4 rounded-2xl border border-blue-200/80 shadow-2xs hover:shadow-xs transition-shadow">
+              <div className="flex items-center gap-3 bg-blue-50/70 p-4 rounded-2xl border border-blue-200/80 shadow-2xs">
                 <div className="w-10 h-10 rounded-2xl bg-blue-500 text-white flex items-center justify-center shrink-0 shadow-2xs font-bold">
                   <TrendingUp className="w-5 h-5" />
                 </div>
@@ -111,7 +130,7 @@ export default function RulesView() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200/80 shadow-2xs hover:shadow-xs transition-shadow">
+              <div className="flex items-center gap-3 bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200/80 shadow-2xs">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs font-bold">
                   <Shield className="w-5 h-5" />
                 </div>
@@ -125,342 +144,94 @@ export default function RulesView() {
           </div>
         )}
 
-        {/* 2. Temel Rozetler */}
-        {(activeCategory === 'all' || activeCategory === 'basic') && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-brand-ink/60" />
-              <h3 className="text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
-                Temel Rozetler (Her Sınavda Kazanılabilir)
-              </h3>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              
-              <div className="bg-amber-50/50 border border-amber-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="bg-amber-100 text-amber-900 text-xs font-bold px-2 py-1 rounded-lg">🛡️ Kalkan</span>
-                    <span className="text-amber-700 font-extrabold text-xs sm:text-sm">+20 LP</span>
-                  </div>
-                  <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                    Sınavda toplam boş sayısı, yanlış sayısından fazla ise.
-                  </p>
-                </div>
-                <p className="text-[10px] text-amber-800/60 mt-2">Bilinçli boş bırakma ödülü</p>
-              </div>
-
-              <div className="bg-purple-50/50 border border-purple-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="bg-purple-100 text-purple-900 text-xs font-bold px-2 py-1 rounded-lg">👑 Zirve</span>
-                    <span className="text-purple-700 font-extrabold text-xs sm:text-sm">+15 LP</span>
-                  </div>
-                  <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                    Sınav sonucu 400 puan ve üzerinde ise.
-                  </p>
-                </div>
-                <p className="text-[10px] text-purple-700/80 italic mt-2 bg-white/80 p-1.5 rounded-lg border border-purple-100">
-                  Kutup Yıldızları hariçtir.
-                </p>
-              </div>
-
-              <div className="bg-blue-50/50 border border-blue-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="bg-blue-100 text-blue-900 text-xs font-bold px-2 py-1 rounded-lg">🚀 İvme</span>
-                    <span className="text-blue-700 font-extrabold text-xs sm:text-sm">+15 LP</span>
-                  </div>
-                  <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                    Sınav sonucu bir önceki ortalamasından yüksek ise.
-                  </p>
-                </div>
-                <p className="text-[10px] text-blue-800/60 mt-2">Sürekli gelişim ödülü</p>
-              </div>
-
-              <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="bg-emerald-100 text-emerald-900 text-xs font-bold px-2 py-1 rounded-lg">🎯 Tam İsabet</span>
-                    <span className="text-emerald-700 font-extrabold text-xs sm:text-sm">+10 LP</span>
-                  </div>
-                  <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                    Herhangi bir derste sıfır yanlış ve tam doğru yapıldığında.
-                  </p>
-                </div>
-                <p className="text-[10px] text-emerald-800/60 mt-2">Ders bazlı kusursuzluk</p>
-              </div>
-
-              <div className="bg-rose-50/50 border border-rose-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="bg-rose-100 text-rose-900 text-xs font-bold px-2 py-1 rounded-lg">🟥 Kırmızı Kart</span>
-                    <span className="text-rose-700 font-extrabold text-xs sm:text-sm">-15 LP</span>
-                  </div>
-                  <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                    Toplamda 15 ve üzeri yanlış yapanlar.
-                  </p>
-                </div>
-                <p className="text-[10px] text-rose-700/80 italic mt-2 bg-white/80 p-1.5 rounded-lg border border-rose-100">
-                  Sadece Kutup Yıldızları için geçerlidir.
-                </p>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* 3. Takıma Özel Hedef Rozetleri */}
-        {(activeCategory === 'all' || activeCategory === 'team_specific') && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-brand-ink/60" />
-              <h3 className="text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
-                Takıma Özel Hedef Rozetleri
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-              
-              {/* Kutup Yıldızları */}
-              <div className="bg-amber-50/40 border border-amber-200 rounded-2xl p-4 space-y-3">
-                <h4 className="text-amber-950 font-bold text-xs sm:text-sm flex items-center gap-1.5">
-                  <Crown className="w-4 h-4 text-amber-600" />
-                  <span>Kutup Yıldızları Hedefleri</span>
-                </h4>
-                <div className="space-y-2.5">
-                  <div className="bg-white border border-amber-100 rounded-xl p-3 shadow-2xs">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="bg-amber-100 text-amber-900 text-xs font-bold px-2 py-0.5 rounded-lg">📜 Sözel Şövalyesi</span>
-                      <span className="text-amber-700 font-bold text-xs">+15 LP</span>
-                    </div>
-                    <p className="text-xs text-brand-ink/70 font-medium">İnkılap, Din ve İngilizce'de sıfır yanlış.</p>
-                  </div>
-                  <div className="bg-white border border-amber-100 rounded-xl p-3 shadow-2xs">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="bg-amber-100 text-amber-900 text-xs font-bold px-2 py-0.5 rounded-lg">🏰 Sayısal Kalesi</span>
-                      <span className="text-amber-700 font-bold text-xs">+20 LP</span>
-                    </div>
-                    <p className="text-xs text-brand-ink/70 font-medium">Matematik ve Fen'de toplam en fazla 2 yanlış.</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sıçrama Ustaları */}
-              <div className="bg-blue-50/40 border border-blue-200 rounded-2xl p-4 space-y-3">
-                <h4 className="text-blue-950 font-bold text-xs sm:text-sm flex items-center gap-1.5">
-                  <TrendingUp className="w-4 h-4 text-blue-600" />
-                  <span>Sıçrama Ustaları Hedefleri</span>
-                </h4>
-                <div className="space-y-2.5">
-                  <div className="bg-white border border-blue-100 rounded-xl p-3 shadow-2xs">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="bg-blue-100 text-blue-900 text-xs font-bold px-2 py-0.5 rounded-lg">💡 Matematik Uyanışı</span>
-                      <span className="text-blue-700 font-bold text-xs">+20 LP</span>
-                    </div>
-                    <p className="text-xs text-brand-ink/70 font-medium">Matematik netinin 10 ve üzeri olması.</p>
-                  </div>
-                  <div className="bg-white border border-blue-100 rounded-xl p-3 shadow-2xs">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="bg-blue-100 text-blue-900 text-xs font-bold px-2 py-0.5 rounded-lg">⚖️ Denge Cambazı</span>
-                      <span className="text-blue-700 font-bold text-xs">+15 LP</span>
-                    </div>
-                    <p className="text-xs text-brand-ink/70 font-medium">Türkçe ve Fen netlerinin 15+ olması.</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Taktik Avcıları */}
-              <div className="bg-emerald-50/40 border border-emerald-200 rounded-2xl p-4 space-y-3">
-                <h4 className="text-emerald-950 font-bold text-xs sm:text-sm flex items-center gap-1.5">
-                  <Shield className="w-4 h-4 text-emerald-600" />
-                  <span>Taktik Avcıları Hedefleri</span>
-                </h4>
-                <div className="space-y-2.5">
-                  <div className="bg-white border border-emerald-100 rounded-xl p-3 shadow-2xs">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="bg-emerald-100 text-emerald-900 text-xs font-bold px-2 py-0.5 rounded-lg">🎯 Keskin Nişancı</span>
-                      <span className="text-emerald-700 font-bold text-xs">+20 LP</span>
-                    </div>
-                    <p className="text-xs text-brand-ink/70 font-medium">Doğru oranının %70 veya üzeri olması.</p>
-                  </div>
-                  <div className="bg-white border border-emerald-100 rounded-xl p-3 shadow-2xs">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="bg-emerald-100 text-emerald-900 text-xs font-bold px-2 py-0.5 rounded-lg">🧱 Temel Atıcı</span>
-                      <span className="text-emerald-700 font-bold text-xs">+15 LP</span>
-                    </div>
-                    <p className="text-xs text-brand-ink/70 font-medium">Hiç eksi net olmaması, İnkılap/Din 8+ olması.</p>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* 4. Uzmanlık Rozetleri */}
-        {(activeCategory === 'all' || activeCategory === 'mastery') && (
-          <div className="space-y-3">
+        {/* 2. Güncel Rozetler Listesi (Tüm 25 Rozet) */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-brand-ink/60" />
               <h3 className="text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
-                Uzmanlık Rozetleri (Seri İstikrar Başarıları)
+                Güncel Rozetler ve Kazanım Kriterleri ({filteredBadges.length} Rozet)
               </h3>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              
-              <div className="bg-fuchsia-50/50 border border-fuchsia-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-fuchsia-100 text-fuchsia-900 text-xs font-bold px-2 py-1 rounded-lg">🏰 Zirve Bekçisi</span>
-                  <span className="text-fuchsia-700 font-bold text-xs">+30 LP</span>
-                </div>
-                <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                  3 sınavda aralıksız 400+ puan elde etme.
-                </p>
-              </div>
-
-              <div className="bg-cyan-50/50 border border-cyan-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-cyan-100 text-cyan-900 text-xs font-bold px-2 py-1 rounded-lg">⚡ İvme Şampiyonu</span>
-                  <span className="text-cyan-700 font-bold text-xs">+30 LP</span>
-                </div>
-                <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                  3 sınav art arda en az +5 puan artış.
-                </p>
-              </div>
-
-              <div className="bg-orange-50/50 border border-orange-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-orange-100 text-orange-900 text-xs font-bold px-2 py-1 rounded-lg">🔨 Baraj Yıkıcı</span>
-                  <span className="text-orange-700 font-bold text-xs">+30 LP</span>
-                </div>
-                <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                  Matematikte 3 sınav boyunca 10+ net.
-                </p>
-              </div>
-
-              <div className="bg-indigo-50/50 border border-indigo-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-indigo-100 text-indigo-900 text-xs font-bold px-2 py-1 rounded-lg">🧠 Strateji Mh.</span>
-                  <span className="text-indigo-700 font-bold text-xs">+40 LP</span>
-                </div>
-                <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                  4 sınavda sürekli Boş &gt; Yanlış kontrolü.
-                </p>
-              </div>
-
-              <div className="bg-teal-50/50 border border-teal-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-teal-100 text-teal-900 text-xs font-bold px-2 py-1 rounded-lg">🕊️ İstikrar Elçisi</span>
-                  <span className="text-teal-700 font-bold text-xs">+50 LP</span>
-                </div>
-                <p className="text-xs text-brand-ink/80 leading-relaxed font-medium">
-                  5 sınav boyunca 0 Kırmızı Kart disiplini.
-                </p>
-              </div>
-
-            </div>
+            <span className="text-[11px] text-brand-ink/50 font-medium">
+              Sınav sonuçlarıyla anlık ve dinamik eşlenir
+            </span>
           </div>
-        )}
 
-        {/* 5. Efsanevi Rozetler */}
-        {(activeCategory === 'all' || activeCategory === 'legendary') && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Flame className="w-4 h-4 text-amber-600" />
-              <h3 className="text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
-                Efsanevi Rozetler (Nadir Başarılar)
-              </h3>
+          {filteredBadges.length === 0 ? (
+            <div className="py-12 text-center bg-[#FAF9F6] rounded-2xl border border-brand-border/60">
+              <p className="text-sm font-medium text-brand-ink/50">Aramanıza uygun rozet bulunamadı.</p>
             </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {filteredBadges.map((badge) => (
+                <div 
+                  key={badge.key}
+                  className="bg-white border border-brand-border/80 hover:border-amber-300 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between group"
+                >
+                  <div>
+                    {/* Header: Icon, Name & LP */}
+                    <div className="flex items-center justify-between gap-2 mb-2.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-2xl shrink-0 group-hover:scale-110 transition-transform">
+                          {badge.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-brand-ink truncate">
+                            {badge.label}
+                          </h4>
+                          <span className="text-[10px] text-brand-ink/50 font-semibold block truncate">
+                            {badge.categoryLabel}
+                          </span>
+                        </div>
+                      </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              
-              <div className="bg-gradient-to-br from-amber-500/10 via-amber-50 to-amber-100/70 border border-amber-300 rounded-2xl p-4 shadow-2xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-amber-500 text-white text-xs font-extrabold px-2.5 py-1 rounded-lg shadow-2xs">
-                    🏆 LGS Fatihi
-                  </span>
-                  <span className="text-amber-800 font-extrabold text-sm">+200 LP</span>
+                      <div className="shrink-0">
+                        <span className={`text-xs font-extrabold px-2.5 py-1 rounded-xl shadow-2xs inline-block ${
+                          badge.lp > 0 
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300/80' 
+                            : 'bg-rose-100 text-rose-900 border border-rose-300/80'
+                        }`}>
+                          {badge.lp > 0 ? `+${badge.lp}` : badge.lp} LP
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Condition pill */}
+                    <div className="mb-2.5">
+                      <span className="text-[11px] font-bold text-amber-900/90 bg-amber-50/80 border border-amber-200/70 px-2 py-0.5 rounded-lg inline-block">
+                        🎯 {badge.condition}
+                      </span>
+                    </div>
+
+                    {/* Description */}
+                    <p className="text-xs text-brand-ink/75 leading-relaxed font-medium">
+                      {badge.description}
+                    </p>
+                  </div>
+
+                  {/* Footer Tag */}
+                  <div className="mt-3.5 pt-2.5 border-t border-brand-border/40 flex items-center justify-between text-[10.5px]">
+                    <span className="text-brand-ink/50">
+                      Takım Kuralı:
+                    </span>
+                    <span className={`font-bold px-1.5 py-0.5 rounded-md ${
+                      badge.teamRestriction === 'Kutup Yıldızları'
+                        ? 'bg-amber-100 text-amber-900'
+                        : badge.teamRestriction === 'Sıçrama Ustaları'
+                        ? 'bg-blue-100 text-blue-900'
+                        : badge.teamRestriction === 'Taktik Avcıları'
+                        ? 'bg-emerald-100 text-emerald-900'
+                        : 'bg-stone-100 text-stone-700'
+                    }`}>
+                      {badge.teamRestriction || 'Tüm Takımlar'}
+                    </span>
+                  </div>
                 </div>
-                <p className="text-xs text-amber-950 font-medium leading-relaxed">
-                  Bir denemede tüm derslerde sıfır boş ve sıfır yanlışla tam net çıkarma.
-                </p>
-              </div>
-
-              <div className="bg-gradient-to-br from-amber-500/10 via-amber-50 to-amber-100/70 border border-amber-300 rounded-2xl p-4 shadow-2xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-amber-500 text-white text-xs font-extrabold px-2.5 py-1 rounded-lg shadow-2xs">
-                    🤝 Takım Ruhu
-                  </span>
-                  <span className="text-amber-800 font-extrabold text-sm">+50 LP</span>
-                </div>
-                <p className="text-xs text-amber-950 font-medium leading-relaxed">
-                  Takımın haftalık deneme sınavına %100 tam kadro katılım göstermesi.
-                </p>
-              </div>
-
-              <div className="bg-gradient-to-br from-amber-500/10 via-amber-50 to-amber-100/70 border border-amber-300 rounded-2xl p-4 shadow-2xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-extrabold px-2.5 py-1 rounded-lg shadow-2xs">
-                    🔥 Anka Kuşu
-                  </span>
-                  <span className="text-amber-800 font-extrabold text-sm">+300 LP</span>
-                </div>
-                <p className="text-xs text-amber-950 font-medium leading-relaxed">
-                  Taktik Avcıları'ndan Sıçrama Ustaları veya Kutup Yıldızları'na lig atlama.
-                </p>
-              </div>
-
+              ))}
             </div>
-          </div>
-        )}
-
-        {/* 6. Branş Efsaneleri */}
-        {(activeCategory === 'all' || activeCategory === 'branch') && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Award className="w-4 h-4 text-brand-ink/60" />
-              <h3 className="text-xs font-bold text-brand-ink/60 uppercase tracking-wider">
-                Branş Efsaneleri (Tam Net Başarıları)
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              
-              <div className="bg-rose-50/50 border border-rose-200/80 rounded-2xl p-4 shadow-2xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-rose-100 text-rose-900 text-xs font-bold px-2 py-1 rounded-lg">📚 Filozof</span>
-                  <span className="text-rose-700 font-extrabold text-sm">+30 LP</span>
-                </div>
-                <p className="text-xs text-brand-ink/80 font-medium leading-relaxed">
-                  Türkçe dersinde 20 doğru, 0 yanlış yapmak.
-                </p>
-              </div>
-
-              <div className="bg-sky-50/50 border border-sky-200/80 rounded-2xl p-4 shadow-2xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-sky-100 text-sky-900 text-xs font-bold px-2 py-1 rounded-lg">🔭 Newton</span>
-                  <span className="text-sky-700 font-extrabold text-sm">+30 LP</span>
-                </div>
-                <p className="text-xs text-brand-ink/80 font-medium leading-relaxed">
-                  Fen dersinde 20 doğru, 0 yanlış yapmak.
-                </p>
-              </div>
-
-              <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-2xl p-4 shadow-2xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="bg-emerald-100 text-emerald-900 text-xs font-bold px-2 py-1 rounded-lg">📐 Pisagor</span>
-                  <span className="text-emerald-700 font-extrabold text-sm">+50 LP</span>
-                </div>
-                <p className="text-xs text-brand-ink/80 font-medium leading-relaxed">
-                  Matematik dersinde 20 doğru, 0 yanlış yapmak.
-                </p>
-              </div>
-
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
       </div>
     </div>

@@ -347,23 +347,62 @@ export const getCachedAccessToken = (): string | null => {
   return null;
 };
 
+// Concurrency guards for popup authentication to prevent Firebase internal assertion double-settle crashes
+let isGoogleAuthInProgress = false;
+let isDriveAuthInProgress = false;
+
+// Suppress known Firebase Auth internal assertion during popup close / grace period double-settle
+if (typeof window !== 'undefined') {
+  const isAssertionError = (msg: string) => 
+    msg.includes('Pending promise was never set') || 
+    (msg.includes('@firebase/auth') && msg.includes('INTERNAL ASSERTION FAILED'));
+
+  window.addEventListener('error', (event) => {
+    const message = event?.message || event?.error?.message || '';
+    if (typeof message === 'string' && isAssertionError(message)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const message = event?.reason?.message || String(event?.reason || '');
+    if (typeof message === 'string' && isAssertionError(message)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+}
+
 /**
  * Standard Universal Google Authentication for all users (Teachers, Admins, Guests).
  * Uses basic non-sensitive scopes (profile & email).
- * NEVER triggers 403: access_denied, test user blockages, or unverified app warnings for teachers!
+ * Concurrency protected against popup double-settle assertion errors.
  */
 export const loginWithGoogle = async () => {
+  if (isGoogleAuthInProgress) {
+    console.warn('Google Sign-In is already in progress, ignoring duplicate trigger');
+    return null;
+  }
+  isGoogleAuthInProgress = true;
   try {
-    // 1. Primary: Standard Universal Google Authentication (profile & email).
-    // NEVER triggers 403: access_denied, test user blockages, or unverified app warnings for teachers!
     const result = await signInWithPopup(auth, googleProvider);
     return result;
   } catch (err: any) {
-    if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+    if (
+      err?.code === 'auth/popup-closed-by-user' || 
+      err?.code === 'auth/cancelled-popup-request' ||
+      err?.message?.includes('Pending promise was never set')
+    ) {
       return null;
     }
     console.warn('Google Sign In notice:', err?.message || err);
     throw err;
+  } finally {
+    // Release mutex after a brief delay to allow internal auth listeners to settle cleanly
+    setTimeout(() => {
+      isGoogleAuthInProgress = false;
+    }, 1200);
   }
 };
 
@@ -406,6 +445,12 @@ export const connectGoogleDrive = async (silentOnly = false, forceRefresh = fals
     return null;
   }
 
+  if (isDriveAuthInProgress) {
+    console.warn('Drive connection is already in progress');
+    return getCachedAccessToken() || null;
+  }
+  isDriveAuthInProgress = true;
+
   try {
     // Uses drive.file and select_account (One-time approval, Google remembers consent permanently)
     const result = await signInWithPopup(auth, googleDriveProvider);
@@ -416,14 +461,22 @@ export const connectGoogleDrive = async (silentOnly = false, forceRefresh = fals
       return credential.accessToken;
     }
   } catch (error: any) {
-    if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
-      // User closed drive popup
+    if (
+      error?.code === 'auth/popup-closed-by-user' || 
+      error?.code === 'auth/cancelled-popup-request' ||
+      error?.message?.includes('Pending promise was never set')
+    ) {
+      // User closed drive popup or concurrent popup settled
       return null;
     }
     console.warn('Drive connection notice:', error?.message);
     if (!silentOnly) {
       throw error;
     }
+  } finally {
+    setTimeout(() => {
+      isDriveAuthInProgress = false;
+    }, 1200);
   }
   return null;
 };
