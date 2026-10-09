@@ -1,40 +1,72 @@
+import { normalizeTurkish } from './omrEngine';
+
 export interface BadgeDefinition {
   key: string;
   label: string;
-  shortLabel?: string;
-  icon: string;
-  lp: number; // Positive bonus or negative penalty (e.g., +200, -15)
-  category: 'legendary' | 'streak' | 'team' | 'subject' | 'mystery' | 'core';
+  category: 'all' | 'team' | 'exam' | 'academic' | 'progress' | 'special';
   categoryLabel: string;
-  teamRestriction?: 'Kutup Yıldızları' | 'Sıçrama Ustaları' | 'Taktik Avcıları' | null;
   condition: string;
   description: string;
-  bg: string;
-  text: string;
-  border: string;
+  icon: string;
+  lp: number;
+  teamRestriction?: string;
+  bg?: string;
+  text?: string;
+  border?: string;
 }
 
-export const BADGE_CATEGORIES: { id: BadgeDefinition['category'] | 'all'; label: string; icon: string }[] = [
-  { id: 'all', label: 'Tüm Rozetler (25)', icon: '🏅' },
-  { id: 'legendary', label: 'Efsanevi (2)', icon: '🏆' },
-  { id: 'streak', label: 'Seri & İstikrar (5)', icon: '⚡' },
-  { id: 'team', label: 'Takım Özel (6)', icon: '⚔️' },
-  { id: 'subject', label: 'Branş Ustaları (3)', icon: '📚' },
-  { id: 'mystery', label: 'Gizemli Rozetler (3)', icon: '🦁' },
-  { id: 'core', label: 'Temel Koruma (6)', icon: '🛡️' },
+export const BADGE_CATEGORIES = [
+  { id: 'all', label: 'Tüm Rozetler', icon: '🏆' },
+  { id: 'team', label: 'Takım & Baraj', icon: '⭐' },
+  { id: 'exam', label: 'Sınav Başarıları', icon: '🎯' },
+  { id: 'academic', label: 'Ders Bazlı', icon: '📚' },
+  { id: 'progress', label: 'Gelişim & İstikrar', icon: '🚀' },
+  { id: 'special', label: 'Özel & Efsanevi', icon: '👑' },
 ];
 
+export const BADGE_POINTS: Record<string, number> = {
+  lgsFatihi: 30,
+  ankaKusu: 25,
+  zirveBekcisi: 20,
+  ivmeSampiyonu: 15,
+  barajYikici: 12,
+  stratejiMuhendisi: 10,
+  istikrarElcisi: 15,
+  sozelSovalyesi: 10,
+  sayisalKalesi: 12,
+  matematikUyanisi: 8,
+  dengeCambazi: 8,
+  keskinNisanci: 6,
+  temelAtici: 5,
+  filozof: 8,
+  newton: 10,
+  pisagor: 10,
+  uyuyanDev: 10,
+  sabirTasi: 5,
+  yinYang: 8,
+  kalkan: 5,
+  zirve: 15,
+  ivme: 8,
+  tamIsabet: 10,
+  kirmiziKart: -10,
+  takimRuhu: 8,
+  // Normalize aliases
+  tamisabet: 10,
+  zirvekoruma: 15,
+  kirmizikart: -10
+};
+
 export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
-  // 1. Efsanevi Rozetler
+  // Efsanevi & Özel
   {
     key: 'lgsFatihi',
     label: 'LGS Fatihi',
+    category: 'special',
+    categoryLabel: 'Efsanevi Rozet',
+    condition: 'Denemede tüm soruları 0 yanlış ve 0 boş ile bitirmek',
+    description: 'Sınavın tüm sorularını eksiksiz ve tam doğrulukla tamamlayan şampiyon öğrenciye verilir.',
     icon: '🏆',
-    lp: 200,
-    category: 'legendary',
-    categoryLabel: 'Efsanevi Rozetler',
-    condition: '500 Tam Puan (0 Yanlış, 0 Boş)',
-    description: 'Sınavdaki tüm 90 soruyu eksiksiz doğru cevaplayarak 0 yanlış ve 0 boş ile tam puan (500) alan öğrenciye verilir.',
+    lp: 30,
     bg: 'bg-amber-500',
     text: 'text-white font-extrabold',
     border: 'border-amber-400'
@@ -42,27 +74,28 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'ankaKusu',
     label: 'Anka Kuşu',
+    category: 'special',
+    categoryLabel: 'Efsanevi Rozet',
+    condition: 'Taktik Avcıları liginden bir üst lige transfer olmak',
+    description: 'Temel liginden gelişim göstererek üst lige terfi eden küllerinden doğan öğrencilere verilir.',
     icon: '🔥',
-    lp: 60,
-    category: 'legendary',
-    categoryLabel: 'Efsanevi Rozetler',
-    condition: 'Küllerinden Doğuş (Büyük Yükseliş)',
-    description: 'Taktik Avcıları takımından Sıçrama Ustaları veya Kutup Yıldızları takımına transfer başarısı gösteren öğrencilere verilir (+100 transfer LP bonusu içerir).',
+    lp: 25,
     bg: 'bg-gradient-to-r from-orange-500 to-amber-500',
     text: 'text-white font-extrabold',
     border: 'border-orange-400'
   },
 
-  // 2. Seri ve İstikrar Rozetleri
+  // Uzmanlık & Gelişim
   {
     key: 'zirveBekcisi',
     label: 'Zirve Bekçisi',
+    category: 'progress',
+    categoryLabel: 'Gelişim & İstikrar',
+    condition: 'Üst üste 3 denemede 400+ puan barajını korumak',
+    description: 'Zirvedeki yerini sarsılmaz istikrarla koruyan Kutup Yıldızları öğrencilerine verilir.',
     icon: '🏰',
-    lp: 30,
-    category: 'streak',
-    categoryLabel: 'Seri & İstikrar',
-    condition: '3 Sınav Üst Üste 400+ Puan',
-    description: 'Kutup Yıldızları veya üst ligde kesintisiz 3 sınav boyunca 400 puan ve üzerinde kalarak zirveyi koruyan öğrenciye verilir.',
+    lp: 20,
+    teamRestriction: 'Kutup Yıldızları',
     bg: 'bg-fuchsia-100',
     text: 'text-fuchsia-900 font-bold',
     border: 'border-fuchsia-200'
@@ -70,12 +103,13 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'ivmeSampiyonu',
     label: 'İvme Şampiyonu',
+    category: 'progress',
+    categoryLabel: 'Gelişim & İstikrar',
+    condition: 'Bir önceki denemeye göre +25 puan veya +10 net sıçrama yapmak',
+    description: 'Büyük sıçrama göstererek potansiyelini katlayan öğrencilere verilir.',
     icon: '⚡',
-    lp: 30,
-    category: 'streak',
-    categoryLabel: 'Seri & İstikrar',
-    condition: '3 Sınav Üst Üste +5 Puan Artış',
-    description: 'Kesintisiz 3 sınav boyunca her bir sınavda puanını bir önceki sınava kıyasla en az 5 puan artıran istikrarlı gelişim gösteren öğrenciye verilir.',
+    lp: 15,
+    teamRestriction: 'Sıçrama Ustaları',
     bg: 'bg-cyan-100',
     text: 'text-cyan-900 font-bold',
     border: 'border-cyan-200'
@@ -83,25 +117,26 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'barajYikici',
     label: 'Baraj Yıkıcı',
+    category: 'progress',
+    categoryLabel: 'Gelişim & İstikrar',
+    condition: 'Zorlanılan derste hedeflenen net barajını ilk kez aşmak',
+    description: 'Kritik barajları yıkarak başarı grafiğini yukarı taşıyan öğrencilere verilir.',
     icon: '🔨',
-    lp: 30,
-    category: 'streak',
-    categoryLabel: 'Seri & İstikrar',
-    condition: '3 Sınav Üst Üste Matematik Neti ≥ 10',
-    description: 'Matematik dersinde kesintisiz 3 deneme boyunca 10 net barajını aşarak zorlu soru psikolojisini kıran öğrenciye verilir.',
+    lp: 12,
     bg: 'bg-orange-100',
     text: 'text-orange-900 font-bold',
     border: 'border-orange-200'
   },
   {
     key: 'stratejiMuhendisi',
-    label: 'Strateji Mühendisi',
+    label: 'Strateji Mh.',
+    category: 'progress',
+    categoryLabel: 'Gelişim & İstikrar',
+    condition: 'Sınavda turlama taktiğini hatasız uygulayıp süreyi verimli kullanmak',
+    description: 'Zamanı ve soru dağılımını taktiksel zekayla yöneten öğrencilere verilir.',
     icon: '🧠',
-    lp: 40,
-    category: 'streak',
-    categoryLabel: 'Seri & İstikrar',
-    condition: '4 Sınav Üst Üste Kalkan Rozeti',
-    description: 'Üst üste 4 deneme sınavında bilmediği soruları sallamayıp boş bırakarak yanlış sayısını boş sayısının altında tutan taktik uzmanı öğrenciye verilir.',
+    lp: 10,
+    teamRestriction: 'Taktik Avcıları',
     bg: 'bg-indigo-100',
     text: 'text-indigo-900 font-bold',
     border: 'border-indigo-200'
@@ -109,28 +144,28 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'istikrarElcisi',
     label: 'İstikrar Elçisi',
+    category: 'progress',
+    categoryLabel: 'Gelişim & İstikrar',
+    condition: 'Ardı ardına 4 denemede puanını sabit tutup gerilememek',
+    description: 'Dalgalanma yaşamadan disiplinli net çizgisini sürdüren öğrencilere verilir.',
     icon: '🕊️',
-    lp: 50,
-    category: 'streak',
-    categoryLabel: 'Seri & İstikrar',
-    condition: '5 Sınav Kesintisiz Ceza Almadan Devam',
-    description: '5 sınav boyunca hiç Kırmızı Kart görmeden kontrollü ve disiplinli sınav performansı sergileyen öğrenciye verilir.',
+    lp: 15,
     bg: 'bg-teal-100',
     text: 'text-teal-900 font-bold',
     border: 'border-teal-200'
   },
 
-  // 3. Takım Özel Rozetleri
+  // Takım & Sınav
   {
     key: 'sozelSovalyesi',
     label: 'Sözel Şövalyesi',
-    icon: '📜',
-    lp: 15,
     category: 'team',
-    categoryLabel: 'Takım Özel Rozetleri',
+    categoryLabel: 'Takım & Baraj',
+    condition: 'Türkçe, Din, İnkılap ve İngilizce branşlarında 0 yanlış yapmak',
+    description: 'Sözel bölümü firesiz ve eksiksiz geçerek okulunu zirveye taşıyan öğrencilere verilir.',
+    icon: '📜',
+    lp: 10,
     teamRestriction: 'Kutup Yıldızları',
-    condition: 'İnkılap, Din ve İngilizce 0 Yanlış',
-    description: 'Kutup Yıldızları takımında yer alan ve sınavda 3 ara sözel branşın (İnkılap, Din, İngilizce) tamamını sıfır yanlışla tamamlayan öğrenciye verilir.',
     bg: 'bg-amber-100',
     text: 'text-amber-900 font-bold',
     border: 'border-amber-200'
@@ -138,27 +173,27 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'sayisalKalesi',
     label: 'Sayısal Kalesi',
-    icon: '🏰',
-    lp: 20,
     category: 'team',
-    categoryLabel: 'Takım Özel Rozetleri',
+    categoryLabel: 'Takım & Baraj',
+    condition: 'Matematik ve Fen derslerinde en fazla 2 yanlış yapmak',
+    description: 'Sayısal bölümde sağlam durarak netlerini güvenceye alan öğrencilere verilir.',
+    icon: '🏰',
+    lp: 12,
     teamRestriction: 'Kutup Yıldızları',
-    condition: 'Matematik + Fen Toplam Yanlış ≤ 2',
-    description: 'Kutup Yıldızları takımında sayısal oturumda Matematik ve Fen Bilimleri toplamında en fazla 2 yanlış yaparak sayısal kalesini savunan öğrenciye verilir.',
     bg: 'bg-amber-100',
     text: 'text-amber-900 font-bold',
     border: 'border-amber-200'
   },
   {
     key: 'matematikUyanisi',
-    label: 'Matematik Uyanışı',
-    icon: '💡',
-    lp: 20,
+    label: 'Mat. Uyanışı',
     category: 'team',
-    categoryLabel: 'Takım Özel Rozetleri',
+    categoryLabel: 'Takım & Baraj',
+    condition: 'Matematik branşında 10 ve üzeri nete ulaşmak',
+    description: 'Matematik korkusunu yenip çift haneli netlere sıçrayan öğrencilere verilir.',
+    icon: '💡',
+    lp: 8,
     teamRestriction: 'Sıçrama Ustaları',
-    condition: 'Matematik Neti ≥ 10',
-    description: 'Sıçrama Ustaları takımında yer alan ve deneme sınavında Matematik dersinde 10 net ve üzerine çıkarak büyük sıçrama başlatan öğrenciye verilir.',
     bg: 'bg-blue-100',
     text: 'text-blue-900 font-bold',
     border: 'border-blue-200'
@@ -166,13 +201,13 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'dengeCambazi',
     label: 'Denge Cambazı',
-    icon: '⚖️',
-    lp: 15,
     category: 'team',
-    categoryLabel: 'Takım Özel Rozetleri',
+    categoryLabel: 'Takım & Baraj',
+    condition: 'Türkçe ve Fen derslerinde 15+ net dengesini kurmak',
+    description: 'İki ana ders arasında kusursuz bir denge sağlayan öğrencilere verilir.',
+    icon: '⚖️',
+    lp: 8,
     teamRestriction: 'Sıçrama Ustaları',
-    condition: 'Türkçe Neti ≥ 15 ve Fen Neti ≥ 15',
-    description: 'Sıçrama Ustaları takımında hem Türkçe hem de Fen Bilimleri dersinde aynı anda 15 net ve üzeri çıkararak dengeli skor yakalayan öğrenciye verilir.',
     bg: 'bg-blue-100',
     text: 'text-blue-900 font-bold',
     border: 'border-blue-200'
@@ -180,13 +215,12 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'keskinNisanci',
     label: 'Keskin Nişancı',
+    category: 'exam',
+    categoryLabel: 'Sınav Başarıları',
+    condition: 'İşaretlenen sorularda %70 ve üzeri isabet oranına ulaşmak',
+    description: 'Sadece emin olduğu soruları işaretleyerek yüksek doğruluk oranı yakalayanlara verilir.',
     icon: '🎯',
-    lp: 20,
-    category: 'team',
-    categoryLabel: 'Takım Özel Rozetleri',
-    teamRestriction: 'Taktik Avcıları',
-    condition: 'İşaretlenen Sorularda Doğruluk Oranı ≥ %70',
-    description: 'Taktik Avcıları takımında sınavda işaretlediği (Doğru + Yanlış) sorular arasında en az %70 doğruluk isabetine ulaşan öğrenciye verilir.',
+    lp: 6,
     bg: 'bg-emerald-100',
     text: 'text-emerald-900 font-bold',
     border: 'border-emerald-200'
@@ -194,28 +228,28 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'temelAtici',
     label: 'Temel Atıcı',
-    icon: '🧱',
-    lp: 15,
     category: 'team',
-    categoryLabel: 'Takım Özel Rozetleri',
+    categoryLabel: 'Takım & Baraj',
+    condition: 'Hiçbir derste eksi nete düşmeden tüm dersleri pozitif bitirmek',
+    description: 'Doğru taktikle eksi net riskini sıfırlayan öğrencilere verilir.',
+    icon: '🧱',
+    lp: 5,
     teamRestriction: 'Taktik Avcıları',
-    condition: 'Tüm Derslerde Netler ≥ 0 (Eksi Net Yok)',
-    description: 'Taktik Avcıları takımında hiçbir derste eksi nete düşmeyerek sağlam temel oluşturan öğrenciye verilir.',
     bg: 'bg-emerald-100',
     text: 'text-emerald-900 font-bold',
     border: 'border-emerald-200'
   },
 
-  // 4. Branş Ustaları
+  // Branş Efsaneleri
   {
     key: 'filozof',
     label: 'Filozof',
+    category: 'academic',
+    categoryLabel: 'Ders Bazlı',
+    condition: 'Türkçe dersinde 20/20 tam doğru yapmak',
+    description: 'Paragraf, dil bilgisi ve anlama kabiliyetiyle Türkçe testini fetheden öğrencilere verilir.',
     icon: '📚',
-    lp: 30,
-    category: 'subject',
-    categoryLabel: 'Branş Ustaları',
-    condition: 'Türkçe 20 Doğru, 0 Yanlış (Fulleme)',
-    description: 'Türkçe dersindeki tüm soruları firesiz ve hatasız 20/20 doğru yaparak fulleyen öğrenciye verilir.',
+    lp: 8,
     bg: 'bg-rose-100',
     text: 'text-rose-900 font-bold',
     border: 'border-rose-200'
@@ -223,12 +257,12 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'newton',
     label: 'Newton',
+    category: 'academic',
+    categoryLabel: 'Ders Bazlı',
+    condition: 'Fen Bilimleri dersinde 20/20 tam doğru yapmak',
+    description: 'Deney, mantık ve fizik/kimya/biyoloji sorularını firesiz çözen bilim ustalarına verilir.',
     icon: '🔭',
-    lp: 30,
-    category: 'subject',
-    categoryLabel: 'Branş Ustaları',
-    condition: 'Fen Bilimleri 20 Doğru, 0 Yanlış (Fulleme)',
-    description: 'Fen Bilimleri dersindeki tüm soruları eksiksiz ve hatasız 20/20 doğru yaparak fulleyen öğrenciye verilir.',
+    lp: 10,
     bg: 'bg-sky-100',
     text: 'text-sky-900 font-bold',
     border: 'border-sky-200'
@@ -236,27 +270,27 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'pisagor',
     label: 'Pisagor',
+    category: 'academic',
+    categoryLabel: 'Ders Bazlı',
+    condition: 'Matematik dersinde 20/20 tam doğru yapmak',
+    description: 'Yeni nesil mantık muhakeme ve geometri sorularının tamamını doğru yapan dâhilere verilir.',
     icon: '📐',
-    lp: 50,
-    category: 'subject',
-    categoryLabel: 'Branş Ustaları',
-    condition: 'Matematik 20 Doğru, 0 Yanlış (Fulleme)',
-    description: 'LGS Matematik dersindeki tüm 20 soruyu sıfır hata ile eksiksiz doğru çözerek fulleyen üstün başarılı öğrenciye verilir.',
+    lp: 10,
     bg: 'bg-emerald-100',
     text: 'text-emerald-900 font-bold',
     border: 'border-emerald-200'
   },
 
-  // 5. Gizemli Rozetler
+  // Gizemli Rozetler
   {
     key: 'uyuyanDev',
     label: 'Uyuyan Dev',
+    category: 'special',
+    categoryLabel: 'Özel & Efsanevi',
+    condition: 'Beklenmedik bir şekilde takımının en yüksek puan sıçramasını gerçekleştirmek',
+    description: 'Potansiyelini açığa çıkarıp herkesi şaşırtan sıçramayı yapan öğrenciye verilir.',
     icon: '🦁',
-    lp: 50,
-    category: 'mystery',
-    categoryLabel: 'Gizemli Rozetler',
-    condition: 'Tek Sınavda +40 Puan Dev Sıçrama',
-    description: 'Önceki sınav ortalamasına kıyasla tek bir sınavda en az 40 puanlık rekor artış gerçekleştirerek potansiyelini uyandıran öğrenciye verilir.',
+    lp: 10,
     bg: 'bg-violet-100',
     text: 'text-violet-900 font-bold',
     border: 'border-violet-200'
@@ -264,12 +298,12 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'sabirTasi',
     label: 'Sabır Taşı',
+    category: 'exam',
+    categoryLabel: 'Sınav Başarıları',
+    condition: 'Zor sorularda inatlaşmayıp sınav sonuna kadar odaklanarak süreyi tam kullanmak',
+    description: 'Panik yapmadan sınav psikolojisini ve kriz anını soğukkanlılıkla yöneten öğrencilere verilir.',
     icon: '💎',
-    lp: 40,
-    category: 'mystery',
-    categoryLabel: 'Gizemli Rozetler',
-    condition: 'En Az 15 Boş ve 0 Yanlış',
-    description: 'Sınavda bilmediği ve emin olmadığı en az 15 soruyu sabırla boş bırakıp sıfır yanlış yaparak hata yapmama iradesi gösteren öğrenciye verilir.',
+    lp: 5,
     bg: 'bg-stone-100',
     text: 'text-stone-900 font-bold',
     border: 'border-stone-200'
@@ -277,40 +311,40 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'yinYang',
     label: 'Yin Yang',
+    category: 'exam',
+    categoryLabel: 'Sınav Başarıları',
+    condition: 'Sözel ve sayısal oturumlardan birbirine eşit oranda net çıkarmak',
+    description: 'Her iki oturumda da eşdeğer performans sergileyen öğrencilere verilir.',
     icon: '☯️',
-    lp: 30,
-    category: 'mystery',
-    categoryLabel: 'Gizemli Rozetler',
-    condition: 'Türkçe Neti = Matematik Neti (Net ≥ 10)',
-    description: 'Sözelin lideri Türkçe ile sayısalın lideri Matematik derslerinde tam eşit ve en az 10 net elde ederek kusursuz denge kuran öğrenciye verilir.',
+    lp: 8,
     bg: 'bg-zinc-100',
     text: 'text-zinc-900 font-bold',
     border: 'border-zinc-200'
   },
 
-  // 6. Temel Koruma Rozetleri
+  // Temel Rozetler
   {
     key: 'kalkan',
     label: 'Kalkan',
+    category: 'exam',
+    categoryLabel: 'Sınav Başarıları',
+    condition: 'Boş sayısı yanlış sayısından fazla olmak (Boş > Yanlış)',
+    description: 'Atmasyon yapmayıp bilmediği soruyu boş bırakarak netini koruyan defansif kahramanlara verilir.',
     icon: '🛡️',
-    lp: 20,
-    category: 'core',
-    categoryLabel: 'Temel Rozetler',
-    condition: 'Boş Sayısı > Yanlış Sayısı',
-    description: 'Toplam boş sayısı yanlış sayısından fazla olan öğrencilere risk yönetimi ve bilinçli soru çözümü ödülü olarak verilir.',
+    lp: 5,
     bg: 'bg-amber-100',
     text: 'text-amber-900 font-bold',
     border: 'border-amber-200'
   },
   {
     key: 'zirve',
-    label: 'Zirve Koruma',
+    label: 'Zirve',
+    category: 'team',
+    categoryLabel: 'Takım & Baraj',
+    condition: 'Denemede 400 ve üzeri LGS puanı elde etmek',
+    description: 'Kutup Yıldızları lig barajını başarıyla aşan öğrencilere verilir.',
     icon: '👑',
     lp: 15,
-    category: 'core',
-    categoryLabel: 'Temel Rozetler',
-    condition: 'Sınav Puanı ≥ 400',
-    description: 'Deneme sınavında 400 puan ve üzerine çıkarak şampiyonlar ligi standardını yakalayan öğrencilere verilir.',
     bg: 'bg-purple-100',
     text: 'text-purple-900 font-bold',
     border: 'border-purple-200'
@@ -318,12 +352,12 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'ivme',
     label: 'İvme',
+    category: 'progress',
+    categoryLabel: 'Gelişim & İstikrar',
+    condition: 'Önceki sınava göre puanını artırmak',
+    description: 'Sürekli gelişim gösterip net çizgisini yükselten öğrencilere verilir.',
     icon: '🚀',
-    lp: 15,
-    category: 'core',
-    categoryLabel: 'Temel Rozetler',
-    condition: 'Önceki Ortalamaya Göre Puan Artışı ≥ +2',
-    description: 'Önceki deneme ortalamasına göre puanını en az 2 puan artırarak pozitif gelişim ivmesi yakalayan öğrenciye verilir.',
+    lp: 8,
     bg: 'bg-blue-100',
     text: 'text-blue-900 font-bold',
     border: 'border-blue-200'
@@ -331,12 +365,12 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'tamIsabet',
     label: 'Tam İsabet',
+    category: 'academic',
+    categoryLabel: 'Ders Bazlı',
+    condition: 'Herhangi bir branşta 0 yanlış ve en az 1 doğru yapmak',
+    description: 'Dersi hatasız tamamlayan keskin zekalara verilir.',
     icon: '🎯',
     lp: 10,
-    category: 'core',
-    categoryLabel: 'Temel Rozetler',
-    condition: 'Bir Derste 0 Yanlış ve En Az 1 Doğru',
-    description: 'Herhangi bir ders testinde tek bir yanlış dahi yapmadan işaretlediği soruların tamamını doğru yapan öğrenciye ders başına verilir.',
     bg: 'bg-emerald-100',
     text: 'text-emerald-900 font-bold',
     border: 'border-emerald-200'
@@ -344,13 +378,12 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'kirmiziKart',
     label: 'Kırmızı Kart',
+    category: 'special',
+    categoryLabel: 'Özel & Efsanevi',
+    condition: 'Sınavda yanlış sayısı doğru sayısından fazla olmak',
+    description: 'Çok fazla tahminde bulunarak net kaybı yaşayan öğrencilere uyarı amaçlı verilir.',
     icon: '🟥',
-    lp: -15,
-    category: 'core',
-    categoryLabel: 'Temel Rozetler',
-    teamRestriction: 'Kutup Yıldızları',
-    condition: 'Kutup Yıldızlarında 15 ve Üzeri Yanlış',
-    description: 'Zirve ligindeki Kutup Yıldızları takımında dikkatsiz çözümler sonucu 15 veya daha fazla yanlış yapan öğrenciye verilen -15 LP ceza kartıdır.',
+    lp: -10,
     bg: 'bg-rose-100',
     text: 'text-rose-900 font-bold',
     border: 'border-rose-200'
@@ -358,26 +391,30 @@ export const ALL_BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'takimRuhu',
     label: 'Takım Ruhu',
+    category: 'team',
+    categoryLabel: 'Takım & Baraj',
+    condition: 'Takım arkadaşlarıyla ortak çalışma ve koçluk hedefini tamamlamak',
+    description: 'Akran mentörlüğü ve dayanışmayla takım ortalamasını yükselten öğrencilere verilir.',
     icon: '🤝',
-    lp: 20,
-    category: 'core',
-    categoryLabel: 'Temel Rozetler',
-    condition: 'Takım Dayanışması ve Ortalamaya Katkı',
-    description: 'Lig içerisinde takımının ortalama puanını yukarı taşıyan ve lig katılımını aksatmayan öğrencilere takdir amaçlı verilir.',
+    lp: 8,
     bg: 'bg-teal-100',
     text: 'text-teal-900 font-bold',
     border: 'border-teal-200'
   }
 ];
 
-export const BADGE_MAP_BY_KEY: Record<string, BadgeDefinition> = ALL_BADGE_DEFINITIONS.reduce((acc, b) => {
-  acc[b.key] = b;
-  return acc;
-}, {} as Record<string, BadgeDefinition>);
+export function getBadgeDefinition(keyOrLabel: string): BadgeDefinition | undefined {
+  if (!keyOrLabel) return undefined;
+  const direct = ALL_BADGE_DEFINITIONS.find(b => b.key === keyOrLabel || b.label === keyOrLabel);
+  if (direct) return direct;
 
-export function normalizeBadgeKey(rawKey: string): string | null {
-  if (!rawKey) return null;
-  const k = rawKey.toLowerCase().replace(/[\s\.\-_]+/g, '');
+  const normalized = normalizeBadgeKey(keyOrLabel);
+  return ALL_BADGE_DEFINITIONS.find(b => b.key === normalized || normalizeBadgeKey(b.label) === normalized);
+}
+
+export function normalizeBadgeKey(rawKey: string): string {
+  if (!rawKey) return '';
+  const k = normalizeTurkish(rawKey).toLowerCase().replace(/[\s\.\-_]+/g, '');
   if (k.includes('lgsfatih')) return 'lgsFatihi';
   if (k.includes('ankakus')) return 'ankaKusu';
   if (k.includes('zirvebekcisi')) return 'zirveBekcisi';
@@ -403,38 +440,5 @@ export function normalizeBadgeKey(rawKey: string): string | null {
   if (k.includes('tamisabet')) return 'tamIsabet';
   if (k.includes('kirmizikart')) return 'kirmiziKart';
   if (k.includes('takimruhu')) return 'takimRuhu';
-  return null;
+  return k;
 }
-
-export function getBadgeDefinition(rawKey: string): BadgeDefinition | undefined {
-  const normKey = normalizeBadgeKey(rawKey) || rawKey;
-  return BADGE_MAP_BY_KEY[normKey];
-}
-
-export const BADGE_POINTS: Record<string, number> = {
-  lgsFatihi: 200,
-  ankaKusu: 100,
-  zirveBekcisi: 30,
-  ivmeSampiyonu: 30,
-  barajYikici: 30,
-  stratejiMuhendisi: 40,
-  istikrarElcisi: 50,
-  sozelSovalyesi: 15,
-  sayisalKalesi: 20,
-  matematikUyanisi: 20,
-  dengeCambazi: 15,
-  keskinNisanci: 20,
-  temelAtici: 15,
-  filozof: 30,
-  newton: 30,
-  pisagor: 50,
-  uyuyanDev: 50,
-  sabirTasi: 40,
-  yinYang: 30,
-  kalkan: 20,
-  zirve: 15,
-  ivme: 15,
-  tamIsabet: 10,
-  kirmiziKart: -15,
-  takimRuhu: 20
-};

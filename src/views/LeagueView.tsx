@@ -3,7 +3,7 @@ import { useAppContext } from '../context/AppContext';
 import { 
   Trophy, TrendingUp, Shield, Crown, ArrowUpRight, ArrowDownRight, 
   Info, X, BookOpen, ChevronDown, Search, Filter, Sparkles, Flame,
-  Award, Medal, Users, Calendar, CheckCircle2, ChevronRight, UserCheck,
+  Award, Users, Calendar, CheckCircle2, ChevronRight, UserCheck,
   ChevronLeft, Printer, RefreshCw, Star, Layers, ArrowRight
 } from 'lucide-react';
 import { determineLeagueTeam, calculateAtaLigPoints, parseDate, normalizeTurkish } from '../lib/utils';
@@ -55,7 +55,6 @@ export const LeagueView = () => {
   // Dropdown states
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const [isGradeDropdownOpen, setIsGradeDropdownOpen] = useState(false);
-  const [isTeamFilterOpen, setIsTeamFilterOpen] = useState(false);
   
   // Tactics modal state
   const [activeTacticsMonth, setActiveTacticsMonth] = useState<number>(0);
@@ -764,31 +763,21 @@ export const LeagueView = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <button
-              onClick={() => setShowBadgesGuideModal(true)}
-              title="Tüm Güncel 25 Rozet ve Kazanım Şartları"
-              className="flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/90 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
-            >
-              <Medal className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span className="sm:hidden text-[11px]">Rozetler</span>
-              <span className="hidden sm:inline">25 Rozet Kılavuzu</span>
-            </button>
-
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <button
               onClick={() => setShowTactics(true)}
               title="Aylık Taktikler"
-              className="flex items-center justify-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200/90 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
+              className="flex items-center justify-center gap-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200/90 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
             >
               <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-              <span className="sm:hidden text-[11px]">Taktik</span>
+              <span className="sm:hidden text-xs">Taktikler</span>
               <span className="hidden sm:inline">Aylık Taktikler</span>
             </button>
 
             <button
               onClick={() => setActiveView(activeView === 'dashboard' ? 'rules' : 'dashboard')}
               title="Rozet Rehberi ve Kurallar"
-              className={`flex items-center justify-center gap-1 px-2.5 sm:px-5 py-1.5 sm:py-2.5 rounded-xl transition-all shadow-2xs text-xs font-bold active:scale-95 cursor-pointer shrink-0 ${
+              className={`flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl transition-all shadow-2xs text-xs font-bold active:scale-95 cursor-pointer shrink-0 ${
                 activeView === 'dashboard'
                   ? 'bg-[#151618] hover:bg-black text-white'
                   : 'bg-amber-600 hover:bg-amber-700 text-white'
@@ -797,13 +786,13 @@ export const LeagueView = () => {
               {activeView === 'dashboard' ? (
                 <>
                   <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="sm:hidden text-[11px]">Kurallar</span>
+                  <span className="sm:hidden text-xs">Kurallar</span>
                   <span className="hidden sm:inline">Rozet Rehberi & Kurallar</span>
                 </>
               ) : (
                 <>
                   <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="text-[11px] sm:text-xs">Arena Tablosu</span>
+                  <span className="text-xs">Arena Tablosu</span>
                 </>
               )}
             </button>
@@ -819,8 +808,8 @@ export const LeagueView = () => {
           <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-2xs border border-brand-border/80 flex flex-col gap-3">
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 sm:gap-3">
               
-              {/* Sol: Zaman Aralığı ve Sınıf Dropdownları (Mobilde dikey olarak sıralanır ve tam genişlikte açılır) */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+              {/* Sol: Zaman Aralığı ve Sınıf Dropdownları (Mobilde 2 sütunlu kompakt yan yana, masaüstünde esnek) */}
+              <div className="grid grid-cols-2 sm:flex sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
                 
                 {/* Zaman Aralığı */}
                 <div className="relative w-full sm:w-auto">
@@ -852,7 +841,7 @@ export const LeagueView = () => {
                   {isMonthDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-30" onClick={() => setIsMonthDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 sm:right-auto sm:w-72 mt-1.5 bg-white border border-brand-border/80 rounded-2xl shadow-xl z-40 py-1.5 overflow-y-auto max-h-72 animate-fade-in divide-y divide-brand-border/30">
+                      <div className="absolute left-0 sm:right-auto w-72 max-w-[calc(100vw-2.5rem)] mt-1.5 bg-white border border-brand-border/80 rounded-2xl shadow-xl z-40 py-1.5 overflow-y-auto max-h-72 animate-fade-in divide-y divide-brand-border/30">
                         <button
                           onClick={() => {
                             setSelectedMonth('all');
@@ -946,7 +935,7 @@ export const LeagueView = () => {
                   {isGradeDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-20" onClick={() => setIsGradeDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 sm:right-auto sm:w-56 mt-1.5 bg-white border border-brand-border/80 rounded-2xl shadow-xl z-30 py-1.5 overflow-y-auto max-h-60 animate-fade-in divide-y divide-brand-border/30">
+                      <div className="absolute right-0 sm:left-0 sm:right-auto w-56 max-w-[calc(100vw-2.5rem)] mt-1.5 bg-white border border-brand-border/80 rounded-2xl shadow-xl z-30 py-1.5 overflow-y-auto max-h-60 animate-fade-in divide-y divide-brand-border/30">
                         <button
                           onClick={() => {
                             setSelectedGrade('all');
@@ -1010,39 +999,19 @@ export const LeagueView = () => {
               </div>
             </div>
 
-            {/* Takım Filtreleri - Mobilde tıklanınca açılır yapı, masaüstünde yatay sekmeler */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 pt-2 border-t border-brand-border/40">
-              <div 
-                onClick={() => setIsTeamFilterOpen(!isTeamFilterOpen)}
-                className="w-full sm:w-auto flex items-center justify-between px-3 py-2 sm:p-0 bg-[#FAF9F6] sm:bg-transparent border sm:border-0 border-brand-border/80 rounded-xl cursor-pointer sm:cursor-default transition-all shadow-2xs sm:shadow-none active:scale-[0.99] sm:active:scale-100"
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <Filter className="w-3.5 h-3.5 text-brand-ink/50 shrink-0" />
-                  <span className="text-[11px] font-bold text-brand-ink/50 uppercase tracking-wider">
-                    Takım Filtresi:
-                  </span>
-                  <span className="text-xs font-extrabold text-brand-ink truncate sm:hidden">
-                    {selectedTeamFilter === 'all' && `🏆 Tüm Takımlar (${baseStudents.length})`}
-                    {selectedTeamFilter === 'Kutup Yıldızları' && `⭐ Kutup (${kutup.length})`}
-                    {selectedTeamFilter === 'Sıçrama Ustaları' && `🚀 Sıçrama (${sicrama.length})`}
-                    {selectedTeamFilter === 'Taktik Avcıları' && `🛡️ Taktik (${taktik.length})`}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 sm:hidden shrink-0 ml-1">
-                  <span className="text-[10px] text-brand-ink/40 font-bold">
-                    {isTeamFilterOpen ? 'Kapat' : 'Seç'}
-                  </span>
-                  <ChevronDown className={`w-3.5 h-3.5 text-brand-ink/50 transition-transform duration-200 ${isTeamFilterOpen ? 'rotate-180' : ''}`} />
-                </div>
+            {/* Takım Filtreleri - Mobilde yatay kaydırılabilir butonlar, masaüstünde yatay sekmeler */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-brand-border/40">
+              <div className="hidden sm:flex items-center gap-2 shrink-0">
+                <Filter className="w-3.5 h-3.5 text-brand-ink/50 shrink-0" />
+                <span className="text-[11px] font-bold text-brand-ink/50 uppercase tracking-wider">
+                  Takım Filtresi:
+                </span>
               </div>
               
-              <div className={`${isTeamFilterOpen ? 'flex' : 'hidden'} sm:flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto animate-fade-in`}>
+              <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5 w-full">
                 <button
-                  onClick={() => {
-                    setSelectedTeamFilter('all');
-                    setIsTeamFilterOpen(false);
-                  }}
-                  className={`w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs ${
+                  onClick={() => setSelectedTeamFilter('all')}
+                  className={`flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95 ${
                     selectedTeamFilter === 'all'
                       ? 'bg-[#151618] text-white ring-1 ring-[#151618]'
                       : 'bg-[#FAF9F6] hover:bg-[#F2EFE9] text-brand-ink/70 border border-brand-border/60'
@@ -1060,11 +1029,8 @@ export const LeagueView = () => {
                 </button>
 
                 <button
-                  onClick={() => {
-                    setSelectedTeamFilter('Kutup Yıldızları');
-                    setIsTeamFilterOpen(false);
-                  }}
-                  className={`w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs ${
+                  onClick={() => setSelectedTeamFilter('Kutup Yıldızları')}
+                  className={`flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95 ${
                     selectedTeamFilter === 'Kutup Yıldızları'
                       ? 'bg-amber-500 text-white font-extrabold ring-1 ring-amber-500'
                       : 'bg-amber-50/70 hover:bg-amber-100/70 text-amber-950 border border-amber-200/80'
@@ -1082,11 +1048,8 @@ export const LeagueView = () => {
                 </button>
 
                 <button
-                  onClick={() => {
-                    setSelectedTeamFilter('Sıçrama Ustaları');
-                    setIsTeamFilterOpen(false);
-                  }}
-                  className={`w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs ${
+                  onClick={() => setSelectedTeamFilter('Sıçrama Ustaları')}
+                  className={`flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95 ${
                     selectedTeamFilter === 'Sıçrama Ustaları'
                       ? 'bg-blue-600 text-white font-extrabold ring-1 ring-blue-600'
                       : 'bg-blue-50/70 hover:bg-blue-100/70 text-blue-950 border border-blue-200/80'
@@ -1104,11 +1067,8 @@ export const LeagueView = () => {
                 </button>
 
                 <button
-                  onClick={() => {
-                    setSelectedTeamFilter('Taktik Avcıları');
-                    setIsTeamFilterOpen(false);
-                  }}
-                  className={`w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs ${
+                  onClick={() => setSelectedTeamFilter('Taktik Avcıları')}
+                  className={`flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95 ${
                     selectedTeamFilter === 'Taktik Avcıları'
                       ? 'bg-emerald-600 text-white font-extrabold ring-1 ring-emerald-600'
                       : 'bg-emerald-50/70 hover:bg-emerald-100/70 text-emerald-950 border border-emerald-200/80'
@@ -1126,29 +1086,6 @@ export const LeagueView = () => {
                 </button>
               </div>
             </div>
-
-            {/* 2.1. Aylık Parçalı Arşiv Bilgilendirmesi - Mobilde gizli, masaüstünde görünür */}
-            {selectedMonth !== 'all' && (
-              <div className="hidden sm:flex sm:flex-row sm:items-center justify-between gap-2 text-xs bg-amber-50/70 border border-amber-200/80 rounded-xl px-3.5 py-2.5 text-amber-900 shadow-2xs mt-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-amber-950 flex items-center gap-1.5">
-                    <span>📅</span>
-                    {(() => {
-                      const [y, m] = selectedMonth.split('-');
-                      const mNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
-                      return `${mNames[parseInt(m) - 1]} ${y}`;
-                    })()} Arena Dönemi
-                  </span>
-                  <span className="text-[11px] text-amber-800/80">
-                    ({monthPartition?.examCount || state.exams.filter(e => e.date && parseDate(e.date).getFullYear() === parseInt(selectedMonth.split('-')[0]) && (parseDate(e.date).getMonth() + 1) === parseInt(selectedMonth.split('-')[1])).length} Deneme Sınavı Analizi)
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-100/80 border border-emerald-300/70 px-2.5 py-1 rounded-lg shrink-0">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Parçalı Aylık Arşiv</span>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* 3. Takım Kartları */}
