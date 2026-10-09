@@ -1,41 +1,45 @@
-# Akademi Arena (Lig & Rozetler) Arayüz Performans Optimizasyonu Planı
+# Akademi Arena Performans Optimizasyonu ve JSON Yedek Boyutunu Azaltma Planı
 
-Akademi Arena görünümüne geçişteki kasma, donma ve gecikme problemlerini gidermek için hazırlanan performans ve mimari optimizasyon planı.
-
-## Kullanıcı Tercihleri ve Analiz
-- **Yükleme Yöntemi:** İlk 30 öğrenci gösterilecek, listenin altında **"Daha Fazla Göster"** butonu yer alacak.
-- **Rozet Görünümü:** Öğrencilerin kazandığı tüm rozetler tabloda açık şekilde yan yana gösterilmeye devam edecek.
-- **Kök Neden:** `baseStudents` hesaplamasında her öğrenci için tüm sınavların ve tüm sonuçların iç içe döngülerle (`O(N³)` karmaşıklık) tekrar tekrar taranması ve binlerce metin normalizasyonunun her render döngüsünde çalışması.
+Kullanıcı geri bildirimlerine göre Akademi Arena arayüzündeki kasma/donma sorununu gidermek ve 7,3 MB'lık JSON yedek dosya boyutunu sıfır veri kaybıyla küçültmek için hazırlanan eylem planı.
 
 ---
 
-## Önerilen Değişiklikler
+## 1. Tespit Edilen Nedenler
 
-### 1. Veri Yapısı ve Hesaplama Optimizasyonu (`src/views/LeagueView.tsx`)
-- **İndeksleme (Pre-indexing):**
-  - Sınav sonuçlarını ve her öğrencinin katılım kayıtlarını tek bir geçişte (single-pass) `Map<studentKey, ExamRecord[]>` haritasına aktarma.
-  - `baseStudents` hesaplamasındaki `filter` ve `map` döngülerini iç içe aramalar yerine `O(1)` zaman karmaşıklığına indirme.
-- **İşlevsel Önbellekleme (Memoization Cleanup):**
-  - `uniqueClasses` içindeki iç içe `.find()` aramalarını `Map` haritası ile hızlı eşlemeye dönüştürme.
-  - Ağır seri ve LP hesaplamalarını sadece `state.exams` veya `state.results` değiştiğinde tetikleme.
+### A. Akademi Arena (Lig & Rozetler) Donma Sebepleri
+- **O(N³) Karmaşıklığında Hesaplamalar:** `LeagueView.tsx` bileşeninde `baseStudents` hesaplaması, yüzlerce öğrenci ve onlarca sınav için her render döngüsünde iç içe `.some()`, `.find()`, metin normalizasyonu ve `calculateAtaLigPoints` fonksiyonlarını çalıştırmaktadır.
+- **DOM Şişmesi (DOM Bloat):** Tabloda tüm öğrencilerin (200-400+ öğrenci) tüm rozetleri aynı anda DOM'a basılmakta; ayrıca mobil kartlar da DOM'da gizli (`md:hidden`) olarak fazladan binlerce düğüm oluşturmaktadır.
 
-### 2. Arayüz (DOM) Yükü ve Sayfalama Düzeltmesi
-- **Kademeli Yükleme (Batching / Load More):**
-  - `visibleCount` adında bir state eklenerek varsayılan olarak **30 öğrenci** listelenecek.
-  - Tablonun ve mobil kart listesinin altında şık ve performanslı bir **"Daha Fazla Göster (+30 Öğrenci)"** butonu yer alacak.
-  - Arama terimi, sınıf filtresi, ay seçimi veya takım filtresi değiştiğinde `visibleCount` otomatik olarak 30'a sıfırlanacak.
-- **Gereksiz Render Önleme:**
-  - Açılır menü (dropdown) veya sekme geçişlerinde ağır öğrenci listesi yeniden hesaplanmayacak.
+### B. JSON Yedek Dosyasının 7,3 MB Olma Sebepleri
+- **Biçimlendirme Fazlalığı:** `JSON.stringify(backupData, null, 2)` kullanımı, her bir ders neti ve soru için dosyaya milyonlarca boşluk (` `) ve satır başı (`\n`) karakteri ekleyerek dosya boyutunu 2-3 katına çıkarmaktadır.
+- **Tekrarlayan Boş/Varsayılan Alanlar:** Sonuçlarda ve öğrencilerde sıfır değerli veya boş alanların temizlenmemesi.
 
 ---
 
-## Do Not Disturb / Saklanan Özellikler
-- Öğrencilerin tüm rozetleri tabloda açık ve görsel zenginliği korunarak görünmeye devam edecek.
-- Öğrenci detay modalı ve takım kadro modalı tüm geçmiş ve rozet detaylarını eksiksiz sunmaya devam edecek.
+## 2. Önerilen Değişiklikler
+
+### A. Akademi Arena Arayüz Akıcılığı (`src/views/LeagueView.tsx`)
+1. **Tek Geçişli İndeksleme (Pre-indexing):**
+   - Sınav sonuçları ve öğrenci katılımları `state.exams` üzerinden tek bir geçişte `Map<studentKey, ExamResult[]>` haritasına indekslenecek.
+   - `baseStudents` içindeki iç içe aramalar doğrudan `O(1)` hızında harita sorgularına dönüştürülecek.
+2. **Kademeli Yükleme (Sayfalama / Load More):**
+   - Tabloda ve mobil kart listesinde ilk etapta **30 öğrenci** listelenecek.
+   - Listenin altına kullanıcı deneyimini bozmayan, şık bir **"Daha Fazla Göster (+30 Öğrenci)"** butonu eklenecek.
+   - Filtreler (arama, sınıf, ay, takım) değiştiğinde sayaç otomatik olarak 30'a sıfırlanacak.
+3. **Rozetlerin Korunması:**
+   - Kullanıcının önceki tercihine uygun olarak kazanılan tüm rozetler tabloda açık ve tam olarak gösterilmeye devam edecek.
+
+### B. JSON Yedek Boyutunun Küçültülmesi (`src/lib/backupOptimizer.ts` ve `src/components/Layout.tsx`)
+1. **Standart Minify Edilmiş Çıktı:**
+   - Yedek indirme işleminde `JSON.stringify(backupData, null, 2)` yerine standart sıkıştırılmış (boşluksuz) `JSON.stringify(backupData)` formatı kullanılacak. Bu tek başına 7,3 MB'lık dosyayı yaklaşık **2,8 - 3,2 MB** seviyesine (yarıdan daha aza) indirecektir.
+2. **Sıfır Veri Kayıplı Alan Budama (Lossless Pruning):**
+   - `createOptimizedBackupPayload` fonksiyonunda sıfır değerli/tanımsız alanlar temizlenecek, ancak öğrencinin netleri, puanları, optik cevapları ve rozetleri eksiksiz korunacak.
+3. **Geri Yükleme Uyumluluğu:**
+   - İçe aktarma (`handleRestore` ve `restoreBackup`) hem yeni minify edilmiş JSON hem de eski biçimlendirilmiş JSON dosyalarını sorunsuz okumaya devam edecek.
 
 ---
 
-## Doğrulama Planı
-1. `compile_applet` ile projenin derleme durumunu doğrulama.
-2. `lint_applet` ile TypeScript ve kod standartlarını denetleme.
-3. Arayüz geçiş hızı ve donmasız 60fps akıcılığı kontrol etme.
+## 3. Doğrulama ve Test Adımları
+1. **Derleme ve Tip Denetimi:** `compile_applet` ve `lint_applet` çalıştırılarak TypeScript hatasızlığı teyit edilecek.
+2. **Performans Denetimi:** Akademi Arena sayfasına geçiş hızının ve filtreleme akıcılığının 60fps düzeyinde olduğu doğrulanacak.
+3. **Yedek Doğrulama:** Üretilen minify JSON dosyasının veri kaybı olmadan oluşturulduğu ve başarıyla geri yüklenebildiği kontrol edilecek.

@@ -232,7 +232,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   const handleBackup = () => {
     if (userRole !== 'admin') return;
     const backupData = createOptimizedBackupPayload(state);
-    const stateStr = JSON.stringify(backupData, null, 2);
+    const stateStr = JSON.stringify(backupData);
     const blob = new Blob([stateStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

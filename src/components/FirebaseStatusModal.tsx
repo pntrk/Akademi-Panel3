@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Database, CheckCircle2, HardDrive, Download, RefreshCw, X, Shield, Info, ArrowUpRight, Cloud, FileJson, Sparkles } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { firebaseConfig, auth, FIREBASE_STORAGE_ACTIVATE_URL, CLOUD_STORAGE_SNAPSHOT_PATH } from '../lib/firebase';
+import { createOptimizedBackupPayload } from '../lib/backupOptimizer';
 
 interface FirebaseStatusModalProps {
   isOpen: boolean;
@@ -57,8 +58,8 @@ export const FirebaseStatusModal: React.FC<FirebaseStatusModalProps> = ({ isOpen
   };
 
   const handleDownloadSnapshot = () => {
-    const cleanState = JSON.parse(JSON.stringify(state));
-    const blob = new Blob([JSON.stringify(cleanState, null, 2)], { type: 'application/json' });
+    const backupData = createOptimizedBackupPayload(state);
+    const blob = new Blob([JSON.stringify(backupData)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -70,30 +71,14 @@ export const FirebaseStatusModal: React.FC<FirebaseStatusModalProps> = ({ isOpen
 
     setFeedback({
       type: 'success',
-      message: 'akademi_data.json snapshot dosyası başarıyla cihazınıza indirildi.'
+      message: 'akademi_data.json optimize snapshot dosyası başarıyla cihazınıza indirildi.'
     });
   };
 
   const handleDownloadBackup = () => {
-    const backupData = {
-      appName: 'Akademi Panel 2',
-      version: '2.0',
-      timestamp: new Date().toISOString(),
-      school: 'Kırklareli Atatürk Ortaokulu',
-      schoolId: 'main',
-      students: state.students || [],
-      exams: state.exams || [],
-      results: state.results || [],
-      budget: state.budget || { incomes: [], expenses: [], debts: [] },
-      examHalls: state.examHalls || [],
-      leagueMentors: state.leagueMentors || {},
-      leagueTeamPoints: state.leagueTeamPoints || {},
-      approvedTransfers: state.approvedTransfers || [],
-      admins: state.admins || ['kirklareliataturkortaokulu@gmail.com', 'bahadirkumcu@gmail.com'],
-      teachers: state.teachers || []
-    };
+    const backupData = createOptimizedBackupPayload(state);
 
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(backupData)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -105,7 +90,7 @@ export const FirebaseStatusModal: React.FC<FirebaseStatusModalProps> = ({ isOpen
 
     setFeedback({
       type: 'success',
-      message: 'Tam sistem yedeği JSON dosyası olarak cihazınıza indirildi.'
+      message: 'Tam optimize sistem yedeği JSON dosyası olarak cihazınıza indirildi.'
     });
   };
 

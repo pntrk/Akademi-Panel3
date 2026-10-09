@@ -8,7 +8,7 @@ import {
   firebaseConfig, 
   fetchModularSchoolState 
 } from './firebase';
-import { optimizeExamResult } from './backupOptimizer';
+import { optimizeExamResult, createOptimizedBackupPayload } from './backupOptimizer';
 
 export interface DriveBackupItem {
   id: string;
@@ -63,7 +63,7 @@ export const uploadBackupToGoogleDrive = async (
       JSON.stringify(metadata) +
       delimiter +
       'Content-Type: application/json\r\n\r\n' +
-      JSON.stringify(backupPayload, null, 2) +
+      JSON.stringify(backupPayload) +
       closeDelimiter;
 
     const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,createdTime,size&supportsAllDrives=true', {
@@ -676,10 +676,10 @@ export const syncLiveMasterToGoogleDrive = async (
         resultCount: liveState.results?.length || 0,
         hallCount: liveState.examHalls?.length || 0,
       },
-      data: liveState
+      data: createOptimizedBackupPayload(liveState)
     };
 
-    const payloadJson = JSON.stringify(payload, null, 2);
+    const payloadJson = JSON.stringify(payload);
 
     // If an existing master file was found, ALWAYS update in-place (PATCH)
     if (existing?.id) {

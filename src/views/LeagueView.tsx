@@ -31,6 +31,14 @@ export const LeagueView = () => {
   });
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Pagination / Load More state for leaderboard (starts at 30)
+  const [visibleCount, setVisibleCount] = useState<number>(30);
+
+  // Reset pagination whenever filters or search query change
+  useEffect(() => {
+    setVisibleCount(30);
+  }, [selectedGrade, selectedMonth, selectedTeamFilter, searchQuery]);
   
   // Dropdown states
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
@@ -204,37 +212,107 @@ export const LeagueView = () => {
     });
   }, [uniqueClasses]);
 
+  // 1. Pre-index exam participations by student in a single pass O(E * R)
+  // This turns what was O(S * E * R) nested scans into instant O(1) map lookups.
+  const studentExamsMap = useMemo(() => {
+    const map = new Map<string, Array<{ examId: string; name: string; date: string; score: number; details: any; examRes: any }>>();
+
+    const pushItem = (key: string, item: any) => {
+      if (!key) return;
+      let list = map.get(key);
+      if (!list) {
+        list = [];
+        map.set(key, list);
+      }
+      if (!list.some(e => e.examId === item.examId)) {
+        list.push(item);
+      }
+    };
+
+    (state.exams || []).forEach(exam => {
+      (exam.results || []).forEach((r: any) => {
+        const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
+        const rId = r.studentId || r.id;
+        const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
+
+        const score = Number(
+          r.evaluatedScore?.total?.lgsScore ??
+          r.lgsScore ??
+          r.evaluatedScore?.total?.net ??
+          r.net ??
+          r.average ??
+          0
+        );
+
+        const details = r.evaluatedScore?.subjectScores || r.scores;
+
+        const item = {
+          examId: String(exam.id),
+          name: exam.name,
+          date: exam.date,
+          score,
+          details,
+          examRes: r
+        };
+
+        if (rNo > 0) pushItem(`no_${rNo}`, item);
+        if (rId) pushItem(`id_${rId}`, item);
+        if (rNameNorm) pushItem(`name_${rNameNorm}`, item);
+      });
+    });
+
+    (state.results || []).forEach((r: any) => {
+      const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
+      const rId = r.studentId || r.id;
+      const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
+
+      if (r.scores && typeof r.scores === 'object') {
+        Object.entries(r.scores).forEach(([examKey, scoreVal]) => {
+          if (typeof scoreVal === 'number' && scoreVal > 0) {
+            const item = {
+              examId: examKey,
+              name: examKey,
+              date: r.date || '',
+              score: Number(scoreVal),
+              details: r.details?.[examKey]?.lessons || r.details?.lessons || r.evaluatedScore?.subjectScores,
+              examRes: r
+            };
+            if (rNo > 0) pushItem(`no_${rNo}`, item);
+            if (rId) pushItem(`id_${rId}`, item);
+            if (rNameNorm) pushItem(`name_${rNameNorm}`, item);
+          }
+        });
+      }
+    });
+
+    return map;
+  }, [state.exams, state.results]);
+
   // Base list of students filtered by grade and monthly calculation
   const baseStudents = useMemo(() => {
-    return state.students.filter(s => {
+    return state.students.map(s => {
       const sNo = Number(s.no) || 0;
+      const sId = s.id ? String(s.id) : '';
       const sNameNorm = s.name ? normalizeTurkish(s.name).trim().toLowerCase() : '';
 
-      // 1. Sınavların kendi results dizisinde arama (Birincil kaynak)
-      const hasExamInExamObj = (state.exams || []).some(e => 
-        (e.results || []).some((r: any) => {
-          const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
-          if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
-          if (s.id && r.studentId && s.id === r.studentId) return true;
-          const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
-          return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
-        })
-      );
+      // Instant O(1) map queries
+      const fromNo = sNo > 0 ? (studentExamsMap.get(`no_${sNo}`) || []) : [];
+      const fromId = sId ? (studentExamsMap.get(`id_${sId}`) || []) : [];
+      const fromName = sNameNorm ? (studentExamsMap.get(`name_${sNameNorm}`) || []) : [];
 
-      // 2. Global sonuç listesinde arama (İkincil kaynak)
-      const hasExamInGlobal = (state.results || []).some((r: any) => {
-        const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
-        const matchesStudent = (sNo > 0 && rNo > 0 && rNo === sNo) ||
-          (s.id && r.studentId && s.id === r.studentId) ||
-          (sNameNorm && (r.name || r.studentName) && normalizeTurkish(r.name || r.studentName).trim().toLowerCase() === sNameNorm);
-        if (!matchesStudent) return false;
-        const hasScores = r.scores && Object.values(r.scores).some((val: any) => typeof val === 'number' && val > 0);
-        return Boolean(hasScores || (r.net && r.net > 0) || (r.lgsScore && r.lgsScore > 0));
-      });
+      const examListMap = new Map<string, any>();
+      for (const e of [...fromNo, ...fromId, ...fromName]) {
+        if (!examListMap.has(e.examId)) {
+          examListMap.set(e.examId, e);
+        }
+      }
+      const studentExams = Array.from(examListMap.values());
+      studentExams.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
 
       const hasLeaguePoints = Boolean((s.leaguePoints && s.leaguePoints > 0) || (s as any).monthlyLeagueData);
-      const hasExams = hasExamInExamObj || hasExamInGlobal || hasLeaguePoints;
+      const hasExams = studentExams.length > 0 || hasLeaguePoints;
 
+      // Grade filtering check
       let matchesGrade = true;
       if (selectedGrade !== 'all') {
         const lvl = getGradeLevel(s.className);
@@ -244,69 +322,11 @@ export const LeagueView = () => {
           matchesGrade = lvl === selectedGrade;
         }
       }
-      return matchesGrade && hasExams;
-    }).map(s => {
-      const sNo = Number(s.no) || 0;
-      const sNameNorm = s.name ? normalizeTurkish(s.name).trim().toLowerCase() : '';
 
-      // Öğrencinin katıldığı tüm sınavları eksiksiz tespit et
-      const studentExams = (state.exams || []).map(exam => {
-        const examRes = (exam.results || []).find((r: any) => {
-          const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
-          if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
-          if (s.id && r.studentId && s.id === r.studentId) return true;
-          const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
-          return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
-        });
+      if (!matchesGrade || !hasExams) return null;
 
-        const globalRes = (state.results || []).find((r: any) => {
-          const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
-          if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
-          if (s.id && r.studentId && s.id === r.studentId) return true;
-          const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
-          return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
-        });
-
-        const scoreInGlobal = globalRes?.scores 
-          ? (globalRes.scores[String(exam.id)] ?? globalRes.scores[exam.name]) 
-          : undefined;
-
-        const participated = Boolean(examRes) || (scoreInGlobal !== undefined && scoreInGlobal > 0);
-        if (!participated) return null;
-
-        const score = Number(
-          examRes?.evaluatedScore?.total?.lgsScore ?? 
-          examRes?.lgsScore ?? 
-          examRes?.evaluatedScore?.total?.net ?? 
-          examRes?.net ?? 
-          examRes?.average ?? 
-          scoreInGlobal ?? 
-          0
-        );
-
-        const details = examRes?.evaluatedScore?.subjectScores || 
-          examRes?.scores || 
-          globalRes?.details?.[exam.name]?.lessons || 
-          globalRes?.details?.lessons || 
-          globalRes?.evaluatedScore?.subjectScores;
-
-        return {
-          examId: exam.id,
-          name: exam.name,
-          date: exam.date,
-          score,
-          details,
-          examRes
-        };
-      }).filter(Boolean) as { examId: string; name: string; date: string; score: number; details: any; examRes: any }[];
-
-      studentExams.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
-
-      // Sınav geçmişi varsa rozetleri sınavlardan topla; henüz sınav kaydı yoksa kütükteki mevcut rozetleri koru
-      const allStudentBadges: Record<string, number> = {};
-      if (studentExams.length === 0 && s.badges) {
-        Object.assign(allStudentBadges, s.badges);
-      }
+      // Kütükteki mevcut rozetleri başlangıç olarak al
+      const allStudentBadges: Record<string, number> = { ...(s.badges || {}) };
       let calculatedTotalLP = 0;
       const monthlyLPAccum: Record<string, number> = {};
       const monthlyBadgesAccum: Record<string, Record<string, number>> = {};
@@ -416,8 +436,8 @@ export const LeagueView = () => {
         displayBadges,
         examCount: studentExams.length 
       };
-    }).sort((a, b) => (b.displayPoints || 0) - (a.displayPoints || 0));
-  }, [state.students, state.results, state.exams, selectedGrade, selectedMonth, state.arenaMonthlyData]);
+    }).filter(Boolean).sort((a: any, b: any) => (b.displayPoints || 0) - (a.displayPoints || 0)) as any[];
+  }, [state.students, studentExamsMap, selectedGrade, selectedMonth, state.arenaMonthlyData]);
 
   // Filtered by search and team tab
   const filteredStudents = useMemo(() => {
@@ -431,6 +451,11 @@ export const LeagueView = () => {
       return matchesTeam && matchesSearch;
     });
   }, [baseStudents, selectedTeamFilter, searchQuery]);
+
+  // Paginated students slice for ultra-fast rendering (30 initial items)
+  const displayedStudents = useMemo(() => {
+    return filteredStudents.slice(0, visibleCount);
+  }, [filteredStudents, visibleCount]);
 
   // Team arrays for stats
   const kutup = useMemo(() => baseStudents.filter(s => s.leagueTeam === 'Kutup Yıldızları'), [baseStudents]);
@@ -846,7 +871,7 @@ export const LeagueView = () => {
                     <div className="flex items-center gap-2 truncate">
                       <Layers className="w-3.5 h-3.5 text-brand-ink/50 shrink-0" />
                       <span className="truncate">
-                        {selectedGrade === 'all' ? '📚 Tüm Sınıflar' : selectedGrade === 'Diğer' ? '🎒 Diğer Sınıflar' : `🎓 ${selectedGrade}. Sınıflar`}
+                        {selectedGrade === 'all' ? '������ Tüm Sınıflar' : selectedGrade === 'Diğer' ? '🎒 Diğer Sınıflar' : `🎓 ${selectedGrade}. Sınıflar`}
                       </span>
                     </div>
                     <ChevronDown className={`w-3.5 h-3.5 text-brand-ink/50 transition-transform duration-200 shrink-0 ${isGradeDropdownOpen ? 'rotate-180' : ''}`} />
@@ -1500,6 +1525,11 @@ export const LeagueView = () => {
                 </div>
                 <p className="text-xs text-brand-ink/50 mt-0.5">
                   {selectedMonth === 'all' ? "Tüm zamanların toplam LP sıralaması" : `${selectedMonthLabel} dönemi performans sıralaması`} • Toplam {filteredStudents.length} öğrenci
+                  {filteredStudents.length > visibleCount && (
+                    <span className="ml-1 text-amber-800 font-bold">
+                      ({Math.min(visibleCount, filteredStudents.length)} gösteriliyor)
+                    </span>
+                  )}
                 </p>
               </div>
 
@@ -1525,7 +1555,7 @@ export const LeagueView = () => {
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-brand-border/40">
-                  {filteredStudents.map((s, idx) => (
+                  {displayedStudents.map((s, idx) => (
                     <tr 
                       key={s.id ? `table-${s.id}` : `table-${s.no || (s as any).name}-${idx}`} 
                       className="hover:bg-[#FAF9F6] cursor-pointer transition-colors group"
@@ -1599,7 +1629,7 @@ export const LeagueView = () => {
 
             {/* Mobile Modern Cards View - Touch-optimized & Team Color-Coded */}
             <div className="md:hidden flex flex-col gap-2">
-              {filteredStudents.map((s, idx) => {
+              {displayedStudents.map((s, idx) => {
                 const lpPoints = (s.displayPoints !== undefined ? s.displayPoints : s.leaguePoints) || 0;
                 const teamBorder = s.leagueTeam === 'Kutup Yıldızları' ? 'border-l-4 border-l-amber-500' :
                   s.leagueTeam === 'Sıçrama Ustaları' ? 'border-l-4 border-l-blue-500' :
@@ -1675,6 +1705,29 @@ export const LeagueView = () => {
                 </div>
               )}
             </div>
+
+            {/* Pagination / Load More Bar */}
+            {filteredStudents.length > visibleCount && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 pb-1 border-t border-brand-border/50 mt-3">
+                <p className="text-xs text-brand-ink/60 font-medium">
+                  Toplam <span className="font-bold text-brand-ink">{filteredStudents.length}</span> öğrenciden <span className="font-bold text-brand-ink">{Math.min(visibleCount, filteredStudents.length)}</span> tanesi gösteriliyor.
+                </p>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => setVisibleCount(prev => prev + 30)}
+                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm hover:shadow transition-all active:scale-95 cursor-pointer"
+                  >
+                    <span>Daha Fazla Göster (+30 Öğrenci)</span>
+                  </button>
+                  <button
+                    onClick={() => setVisibleCount(filteredStudents.length)}
+                    className="inline-flex items-center justify-center px-3 py-2 rounded-xl bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    <span>Tümünü Göster</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 7. Takım Detay Modalı */}
@@ -2042,62 +2095,18 @@ export const LeagueView = () => {
             const sNo = selectedStudent.no !== undefined ? Number(selectedStudent.no) : 0;
             const sNameNorm = selectedStudent.name ? normalizeTurkish(selectedStudent.name).trim().toLowerCase() : '';
 
-            // 1. Sınavların kendi altındaki results listeleri ve global results üzerinden öğrencinin girdiği tüm sınavları bul
-            const allHistory = (state.exams || [])
-              .map(exam => {
-                // Sınavın kendi sonuçlarında ara (Birincil kaynak)
-                const examRes = (exam.results || []).find((r: any) => {
-                  const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
-                  if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
-                  if (selectedStudent.id && r.studentId && selectedStudent.id === r.studentId) return true;
-                  const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
-                  return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
-                });
+            // 1. Öğrencinin tüm sınavlarını pre-indexed haritadan anında O(1) hızında getir
+            const fromNo = sNo > 0 ? (studentExamsMap.get(`no_${sNo}`) || []) : [];
+            const fromId = selectedStudent.id ? (studentExamsMap.get(`id_${selectedStudent.id}`) || []) : [];
+            const fromName = sNameNorm ? (studentExamsMap.get(`name_${sNameNorm}`) || []) : [];
 
-                // Global state.results içinde ara (İkincil kaynak)
-                const globalRes = (state.results || []).find((r: any) => {
-                  const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : 0);
-                  if (sNo > 0 && rNo > 0 && rNo === sNo) return true;
-                  if (selectedStudent.id && r.studentId && selectedStudent.id === r.studentId) return true;
-                  const rNameNorm = (r.name || r.studentName) ? normalizeTurkish(r.name || r.studentName).trim().toLowerCase() : '';
-                  return Boolean(sNameNorm && rNameNorm && sNameNorm === rNameNorm);
-                });
-
-                const scoreInGlobal = globalRes?.scores 
-                  ? (globalRes.scores[String(exam.id)] ?? globalRes.scores[exam.name]) 
-                  : undefined;
-
-                const participated = Boolean(examRes) || (scoreInGlobal !== undefined && scoreInGlobal > 0);
-                if (!participated) return null;
-
-                const score = Number(
-                  examRes?.evaluatedScore?.total?.lgsScore ?? 
-                  examRes?.lgsScore ?? 
-                  examRes?.evaluatedScore?.total?.net ?? 
-                  examRes?.net ?? 
-                  examRes?.average ?? 
-                  scoreInGlobal ?? 
-                  0
-                );
-
-                const details = 
-                  examRes?.evaluatedScore?.subjectScores || 
-                  examRes?.scores || 
-                  globalRes?.details?.[exam.name]?.lessons || 
-                  globalRes?.details?.lessons || 
-                  globalRes?.evaluatedScore?.subjectScores;
-
-                return {
-                  examId: exam.id,
-                  name: exam.name,
-                  date: exam.date,
-                  score,
-                  details,
-                  examRes
-                };
-              })
-              .filter(Boolean) as { examId: string; name: string; date: string; score: number; details: any; examRes: any }[];
-
+            const examListMap = new Map<string, any>();
+            for (const e of [...fromNo, ...fromId, ...fromName]) {
+              if (!examListMap.has(e.examId)) {
+                examListMap.set(e.examId, e);
+              }
+            }
+            const allHistory = Array.from(examListMap.values());
             allHistory.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
               
             const rawHistory = allHistory.map((h, i) => {
@@ -2175,6 +2184,15 @@ export const LeagueView = () => {
 
             // Öğrencinin kazandığı tüm rozetleri birleştir (Kütük genel lig rozetleri + sınav bazlı rozetler)
             const aggregatedBadges: Record<string, number> = { ...(selectedStudent.allBadges || selectedStudent.badges || {}) };
+            rawHistory.forEach(h => {
+              if (h.badgeCounts) {
+                Object.entries(h.badgeCounts).forEach(([k, count]: [string, any]) => {
+                  if (typeof count === 'number' && count > 0) {
+                    aggregatedBadges[k] = (aggregatedBadges[k] || 0) + count;
+                  }
+                });
+              }
+            });
             const totalBadgesCount = Object.values(aggregatedBadges).reduce((sum, c) => sum + (typeof c === 'number' && c > 0 ? c : 0), 0);
 
             const studentRank = baseStudents.findIndex(s => s.no === selectedStudent.no) + 1;

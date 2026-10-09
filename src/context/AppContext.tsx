@@ -1142,8 +1142,14 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         } catch {}
       }
 
-      // Trigger physical browser JSON file download
-      const jsonContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent, null, 2);
+      // Trigger physical browser JSON file download (strictly minified without whitespace bloat)
+      let jsonContent: string;
+      try {
+        const parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+        jsonContent = JSON.stringify(parsed);
+      } catch {
+        jsonContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
+      }
       const blob = new Blob([jsonContent], { type: 'application/json' });
       const blobUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
