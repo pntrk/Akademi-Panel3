@@ -1444,25 +1444,44 @@ export const ExamsView = () => {
   const originalExamName = editingExam ? editingExam.name : '';
   const examResults = useMemo(() => {
     if (!originalExamName) return [];
-    return state.results.filter(r => r.scores[originalExamName] !== undefined);
-  }, [state.results, originalExamName]);
+    return state.results.filter(r => {
+      if (!r || !r.scores) return false;
+      return (
+        r.scores[originalExamName] !== undefined ||
+        (editingExam && r.scores[String(editingExam.id)] !== undefined)
+      );
+    });
+  }, [state.results, originalExamName, editingExam]);
 
   // Calculate stats for these results
   const resultStats = useMemo(() => {
     if (examResults.length === 0) return null;
-    const scores = examResults.map(r => r.scores[originalExamName]);
-    const max = Math.max(...scores);
-    const min = Math.min(...scores);
+    const scores = examResults.map(r => {
+      if (!r || !r.scores) return 0;
+      if (r.scores[originalExamName] !== undefined) {
+        const val = typeof r.scores[originalExamName] === 'object' ? (r.scores[originalExamName]?.score ?? r.scores[originalExamName]?.net ?? 0) : r.scores[originalExamName];
+        return typeof val === 'number' ? val : (parseFloat(val) || 0);
+      }
+      if (editingExam && r.scores[String(editingExam.id)] !== undefined) {
+        const val = typeof r.scores[String(editingExam.id)] === 'object' ? (r.scores[String(editingExam.id)]?.score ?? r.scores[String(editingExam.id)]?.net ?? 0) : r.scores[String(editingExam.id)];
+        return typeof val === 'number' ? val : (parseFloat(val) || 0);
+      }
+      return 0;
+    });
+    const max = scores.length > 0 ? Math.max(...scores) : 0;
+    const min = scores.length > 0 ? Math.min(...scores) : 0;
     const sum = scores.reduce((a, b) => a + b, 0);
-    const avg = sum / examResults.length;
+    const avg = examResults.length > 0 ? sum / examResults.length : 0;
     return { count: examResults.length, max, min, avg };
-  }, [examResults, originalExamName]);
+  }, [examResults, originalExamName, editingExam]);
 
   // Filter exam results list inside modal
   const filteredExamResults = useMemo(() => {
     return examResults.filter(r => {
       const query = normalizeForSearch(resultsSearchQuery);
-      return normalizeForSearch(r.studentName).includes(query) || r.studentNo.toString().includes(resultsSearchQuery);
+      const studentName = r.studentName || r.name || '';
+      const studentNo = r.studentNo !== undefined ? r.studentNo : (r.no !== undefined ? r.no : '');
+      return normalizeForSearch(studentName).includes(query) || studentNo.toString().includes(resultsSearchQuery);
     });
   }, [examResults, resultsSearchQuery]);
 
@@ -1472,8 +1491,8 @@ export const ExamsView = () => {
     return state.students.filter(s => {
       const studentGrade = s.className ? (s.className.trim().match(/^(\d+)/)?.[1] || 'Diğer') : 'Diğer';
       return selectedClasses.includes(studentGrade) && 
-             !examResults.some(r => r.studentNo === s.no);
-    }).sort((a, b) => a.no - b.no);
+             !examResults.some(r => (r.studentNo !== undefined && r.studentNo === s.no) || (r.no !== undefined && String(r.no) === String(s.no)));
+    }).sort((a, b) => (a.no || 0) - (b.no || 0));
   }, [state.students, selectedClasses, examResults]);
 
   // Import mock exams list from main dashboard Excel
@@ -1568,7 +1587,7 @@ export const ExamsView = () => {
     const updatedResults = state.results.map(r => {
       let scoresChanged = false;
       let detailsChanged = false;
-      const newScores = { ...r.scores };
+      const newScores = { ...(r.scores || {}) };
       let newDetails = r.details ? { ...r.details } : undefined;
 
       if (newScores[oldName] !== undefined) {
@@ -1650,7 +1669,7 @@ export const ExamsView = () => {
     const score = parseFloat(newScoreStr) || 0;
     setResults(state.results.map(r => {
       if (r.id === resultId) {
-        const newScores = { ...r.scores, [originalExamName]: score };
+        const newScores = { ...(r.scores || {}), [originalExamName]: score };
         const values = Object.values(newScores) as number[];
         const average = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
         return { ...r, scores: newScores, average };
@@ -1663,12 +1682,18 @@ export const ExamsView = () => {
   const handleDeleteScoreInModal = (resultId: string) => {
     setResults(state.results.map(r => {
       if (r.id === resultId) {
-        const newScores = { ...r.scores };
+        const newScores = { ...(r.scores || {}) };
         delete newScores[originalExamName];
+        if (editingExam) {
+          delete newScores[String(editingExam.id)];
+        }
         
         const newDetails = r.details ? { ...r.details } : undefined;
         if (newDetails) {
           delete newDetails[originalExamName];
+          if (editingExam) {
+            delete newDetails[String(editingExam.id)];
+          }
         }
 
         const values = Object.values(newScores) as number[];
@@ -1699,7 +1724,7 @@ export const ExamsView = () => {
 
     if (existingResultIndex !== -1) {
       const r = updatedResults[existingResultIndex];
-      const newScores = { ...r.scores, [originalExamName]: scoreVal };
+      const newScores = { ...(r.scores || {}), [originalExamName]: scoreVal };
       const values = Object.values(newScores) as number[];
       const average = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
 
@@ -1781,7 +1806,7 @@ export const ExamsView = () => {
 
           if (existingResultIndex !== -1) {
             const r = updatedResults[existingResultIndex];
-            const newScores = { ...r.scores, [examNameKey]: score };
+            const newScores = { ...(r.scores || {}), [examNameKey]: score };
             const values = Object.values(newScores) as number[];
             const average = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
 
