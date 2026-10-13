@@ -5,7 +5,7 @@ import {
   LogOut, Shield, Download, Globe, HardDriveDownload, Cloud, 
   Bell, Camera, Printer, TrendingUp, HelpCircle, ChevronRight, 
   Sparkles, Zap, CheckCircle2, User as UserIcon, RefreshCw,
-  Sliders, AlertCircle, AlertTriangle, ExternalLink, FolderCheck, Eye, Lock, Radio
+  Sliders, AlertCircle, AlertTriangle, ExternalLink, FolderCheck, Eye, Lock
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAppContext } from '../context/AppContext';
@@ -162,10 +162,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   } = useAppContext();
   
   const [isPublishing, setIsPublishing] = useState(false);
-  const [teacherRefreshFeedback, setTeacherRefreshFeedback] = useState<string | null>(null);
-  const [isTeacherRefreshing, setIsTeacherRefreshing] = useState(false);
-  const [isDriveDownloading, setIsDriveDownloading] = useState(false);
-  const [driveDownloadFeedback, setDriveDownloadFeedback] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFirebaseStatusOpen, setIsFirebaseStatusOpen] = useState(false);
   const [isCloudBackupOpen, setIsCloudBackupOpen] = useState(false);
@@ -312,7 +308,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-md md:hidden transition-all animate-fade-in" onClick={closeMobileMenu}>
           <div 
-            className="w-full bg-[#131418] border-t border-white/15 rounded-t-[32px] p-5 sm:p-6 pb-safe flex flex-col gap-3.5 animate-slide-up shadow-2xl max-h-[88vh] overflow-y-auto"
+            className="w-full bg-[#0D1526] border-t border-slate-700/80 rounded-t-[32px] p-5 sm:p-6 pb-safe flex flex-col gap-3.5 animate-slide-up shadow-2xl max-h-[88vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Sheet Handle */}
@@ -370,62 +366,56 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
               </span>
             </div>
             
-            {/* Cloud Sync Status & Backup Area */}
+            {/* Unified Cloud Sync & Backup Action Area */}
             {userRole === 'admin' && (
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-3 space-y-2.5">
+              <div className="bg-white/5 hover:bg-white/[0.08] border border-white/10 hover:border-amber-400/30 rounded-2xl p-2.5 transition-all shadow-xs group">
                 <input type="file" accept=".json" className="hidden" id="restore-input-mobile" onChange={handleRestore} />
                 
-                {/* Sync Status Row */}
-                <div 
-                  onClick={() => setIsFirebaseStatusOpen(true)}
-                  className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer transition-all active:scale-[0.99]"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Cloud className="w-4 h-4 text-sky-400 shrink-0" />
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => {
+                      setIsCloudBackupOpen(true);
+                      closeMobileMenu();
+                    }}
+                    className="flex items-center gap-2.5 min-w-0 text-left flex-1 cursor-pointer"
+                    title="Yedekleme & Senkronizasyon Merkezini Aç (Bulut & JSON)"
+                  >
+                    <div className="relative w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400/20 via-sky-400/20 to-emerald-400/20 border border-amber-400/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Cloud className="w-4 h-4 text-amber-300" />
+                      <span className={cn(
+                        "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full",
+                        syncStatus === 'synced' ? "bg-emerald-400 ring-2 ring-slate-900" :
+                        syncStatus === 'saving' ? "bg-amber-400 animate-ping" :
+                        pendingSyncCount > 0 ? "bg-amber-400 ring-2 ring-slate-900" : "bg-sky-400 ring-2 ring-slate-900"
+                      )} />
+                    </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-white truncate">
-                        {pendingSyncCount > 0 && `Tamponda: ${pendingSyncCount} İşlem`}
-                        {pendingSyncCount === 0 && syncStatus === 'synced' && "Bulut Senkronize"}
-                        {pendingSyncCount === 0 && syncStatus === 'saving' && "Kaydediliyor..."}
-                        {syncStatus === 'quota_exceeded' && "⚡ Yerel Koruma Aktif"}
-                        {(syncStatus === 'offline' || syncStatus === 'error') && "Yerel Koruma"}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors truncate">
+                          Yedekleme & Senkron
+                        </span>
+                        {pendingSyncCount > 0 && (
+                          <span className="text-[9px] font-bold text-amber-300 bg-amber-400/20 px-1 py-0.2 rounded-full shrink-0">
+                            {pendingSyncCount}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-white/50 truncate">
-                        {pendingSyncCount > 0 ? "Akıllı tamponda bekliyor..." : (saveFeedback || (lastSyncedAt ? `Son eşitlenme: ${lastSyncedAt}` : "Veriler yerel hafızada %100 güvende"))}
+                        {pendingSyncCount > 0 ? "Tamponda bekliyor" : (saveFeedback || (lastSyncedAt ? `Eşitlendi: ${lastSyncedAt}` : "Bulut & JSON Hazır"))}
                       </p>
                     </div>
-                  </div>
+                  </button>
 
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleManualSave();
                     }}
-                    className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-bold shrink-0 transition-colors"
+                    className="p-1.5 bg-white/5 hover:bg-amber-500/20 text-white/70 hover:text-amber-300 border border-white/10 hover:border-amber-400/30 rounded-lg shrink-0 transition-colors cursor-pointer"
+                    title={pendingSyncCount > 0 ? "Tampondaki verileri şimdi kaydet" : "Şimdi Buluta Kaydet"}
+                    aria-label="Şimdi Kaydet"
                   >
-                    {pendingSyncCount > 0 ? "Şimdi Gönder" : "Şimdi Kaydet"}
-                  </button>
-                </div>
-
-                {/* Bulut & JSON Butonları */}
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => {
-                      setIsCloudBackupOpen(true);
-                      closeMobileMenu();
-                    }}
-                    className="flex items-center justify-center gap-1.5 p-2 bg-gradient-to-r from-amber-500/20 to-amber-500/10 border border-amber-500/40 rounded-xl text-amber-200 text-xs font-bold transition-all active:scale-[0.98] cursor-pointer"
-                  >
-                    <Cloud className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="truncate">Bulut Yedekleri</span>
-                  </button>
-
-                  <button 
-                    onClick={handleBackup} 
-                    className="flex items-center justify-center gap-1.5 bg-white/5 hover:bg-white/10 text-white text-xs font-bold p-2 rounded-xl border border-white/10 transition-all active:scale-[0.98] cursor-pointer"
-                  >
-                    <DownloadCloud className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span className="truncate">JSON İndir</span>
+                    <RefreshCw className={cn("w-3.5 h-3.5", syncStatus === 'saving' && "animate-spin")} />
                   </button>
                 </div>
               </div>
@@ -573,7 +563,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
 
       {/* Sidebar Desktop */}
       <aside className={cn(
-        "hidden md:flex fixed inset-y-0 left-0 z-50 w-[280px] bg-brand-sidebar-bg text-white flex-col p-6 justify-between border-r border-white/5 overflow-y-auto relative translate-x-0 shrink-0"
+        "hidden md:flex fixed inset-y-0 left-0 z-50 w-[280px] bg-brand-sidebar-bg text-white flex-col p-6 justify-between border-r border-slate-800/80 overflow-y-auto relative translate-x-0 shrink-0"
       )}>
         <div className="flex flex-col flex-grow">
           <div className="brand mb-5 flex items-center justify-between gap-2 p-2 rounded-2xl bg-white/[0.03] transition-all">
@@ -775,12 +765,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       <main className="flex-1 flex flex-col overflow-auto bg-brand-bg text-brand-ink transition-colors duration-200 w-full pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-0">
         
         {/* 📱 Mobile Header - Clean Elevated Warm Glassmorphism */}
-        <header className="md:hidden flex items-center justify-between px-3.5 py-2.5 bg-[#FAF9F5]/95 dark:bg-[#131418]/95 backdrop-blur-xl text-[#2d2c25] dark:text-white border-b border-[#e6e2d3] dark:border-white/10 shrink-0 sticky top-0 z-30 shadow-2xs">
+        <header className="md:hidden flex items-center justify-between px-3.5 py-2.5 bg-[#FAF9F5]/95 dark:bg-[#0B0F19]/95 backdrop-blur-xl text-[#2d2c25] dark:text-slate-100 border-b border-[#e6e2d3] dark:border-slate-800/80 shrink-0 sticky top-0 z-30 shadow-2xs">
           <div className="flex items-center gap-2.5">
             <img 
               src="/apple-touch-icon.png" 
               alt="AkademiPanel" 
-              className="w-8 h-8 rounded-xl shadow-2xs border border-[#e6e2d3] dark:border-white/15 shrink-0 object-cover" 
+              className="w-8 h-8 rounded-xl shadow-2xs border border-[#e6e2d3] dark:border-slate-700/60 shrink-0 object-cover" 
             />
             <div>
               <h1 className="font-serif text-sm italic font-bold tracking-tight text-[#2d2c25] dark:text-white leading-none">AkademiPanel</h1>
@@ -871,209 +861,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
           </div>
         </header>
 
-        {/* 💻 Desktop Top Action Bar */}
-        <header className="hidden md:flex items-center justify-between px-6 py-3 bg-[#FAF9F5]/90 dark:bg-[#131418]/90 backdrop-blur-xl border-b border-[#e6e2d3] dark:border-white/10 shrink-0 sticky top-0 z-30 shadow-2xs">
-          {/* Left: Active Section Info */}
-          <div className="flex items-center gap-3">
-            {(() => {
-              const current = navItems.find(i => i.id === activeTab);
-              if (!current) return null;
-              return (
-                <div className="flex items-center gap-2.5">
-                  <div className={cn("w-8 h-8 rounded-xl border flex items-center justify-center shrink-0", current.activeIconBg)}>
-                    <current.icon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-[#2d2c25] dark:text-white leading-tight">
-                      {current.id === 'halls' && userRole === 'teacher' ? 'Salonlar & Oturma Planı' : current.label}
-                    </h2>
-                    <p className="text-[10.5px] text-[#737265] dark:text-white/50 font-medium">
-                      {current.id === 'halls' && userRole === 'teacher' ? 'Yönetici tarafından yayınlanan salon düzeni' : current.subtitle}
-                    </p>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* Right: Actions, Drive Status, Publish & Theme */}
-          <div className="flex items-center gap-2.5">
-            {/* ADMIN ACTIONS */}
-            {userRole === 'admin' && (
-              <>
-                {/* 1. Google Drive Live Sync Status & Download Latest */}
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/20 text-sky-900 dark:text-sky-300 text-xs shadow-2xs">
-                  <Cloud className={cn("w-3.5 h-3.5 text-sky-500 shrink-0", isDriveAutoSyncing && "animate-spin")} />
-                  {isDriveLocked && (
-                    <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" title="Sabit ve kilitli ortak Google Drive dosyası" />
-                  )}
-                  <span 
-                    onClick={async () => {
-                      if (isDriveDownloading) return;
-                      setIsDriveDownloading(true);
-                      setDriveDownloadFeedback('İndiriliyor...');
-                      try {
-                        const res = await downloadLockedDriveFileLocally();
-                        if (res.success) {
-                          setDriveDownloadFeedback('✓ JSON İndirildi');
-                        } else {
-                          setDriveDownloadFeedback('⚠️ ' + (res.error || 'Hata'));
-                        }
-                      } catch (e: any) {
-                        setDriveDownloadFeedback('⚠️ Hata');
-                      } finally {
-                        setIsDriveDownloading(false);
-                        setTimeout(() => setDriveDownloadFeedback(null), 3500);
-                      }
-                    }}
-                    className="font-semibold text-[11px] truncate max-w-[210px] xl:max-w-[260px] flex items-center gap-1 cursor-pointer hover:underline select-none" 
-                    title={`Kilitli Google Drive JSON Dosyası\nDosya: ${activeMasterFileName || 'AkademiPanel_Canli_Kutuk.json'}\nSon Yedeklenme Tarihi: ${lastDriveBackupDate || lastDriveSyncedAt || 'Henüz kaydedilmedi'}\nDurum: ${isDriveLocked ? 'Sabit & Kilitli' : 'Bağlı'}\n\n(Dosyayı fiziki olarak bilgisayara indirmek için tıklayın)`}
-                  >
-                    {driveDownloadFeedback || (
-                      lastDriveBackupDate 
-                        ? `Son Yedek: ${lastDriveBackupDate}` 
-                        : (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : 'Kilitli Drive Bağlı')
-                    )}
-                  </span>
-                  
-                  {/* Fiziki Olarak Bilgisayara İndir (.json) Butonu */}
-                  <button
-                    onClick={async () => {
-                      setIsDriveDownloading(true);
-                      setDriveDownloadFeedback('İndiriliyor...');
-                      try {
-                        const res = await downloadLockedDriveFileLocally();
-                        if (res.success) {
-                          setDriveDownloadFeedback('✓ JSON İndirildi');
-                        } else {
-                          setDriveDownloadFeedback('⚠️ ' + (res.error || 'Hata'));
-                        }
-                      } catch (e: any) {
-                        setDriveDownloadFeedback('⚠️ Hata');
-                      } finally {
-                        setIsDriveDownloading(false);
-                        setTimeout(() => setDriveDownloadFeedback(null), 3500);
-                      }
-                    }}
-                    disabled={isDriveDownloading}
-                    className="p-1 hover:bg-sky-500/20 active:scale-95 rounded-lg text-sky-700 dark:text-sky-300 transition-all cursor-pointer disabled:opacity-50 flex items-center"
-                    title="Kilitli Google Drive JSON dosyasını fiziki olarak bilgisayara indir (.json)"
-                    aria-label="Kilitli Google Drive JSON dosyasını fiziki olarak indir"
-                  >
-                    <HardDriveDownload className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* Canlı Kütüğü Uygulamaya Yenile / Senkronize Et Butonu */}
-                  <button
-                    onClick={async () => {
-                      setIsDriveDownloading(true);
-                      setDriveDownloadFeedback('Eşitleniyor...');
-                      try {
-                        const res = await downloadLatestFromDrive();
-                        if (res.success) {
-                          setDriveDownloadFeedback(`✓ ${res.studentCount} Öğr.`);
-                        } else {
-                          setDriveDownloadFeedback('⚠️ ' + (res.error || 'Hata'));
-                        }
-                      } catch (e: any) {
-                        setDriveDownloadFeedback('⚠️ Hata');
-                      } finally {
-                        setIsDriveDownloading(false);
-                        setTimeout(() => setDriveDownloadFeedback(null), 3500);
-                      }
-                    }}
-                    disabled={isDriveDownloading}
-                    className="p-1 hover:bg-sky-500/20 active:scale-95 rounded-lg text-sky-700 dark:text-sky-300 transition-all cursor-pointer disabled:opacity-50 flex items-center"
-                    title="Google Drive üzerindeki canlı kütüğü uygulamaya eşitle / yenile"
-                    aria-label="Google Drive canlı kütüğü eşitle"
-                  >
-                    <RefreshCw className={cn("w-3 h-3", isDriveDownloading && "animate-spin")} />
-                  </button>
-                </div>
-
-                {/* 2. Publish to Teachers (Öğretmene Yayınla - Google Drive Kütüğünü Öğretmenlere Aç & Sunucu Önbelleğini Mühürle) */}
-                <button
-                  onClick={async () => {
-                    try {
-                      const res = await publishToTeachersNow();
-                      if (res.success) {
-                        setSaveFeedback(`✓ Öğretmenlere yayınlandı (${res.publishedDate || 'Güncel'})`);
-                      } else {
-                        setSaveFeedback(`⚠️ ${res.error || 'Yayınlanamadı'}`);
-                      }
-                      setTimeout(() => setSaveFeedback(null), 4000);
-                    } catch (e: any) {
-                      setSaveFeedback("⚠️ Yayınlama hatası");
-                      setTimeout(() => setSaveFeedback(null), 3000);
-                    }
-                  }}
-                  disabled={isPublishingToTeachers}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs disabled:opacity-50 active:scale-95",
-                    hasPendingChanges || syncStatus === 'pending_publish'
-                      ? "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/30 ring-2 ring-amber-400/50 animate-pulse"
-                      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 border border-emerald-500"
-                  )}
-                  title={`Google Drive üzerindeki son kütük yedeğini öğretmenlerin okumasına açar.\nSon Yayınlanma: ${lastTeacherPublishedDate || 'Henüz yayınlanmadı'}`}
-                >
-                  <Radio className={cn("w-3.5 h-3.5 text-white", isPublishingToTeachers && "animate-pulse")} />
-                  <span>
-                    {isPublishingToTeachers
-                      ? 'Yayınlanıyor...'
-                      : 'Öğretmene Yayınla'}
-                  </span>
-                  {lastTeacherPublishedDate && !isPublishingToTeachers && (
-                    <span className="hidden xl:inline text-[9.5px] opacity-90 font-mono font-normal">
-                      ({lastTeacherPublishedDate.split(' ')[1] || lastTeacherPublishedDate})
-                    </span>
-                  )}
-                </button>
-              </>
-            )}
-
-            {/* TEACHER MODE STATUS & BROADCAST REFRESH (0 FIRESTORE QUOTA) */}
-            {userRole === 'teacher' && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-300 text-xs shadow-2xs">
-                <Shield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <div className="flex flex-col">
-                  <span className="text-[11px] font-bold leading-tight flex items-center gap-1">
-                    <span>Öğretmen Paneli</span>
-                    <Lock className="w-3 h-3 text-emerald-600" title="Kilitli Google Drive Kütüğü" />
-                  </span>
-                  <span className="text-[9.5px] text-emerald-700 dark:text-emerald-400 font-medium">
-                    {teacherRefreshFeedback || (lastDriveSyncedAt ? `Drive: ${lastDriveSyncedAt}` : (lastTeacherPublishedDate ? `Yayın: ${lastTeacherPublishedDate}` : 'Canlı Senkron'))}
-                  </span>
-                </div>
-                <button
-                  onClick={async () => {
-                    setIsTeacherRefreshing(true);
-                    setTeacherRefreshFeedback('Çekiliyor...');
-                    try {
-                      const res = await fetchTeacherDataNow();
-                      if (res.success) {
-                        setTeacherRefreshFeedback(`✓ ${res.data?.students?.length || state.students.length} Öğr.`);
-                      } else {
-                        setTeacherRefreshFeedback('⚠️ ' + (res.error || 'Hata'));
-                      }
-                    } catch {
-                      setTeacherRefreshFeedback('⚠️ Hata');
-                    } finally {
-                      setIsTeacherRefreshing(false);
-                      setTimeout(() => setTeacherRefreshFeedback(null), 3500);
-                    }
-                  }}
-                  disabled={isTeacherRefreshing}
-                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 disabled:opacity-50 ml-1"
-                  title="Google Drive üzerindeki kilitli canlı kütükten son verileri dinamik çek ve eşitle"
-                >
-                  <RefreshCw className={cn("w-3 h-3", isTeacherRefreshing && "animate-spin")} />
-                  <span>Yenile</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </header>
-
         {/* Quota Exceeded Notification Banner & Main Content Area */}
         <div 
           className="flex-1 flex flex-col p-2 sm:p-4 md:p-6 lg:p-8 w-full max-w-7xl mx-auto h-full font-sans antialiased overflow-x-hidden"
@@ -1142,7 +929,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       </main>
 
       {/* 📱 Mobile Bottom Navigation - Modern Touch-Optimized Scrollable Glass Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0d0e12]/95 backdrop-blur-2xl border-t border-white/[0.1] z-40 px-2 py-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] shadow-[0_-12px_36px_rgba(0,0,0,0.65)] select-none">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#090D17]/95 backdrop-blur-2xl border-t border-slate-800/90 z-40 px-2 py-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] shadow-[0_-12px_36px_rgba(0,0,0,0.7)] select-none">
         {(() => {
           const visibleItems = navItems.filter(item => isNavItemVisible(item.id));
           const isFewItems = visibleItems.length <= 4;

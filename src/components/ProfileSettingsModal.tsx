@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, User, Shield, Moon, Sun, 
   DownloadCloud, UploadCloud, LogOut, Check, 
-  RefreshCw, Database, Activity, ChevronRight, AlertCircle,
-  Bell, BellRing, Sparkles, ShieldCheck, Users, Smartphone, HardDriveDownload
+  Database, Activity, ChevronRight, AlertCircle,
+  Bell, BellRing, Sparkles, ShieldCheck, Users, Smartphone, HardDriveDownload, Cloud
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAppContext } from '../context/AppContext';
@@ -47,15 +47,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   onOpenCloudBackup,
   handleBackup,
   handleRestore,
-  handleManualSave,
+  handleManualSave: _handleManualSave,
   saveFeedback,
-  syncStatus = 'synced'
+  syncStatus: _syncStatus = 'synced'
 }) => {
-  const { state, checkTeacherUpdatesNow } = useAppContext();
-  const [activeTab, setActiveTab] = useState<'profile' | 'backup' | 'cloud'>('profile');
-  const [isSaving, setIsSaving] = useState(false);
-  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
-  const [checkFeedback, setCheckFeedback] = useState<string | null>(null);
+  const { state } = useAppContext();
+  const [activeTab, setActiveTab] = useState<'profile' | 'backup'>('profile');
   const [permissionState, setPermissionState] = useState<NotificationPermission>('default');
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
@@ -116,53 +113,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const triggerSave = async () => {
-    if (!handleManualSave) return;
-    setIsSaving(true);
-    await handleManualSave();
-    setIsSaving(false);
-  };
 
-  const getSyncStatusBadge = () => {
-    switch (syncStatus) {
-      case 'synced':
-        return {
-          label: 'Bulut Senkronize',
-          desc: 'Tüm verileriniz Firebase bulut ortamı ile anlık olarak senkronize ediliyor.',
-          color: 'text-emerald-400',
-          bg: 'bg-emerald-500/10 border-emerald-500/25',
-          dot: 'bg-emerald-400'
-        };
-      case 'saving':
-        return {
-          label: 'Kaydediliyor...',
-          desc: 'Değişiklikler bulut veritabanına aktarılıyor.',
-          color: 'text-sky-400',
-          bg: 'bg-sky-500/10 border-sky-500/25',
-          dot: 'bg-sky-400 animate-spin'
-        };
-      case 'quota_exceeded':
-        return {
-          label: 'Yerel Koruma Modu (Kota)',
-          desc: 'Günlük bulut senkronizasyon limitine ulaşıldı. Verileriniz cihazınızda kesintisiz saklanmaktadır.',
-          color: 'text-amber-400',
-          bg: 'bg-amber-500/10 border-amber-500/25',
-          dot: 'bg-amber-400'
-        };
-      case 'offline':
-      case 'error':
-      default:
-        return {
-          label: 'Yerel Hafıza Koruması',
-          desc: 'Ağ bağlantısı beklemede. Değişiklikleriniz yerel hafızada güvenle saklanmaktadır.',
-          color: 'text-rose-400',
-          bg: 'bg-rose-500/10 border-rose-500/25',
-          dot: 'bg-rose-400'
-        };
-    }
-  };
-
-  const syncInfo = getSyncStatusBadge();
 
   return (
     <div 
@@ -170,7 +121,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-xl bg-[#141518] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-xl bg-[#0D1526] border border-slate-700/80 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Hidden File Input for JSON Restore */}
@@ -185,7 +136,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         )}
 
         {/* Modal Header */}
-        <div className="p-3 sm:p-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-amber-500/5 via-white/[0.02] to-transparent">
+        <div className="p-3 sm:p-4 border-b border-slate-800/90 flex items-center justify-between bg-gradient-to-r from-indigo-500/10 via-slate-900/40 to-transparent">
           <div className="flex items-center gap-2.5">
             <div className="w-8.5 h-8.5 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#B08D57] to-[#8d6f3e] flex items-center justify-center text-white shadow-sm font-bold text-sm border border-amber-400/30 shrink-0">
               {currentUser?.photoURL ? (
@@ -230,11 +181,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         )}
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-white/10 bg-white/[0.02] px-2 sm:px-4 gap-0.5 sm:gap-1 overflow-x-auto no-scrollbar">
+        <div className="flex border-b border-white/10 bg-white/[0.02] px-2 sm:px-4 gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('profile')}
             className={cn(
-              "px-3 py-2 sm:py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
+              "px-3.5 py-2 sm:py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
               activeTab === 'profile' 
                 ? "border-amber-400 text-amber-300 bg-amber-400/5" 
                 : "border-transparent text-white/60 hover:text-white hover:border-white/20"
@@ -247,27 +198,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           <button
             onClick={() => setActiveTab('backup')}
             className={cn(
-              "px-3 py-2 sm:py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
+              "px-3.5 py-2 sm:py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
               activeTab === 'backup' 
                 ? "border-amber-400 text-amber-300 bg-amber-400/5" 
                 : "border-transparent text-white/60 hover:text-white hover:border-white/20"
             )}
           >
             <Database className="w-3.5 h-3.5" />
-            <span>Yedekleme & Aktarım</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('cloud')}
-            className={cn(
-              "px-3 py-2 sm:py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
-              activeTab === 'cloud' 
-                ? "border-amber-400 text-amber-300 bg-amber-400/5" 
-                : "border-transparent text-white/60 hover:text-white hover:border-white/20"
-            )}
-          >
-            <Activity className="w-3.5 h-3.5" />
-            <span>Bulut Senkron</span>
+            <span>Yedekleme & Bulut Senkron</span>
           </button>
         </div>
 
@@ -470,43 +408,58 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: BACKUP & RESTORE */}
+          {/* TAB 2: UNIFIED BACKUP & CLOUD SYNC */}
           {activeTab === 'backup' && (
-            <div className="space-y-2 sm:space-y-2.5">
-              {/* Bulut Senkronizasyon & Yedekleme Merkezi Butonu */}
+            <div className="space-y-3 sm:space-y-3.5">
+              {/* 1. Yedekleme & Senkronizasyon Merkezi Ana Girişi */}
               {onOpenCloudBackup && (
                 <button
                   onClick={() => {
                     onOpenCloudBackup();
                     onClose();
                   }}
-                  className="w-full p-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/10 hover:from-amber-500/30 text-amber-200 font-semibold text-xs border border-amber-500/30 transition-all cursor-pointer flex items-center justify-between shadow-xs active:scale-98"
+                  className="w-full p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-amber-500/5 hover:from-amber-500/25 hover:via-emerald-500/20 hover:to-amber-500/15 text-white font-semibold text-xs border border-amber-500/30 hover:border-amber-400/50 transition-all cursor-pointer flex items-center justify-between shadow-xs active:scale-[0.99] group"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-400/30">
-                      <Database className="w-4 h-4" />
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400/25 via-sky-400/20 to-emerald-400/25 text-amber-300 flex items-center justify-center shrink-0 border border-amber-400/35 group-hover:scale-105 transition-transform shadow-xs">
+                      <Cloud className="w-5 h-5 text-amber-300" />
                     </div>
-                    <div className="text-left">
-                      <div className="font-bold text-white text-xs">Bulut Senkronizasyon & Yedek Merkezi</div>
-                      <div className="text-[10.5px] text-amber-300/80">Google Drive canlı kütük ve Firebase yönetimi</div>
+                    <div className="text-left min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-xs sm:text-sm group-hover:text-amber-200 transition-colors">
+                          Yedekleme & Senkronizasyon Merkezi
+                        </span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/35">
+                          Tümleşik
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-white/60 mt-0.5 line-clamp-1">
+                        Google Drive canlı kütüğü, anlık bulut eşitleme ve kütük yayın kontrolü
+                      </div>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-amber-300" />
+                  <ChevronRight className="w-4 h-4 text-amber-300 group-hover:translate-x-0.5 transition-transform shrink-0" />
                 </button>
               )}
 
+              {/* 2. Çevrim Dışı JSON Dosyası (Yerel Yedekleme & Aktarım) */}
               {userRole === 'admin' ? (
-                <div className="p-3 rounded-xl bg-white/[0.04] border border-white/10 space-y-2 shadow-xs">
-                  <div className="text-xs font-bold text-white flex items-center justify-between">
-                    <span>Çevrim Dışı JSON Dosyası</span>
-                    <span className="text-[10px] text-white/40 font-normal">Tek tıkla yedekle & aktar</span>
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.04] border border-white/10 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-white">Çevrim Dışı JSON Dosyası</h4>
+                      <p className="text-[11px] text-white/50">Cihazınıza güvenli yedek indirin veya mevcut yedeği aktarın</p>
+                    </div>
+                    <span className="text-[10px] text-white/40 font-mono px-2 py-0.5 rounded-md bg-white/5 border border-white/10">
+                      Yerel Dosya
+                    </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2.5 pt-0.5">
                     {handleBackup && (
                       <button
                         onClick={handleBackup}
-                        className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-200 transition-all cursor-pointer text-xs font-bold active:scale-98"
+                        className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-200 transition-all cursor-pointer text-xs font-bold active:scale-98 shadow-xs"
                       >
                         <DownloadCloud className="w-4 h-4 text-emerald-400 shrink-0" />
                         <span>Yedeği İndir</span>
@@ -516,7 +469,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     {handleRestore && (
                       <button
                         onClick={() => document.getElementById('modal-restore-input')?.click()}
-                        className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-200 transition-all cursor-pointer text-xs font-bold active:scale-98"
+                        className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-200 transition-all cursor-pointer text-xs font-bold active:scale-98 shadow-xs"
                       >
                         <UploadCloud className="w-4 h-4 text-indigo-400 shrink-0" />
                         <span>Dosya Yükle</span>
@@ -525,104 +478,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-sky-200 flex items-center gap-2">
+                <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 text-xs text-sky-200 flex items-center gap-2.5">
                   <AlertCircle className="w-4 h-4 text-sky-400 shrink-0" />
-                  <span>Öğretmen yetkisi: Salt okunur kütük erişimi.</span>
+                  <span>Öğretmen yetkisi: Salt okunur kütük erişimi. Güncel veriler otomatik senkronize edilir.</span>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* TAB 3: CLOUD SYNC (GOOGLE DRIVE 30SN + FIREBASE YAYINLAMA) */}
-          {activeTab === 'cloud' && (
-            <div className="space-y-2 sm:space-y-2.5">
-              {/* 1. Google Drive Card */}
-              <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500/10 to-transparent border border-emerald-500/25 space-y-2 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                      <Database className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-white">Google Drive Canlı Kütük</h4>
-                      <span className="text-[10px] text-emerald-300 font-mono">AkademiPanel_Canli_Kutuk.json</span>
-                    </div>
-                  </div>
-                  <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    30sn Canlı
-                  </span>
-                </div>
-
-                {onOpenCloudBackup && (
-                  <button
-                    onClick={() => {
-                      onOpenCloudBackup();
-                      onClose();
-                    }}
-                    className="w-full flex items-center justify-between p-2 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 font-semibold text-[11px] border border-emerald-500/30 transition-all cursor-pointer active:scale-98"
-                  >
-                    <span>Google Drive Canlı Dosyasını İncele</span>
-                    <ChevronRight className="w-3.5 h-3.5 text-emerald-300" />
-                  </button>
-                )}
-              </div>
-
-              {/* 2. Firebase Card */}
-              <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/25 space-y-2 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-                      <UploadCloud className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-white">Firebase Öğretmen Yayını</h4>
-                      <span className="text-[10px] text-amber-300/80">Salt Okunur Yayın Kanalı</span>
-                    </div>
-                  </div>
-                  <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    Genel Yayın
-                  </span>
-                </div>
-
-                {userRole === 'admin' && handleManualSave && (
-                  <button
-                    onClick={triggerSave}
-                    disabled={isSaving}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-98 disabled:opacity-50"
-                  >
-                    <UploadCloud className={cn("w-3.5 h-3.5", isSaving && "animate-bounce")} />
-                    <span>{isSaving ? 'Yayınlanıyor...' : 'Yayınla (Firebase)'}</span>
-                  </button>
-                )}
-
-                {userRole === 'teacher' && checkTeacherUpdatesNow && (
-                  <div className="space-y-1.5 pt-1">
-                    <button
-                      onClick={async () => {
-                        setIsCheckingUpdates(true);
-                        setCheckFeedback(null);
-                        try {
-                          const res = await checkTeacherUpdatesNow();
-                          setCheckFeedback(res.message || 'Denetlendi.');
-                        } finally {
-                          setIsCheckingUpdates(false);
-                          setTimeout(() => setCheckFeedback(null), 4000);
-                        }
-                      }}
-                      disabled={isCheckingUpdates}
-                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-98 disabled:opacity-50"
-                    >
-                      <RefreshCw className={cn("w-3.5 h-3.5 text-amber-400", isCheckingUpdates && "animate-spin")} />
-                      <span>{isCheckingUpdates ? 'Kontrol Ediliyor...' : 'Yayın Güncellemelerini Denetle'}</span>
-                    </button>
-                    {checkFeedback && (
-                      <p className="text-[11px] text-amber-300/90 text-center font-medium animate-fade-in">
-                        {checkFeedback}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
             </div>
           )}
 

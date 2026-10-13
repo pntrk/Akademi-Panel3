@@ -2410,13 +2410,13 @@ export const ExamsView = () => {
                           {exam.name || '(İsimsiz Sınav)'}
                         </button>
                         {exam.examType === 'internal' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0 shadow-2xs">
-                            <QrCode className="w-2.5 h-2.5 text-purple-600" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 shrink-0 shadow-2xs">
+                            <QrCode className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400" />
                             Kurum İçi Optik
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0 shadow-2xs">
-                            <Building className="w-2.5 h-2.5 text-amber-700" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shrink-0 shadow-2xs">
+                            <Building className="w-2.5 h-2.5 text-amber-700 dark:text-amber-400" />
                             Yayıncı Denemesi
                           </span>
                         )}
@@ -2433,7 +2433,7 @@ export const ExamsView = () => {
                     </td>
 
                     <td className="py-4 px-5 text-center" data-label="KATILAN">
-                      <span className="inline-block bg-[#F3F2EE] text-brand-ink px-2.5 py-0.5 rounded-none text-[0.75rem] font-bold" title="Kayıtlı Öğrenci Sayısı">
+                      <span className="inline-flex items-center justify-center bg-slate-100 dark:bg-slate-800/90 text-slate-800 dark:text-slate-100 px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 shadow-2xs transition-colors" title="Kayıtlı Öğrenci Sayısı">
                         {registeredCount} Öğr.
                       </span>
                     </td>
@@ -2542,20 +2542,20 @@ export const ExamsView = () => {
                           {exam.name || '(İsimsiz Sınav)'}
                         </button>
                         {exam.examType === 'internal' ? (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
-                            <QrCode className="w-2.5 h-2.5 text-purple-600" />
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 shrink-0">
+                            <QrCode className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400" />
                             Kurum İçi
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
-                            <Building className="w-2.5 h-2.5 text-amber-700" />
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shrink-0">
+                            <Building className="w-2.5 h-2.5 text-amber-700 dark:text-amber-400" />
                             Yayıncı
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium mt-0.5">
-                        <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
-                        <span className="font-semibold text-slate-700">{formatDateLong(exam.date) || exam.date || 'Tarih belirtilmedi'}</span>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                        <Calendar className="w-3 h-3 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">{formatDateLong(exam.date) || exam.date || 'Tarih belirtilmedi'}</span>
                       </div>
                     </div>
                   </div>
@@ -2565,7 +2565,7 @@ export const ExamsView = () => {
                     <button 
                       type="button"
                       onClick={() => setEditingExam(exam)}
-                      className="w-6.5 h-6.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-all active:scale-95 cursor-pointer"
+                      className="w-6.5 h-6.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-700 hover:border-indigo-200 dark:hover:border-slate-600 transition-all active:scale-95 cursor-pointer"
                       title="Detayları Düzenle"
                       aria-label="Detayları Düzenle"
                     >
@@ -2574,7 +2574,7 @@ export const ExamsView = () => {
                     <button 
                       type="button"
                       onClick={() => removeExam(exam.id)}
-                      className="w-6.5 h-6.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-all active:scale-95 cursor-pointer"
+                      className="w-6.5 h-6.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-700 hover:border-rose-200 dark:hover:border-slate-600 transition-all active:scale-95 cursor-pointer"
                       title="Sınavı Sil"
                       aria-label="Sınavı Sil"
                     >
@@ -2587,21 +2587,21 @@ export const ExamsView = () => {
                 <div className="flex flex-wrap items-center justify-between gap-1.5 pt-0.5">
                   <div className="flex flex-wrap items-center gap-1">
                     {/* Publisher Badge */}
-                    <div className="bg-slate-50 border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 shadow-2xs">
-                      <Building className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                    <div className="bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 shadow-2xs">
+                      <Building className="w-2.5 h-2.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
                       <span className="truncate max-w-[100px]">{exam.publisher || 'Yayıncı Yok'}</span>
                     </div>
 
                     {/* Registered Students Badge */}
-                    <div className="bg-purple-50 border border-purple-200 text-purple-800 px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-2xs">
-                      <Users className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                    <div className="bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60 text-purple-800 dark:text-purple-300 px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                      <Users className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400 shrink-0" />
                       <span>{registeredCount} Öğr.</span>
                     </div>
 
                     {/* Order Quantity Badge */}
                     {(exam.orderQuantity || 0) > 0 && (
-                      <div className="bg-blue-50 border border-blue-200 text-blue-800 px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-2xs">
-                        <Package className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                      <div className="bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/60 text-blue-800 dark:text-blue-300 px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                        <Package className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400 shrink-0" />
                         <span>{exam.orderQuantity} Sip.</span>
                       </div>
                     )}

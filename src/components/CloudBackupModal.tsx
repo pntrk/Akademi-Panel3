@@ -3,7 +3,8 @@ import {
   Cloud, CheckCircle2, AlertTriangle, RefreshCw, X, Eye, 
   UploadCloud, FolderCheck, Download, Trash2, Plus, 
   User as UserIcon, ShieldCheck, Database, ExternalLink,
-  Link2, Copy, Check, Lock, Unlock, HardDriveDownload, Radio
+  Link2, Copy, Check, Lock, Unlock, HardDriveDownload,
+  ChevronDown, Settings2
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { 
@@ -57,21 +58,19 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     downloadLockedDriveFileLocally,
     lastDriveBackupDate,
     lastTeacherPublishedDate,
-    publishToTeachersNow,
     lastDataSource,
     activeMasterFileName,
     fetchTeacherDataNow
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<'sync' | 'archive'>('sync');
-  const [isPublishingToTeachers, setIsPublishingToTeachers] = useState(false);
   const [isPullingData, setIsPullingData] = useState(false);
   const [isPullingFromDrive, setIsPullingFromDrive] = useState(false);
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshotNote, setSnapshotNote] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [confirmRestoreBackup, setConfirmRestoreBackup] = useState<CloudBackupRecord | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -87,6 +86,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
   const [customFileLinkInput, setCustomFileLinkInput] = useState<string>(() => getLiveMasterFileLink() || state.canonicalDriveFileLink || '');
   const [isValidatingLink, setIsValidatingLink] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
 
   const isAdmin = userRole === 'admin';
   const currentUser = auth.currentUser;
@@ -360,31 +360,16 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
     }
   };
 
-  // 3. ADMIN ACTION: Publish to Teachers (Direct Google Drive Master)
-  const handlePublishToTeachers = async () => {
-    if (!isAdmin) return;
-    setIsPublishingToTeachers(true);
-    setFeedback(null);
-    try {
-      const res = await publishToTeachersNow();
-      if (res.success) {
-        setFeedback({
-          type: 'success',
-          message: `✓ Tüm güncellemeler Google Drive canlı kütüğüne aktarıldı (${res.publishedDate}). Öğretmen panellerine 0 Firebase kotası ile doğrudan iletildi!`
-        });
-      } else {
-        setFeedback({
-          type: 'error',
-          message: res.error || 'Google Drive yayını yapılırken bir hata oluştu.'
-        });
-      }
-    } catch (err: any) {
+  // 3. ADMIN ACTION: Open Locked Master File on Google Drive in New Tab
+  const handleOpenLockedDriveFile = () => {
+    const link = canonicalFileLink || getLiveMasterFileLink() || (canonicalFileId ? `https://drive.google.com/file/d/${canonicalFileId}/view` : null);
+    if (link) {
+      window.open(link, '_blank', 'noopener,noreferrer');
+    } else {
       setFeedback({
-        type: 'error',
-        message: err?.message || 'Google Drive yayını yapılırken bir hata oluştu.'
+        type: 'info',
+        message: 'Kilitli Google Drive ortak kütük bağlantısı henüz mevcut değil. Lütfen önce "Şimdi Drive\'a Eşitle" butonunu kullanın.'
       });
-    } finally {
-      setIsPublishingToTeachers(false);
     }
   };
 
@@ -599,7 +584,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-serif font-bold text-[#2d2c25]">
-                  {isAdmin ? 'Bulut Senkronizasyon & Yayın Merkezi' : 'Yönetim Kütük & Yayın Durumu'}
+                  {isAdmin ? 'Yedekleme & Senkronizasyon Merkezi' : 'Yönetim Kütük & Yayın Durumu'}
                 </h2>
                 {isAdmin ? (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
@@ -615,7 +600,7 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
               </div>
               <p className="text-xs text-[#737265] truncate mt-0.5">
                 {isAdmin 
-                  ? 'Adminler arası canlı eşitleme Google Drive ile tek dosya üzerinden yürütülür; Yayınla butonu verileri öğretmenlere aktarır.' 
+                  ? 'Google Drive canlı kütüğü, anlık bulut eşitleme, öğretmen yayını ve yerel JSON yedekleme tek merkezde.' 
                   : 'Yönetim tarafından onaylanıp Firebase üzerinden yayınlanan güncel okul kütüğü.'}
               </p>
             </div>
@@ -629,35 +614,6 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
           </button>
         </div>
 
-        {/* Admin Navigation Tabs */}
-        {isAdmin && (
-          <div className="flex border-b border-[#e6e2d3] bg-[#FAF9F5]/50 px-5 shrink-0">
-            <button
-              onClick={() => setActiveTab('sync')}
-              className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'sync' 
-                  ? 'border-[#B08D57] text-[#B08D57]' 
-                  : 'border-transparent text-[#737265] hover:text-[#2d2c25]'
-              }`}
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Senkronizasyon & Yayın</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('archive')}
-              className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'archive' 
-                  ? 'border-[#B08D57] text-[#B08D57]' 
-                  : 'border-transparent text-[#737265] hover:text-[#2d2c25]'
-              }`}
-            >
-              <Database className="w-3.5 h-3.5" />
-              <span>Sistem Yedekleri & Arşiv ({cloudBackups.length})</span>
-            </button>
-          </div>
-        )}
-
         {/* Content Body */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
           {/* Feedback Toast */}
@@ -665,11 +621,15 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
             <div className={`p-3.5 rounded-2xl border text-xs font-medium flex items-center justify-between gap-3 animate-fade-in ${
               feedback.type === 'success' 
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                : feedback.type === 'info'
+                ? 'bg-sky-50 text-sky-800 border-sky-200'
                 : 'bg-rose-50 text-rose-800 border-rose-200'
             }`}>
               <div className="flex items-center gap-2.5">
                 {feedback.type === 'success' ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : feedback.type === 'info' ? (
+                  <ExternalLink className="w-4 h-4 text-sky-600 shrink-0" />
                 ) : (
                   <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                 )}
@@ -685,12 +645,13 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
           )}
 
           {/* ============================================================ */}
-          {/* 1. ADMIN VIEW - TAB 1: SENKRONİZASYON & YAYIN (SADE & NET)   */}
+          {/* 1. ADMIN VIEW - TEK VE TÜMLEŞİK YEDEKLEME & SENKRONİZASYON   */}
           {/* ============================================================ */}
-          {isAdmin && activeTab === 'sync' && (
+          {isAdmin && (
             <div className="space-y-4">
-              {/* PILLAR 1: GOOGLE DRIVE (ADMINLER ARASI TEK CANLI KÜTÜK DOSYASI) */}
-              <div className="bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/40 rounded-2xl p-4 sm:p-5 border border-emerald-200 shadow-2xs space-y-3.5">
+              
+              {/* STATUS & OVERVIEW CARD */}
+              <div className="bg-gradient-to-br from-[#FAF9F5] via-white to-emerald-50/30 rounded-2xl p-4 sm:p-5 border border-[#e6e2d3] shadow-xs space-y-3.5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
@@ -698,8 +659,8 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-sm text-emerald-950 font-serif">
-                          1. Google Drive — Adminler Arası Canlı Kütük
+                        <h3 className="font-bold text-sm text-[#2d2c25] font-serif">
+                          Google Drive Canlı Kütük & Yayın Durumu
                         </h3>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           isDriveConnected 
@@ -708,121 +669,275 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                         }`}>
                           {isDriveConnected ? '✓ Drive Bağlı' : 'Bağlantı Bekleniyor'}
                         </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100/90 text-emerald-900 border border-emerald-300">
-                          Kaynak: {lastDataSource === 'drive' ? 'Google Drive (Canlı Kütük)' : lastDataSource === 'firebase' ? 'Firebase Bulut' : 'Cihaz Hafızası'}
-                        </span>
+                        {isLinkLocked && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white flex items-center gap-1 shadow-2xs">
+                            <Lock className="w-2.5 h-2.5" />
+                            Kilitli Master Kütük
+                          </span>
+                        )}
+                        {hasPendingChanges ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                            {pendingSyncCount} Değişiklik Yayına Hazır
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            ✓ Öğretmenler Güncel
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[11px] text-emerald-800 mt-1 leading-relaxed">
-                        Tüm idareciler <strong>tek bir ortak dosya</strong> üzerinden 30 saniyede bir otomatik eşitlenir. Çift başlılık önlenir. <strong>Firebase kotası tüketmez.</strong>
+                      <p className="text-xs text-[#737265] mt-1 leading-relaxed">
+                        Tüm yöneticiler tek bir ortak dosya (<code className="font-mono text-emerald-800 text-[11px] bg-emerald-50 px-1.5 py-0.5 rounded">{LIVE_MASTER_FILE_NAME}</code>) üzerinden 30 saniyede bir otomatik eşitlenir. Öğretmenler verileri Google Drive üzerinden kotasız okur.
                       </p>
                     </div>
                   </div>
 
-                  <div className="w-full sm:w-auto flex flex-wrap items-center gap-2 shrink-0">
-                    {!isDriveConnected ? (
-                      <button
-                        onClick={handleConnectDrive}
-                        disabled={isConnectingDrive}
-                        className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
-                      >
-                        <FolderCheck className="w-3.5 h-3.5" />
-                        <span>{isConnectingDrive ? 'Bağlanıyor...' : 'Drive\'a Bağlan'}</span>
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          onClick={handlePullFromDrive}
-                          disabled={isPullingFromDrive || isDriveAutoSyncing}
-                          className="w-full sm:w-auto px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
-                          title="Google Drive'daki en son canlı kütüğü hemen indir"
-                        >
-                          <Download className={`w-3.5 h-3.5 ${isPullingFromDrive ? 'animate-bounce' : ''}`} />
-                          <span>{isPullingFromDrive ? 'Drive\'dan İndiriliyor...' : 'Drive\'dan Canlı Kütüğü İndir'}</span>
-                        </button>
+                  {!isDriveConnected && (
+                    <button
+                      onClick={handleConnectDrive}
+                      disabled={isConnectingDrive}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95 shrink-0 self-start sm:self-auto"
+                    >
+                      <FolderCheck className="w-3.5 h-3.5" />
+                      <span>{isConnectingDrive ? 'Bağlanıyor...' : 'Drive\'a Bağlan'}</span>
+                    </button>
+                  )}
+                </div>
 
-                        <button
-                          onClick={handleManualDriveSync}
-                          disabled={isDriveAutoSyncing || isPullingFromDrive}
-                          className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
-                          title="Mevcut kütüğü Drive'a kaydet"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isDriveAutoSyncing ? 'animate-spin' : ''}`} />
-                          <span>{isDriveAutoSyncing ? 'Drive Eşitleniyor...' : 'Şimdi Drive\'a Eşitle'}</span>
-                        </button>
-                      </>
-                    )}
+                {/* Status Metrics Ribbon */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[#e6e2d3]/80 text-xs">
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-[#e6e2d3]/60 shadow-2xs">
+                    <span className="text-[10px] text-[#737265] font-medium block">Son Drive Eşitleme</span>
+                    <span className="font-bold text-[#2d2c25] truncate block mt-0.5" title={lastDriveSyncedAt || lastDriveBackupDate || 'Beklemede'}>
+                      {liveDriveMeta?.modifiedTime || lastDriveSyncedAt || lastDriveBackupDate || 'Beklemede'}
+                    </span>
+                  </div>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-[#e6e2d3]/60 shadow-2xs">
+                    <span className="text-[10px] text-[#737265] font-medium block">Son Öğretmen Yayını</span>
+                    <span className="font-bold text-[#2d2c25] truncate block mt-0.5">
+                      {lastTeacherPublishedDate || 'Henüz yayınlanmadı'}
+                    </span>
+                  </div>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-[#e6e2d3]/60 shadow-2xs">
+                    <span className="text-[10px] text-[#737265] font-medium block">Aktif Veri Kaynağı</span>
+                    <span className="font-bold text-emerald-800 truncate block mt-0.5">
+                      {lastDataSource === 'drive' ? 'Google Drive (Canlı)' : lastDataSource === 'firebase' ? 'Firebase Bulut' : 'Cihaz Hafızası'}
+                    </span>
+                  </div>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-[#e6e2d3]/60 shadow-2xs">
+                    <span className="text-[10px] text-[#737265] font-medium block">Kütük Hacmi</span>
+                    <span className="font-bold text-[#2d2c25] truncate block mt-0.5">
+                      {state.students?.length || 0} Öğr · {state.exams?.length || 0} Sınav · {state.results?.length || 0} Sonuç
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 FAST ACTION BUTTONS (CLEAN GRID) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                
+                {/* 1. ŞİMDİ DRIVE'A EŞİTLE */}
+                <button
+                  onClick={handleManualDriveSync}
+                  disabled={isDriveAutoSyncing || isPullingFromDrive}
+                  className="group relative p-4 bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-2xl shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between gap-3 cursor-pointer disabled:opacity-50 active:scale-[0.98]"
+                  title="Mevcut kütüğü Google Drive'daki ortak canlı dosyaya yazar"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                      <RefreshCw className={`w-5 h-5 text-white ${isDriveAutoSyncing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white">
+                      Canlı Eşitle
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-serif font-bold text-sm text-white">
+                      {isDriveAutoSyncing ? 'Drive Eşitleniyor...' : 'Şimdi Drive\'a Eşitle'}
+                    </h4>
+                    <p className="text-[11px] text-emerald-100/90 mt-0.5 line-clamp-2">
+                      Mevcut cihazdaki kütük ve sonuçları Google Drive ortak dosyasına kaydeder.
+                    </p>
+                  </div>
+                </button>
+
+                {/* 2. KİLİTLİ DRIVE DOSYASINI AÇ */}
+                <button
+                  onClick={handleOpenLockedDriveFile}
+                  className="group relative p-4 bg-gradient-to-br from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-2xl shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between gap-3 cursor-pointer active:scale-[0.98]"
+                  title="Sabit ve kilitli Google Drive canlı kütük dosyasını yeni sekmede açar"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                      <ExternalLink className="w-5 h-5 text-white group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5" />
+                      Kilitli Kütük
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-serif font-bold text-sm text-white">
+                      Drive Dosyasını Aç
+                    </h4>
+                    <p className="text-[11px] text-indigo-100/90 mt-0.5 line-clamp-2">
+                      Ortak Google Drive JSON dosyasını doğrudan tarayıcıda inceleyin veya paylaşın.
+                    </p>
+                  </div>
+                </button>
+
+                {/* 3. DRIVE'DAN KÜTÜĞÜ İNDİR */}
+                <button
+                  onClick={handlePullFromDrive}
+                  disabled={isPullingFromDrive || isDriveAutoSyncing}
+                  className="group relative p-4 bg-gradient-to-br from-teal-700 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white rounded-2xl shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between gap-3 cursor-pointer disabled:opacity-50 active:scale-[0.98]"
+                  title="Google Drive'daki en son canlı kütüğü indirip uygulamaya yükler"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                      <Download className={`w-5 h-5 text-white ${isPullingFromDrive ? 'animate-bounce' : 'group-hover:translate-y-0.5 transition-transform'}`} />
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white">
+                      Buluttan Al
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-serif font-bold text-sm text-white">
+                      {isPullingFromDrive ? 'Drive\'dan İndiriliyor...' : 'Drive\'dan Kütüğü İndir'}
+                    </h4>
+                    <p className="text-[11px] text-teal-100/90 mt-0.5 line-clamp-2">
+                      Diğer idarecilerin kaydettiği en son canlı kütüğü indirir ve panele yükler.
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              {/* LOCAL JSON BACKUP & TRANSFER SECTION */}
+              <div className="bg-gradient-to-br from-[#FAF9F5] via-white to-amber-50/20 rounded-2xl p-4 sm:p-5 border border-[#e6e2d3] shadow-xs space-y-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#B08D57] to-[#8d6f3e] text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <HardDriveDownload className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-[#2d2c25] font-serif">
+                      Çevrim Dışı JSON Dosyası (Yerel Yedekleme & Aktarım)
+                    </h3>
+                    <p className="text-xs text-[#737265] mt-0.5">
+                      İnternet veya bulut olmasa dahi okulun tam kütüğünü bilgisayarınıza indirebilir veya yükleyebilirsiniz.
+                    </p>
                   </div>
                 </div>
 
-                {/* CANONICAL FILE LOCK & LINK BADGE */}
-                <div className="bg-white/95 rounded-xl p-3 border border-emerald-200/80 shadow-2xs space-y-2.5 text-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isLinkLocked ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                        <Lock className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-emerald-950 block truncate">
-                            Sabit Canlı Kütük: <code className="font-mono text-emerald-800 text-[11px] bg-emerald-50 px-1.5 py-0.5 rounded">{LIVE_MASTER_FILE_NAME}</code>
-                          </span>
-                          {isLinkLocked && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white flex items-center gap-1 shadow-2xs">
-                              <Lock className="w-2.5 h-2.5" />
-                              SABİT & KİLİTLİ
-                            </span>
-                          )}
-                        </div>
-                        {canonicalFileId ? (
-                          <div className="flex flex-col gap-0.5 mt-0.5">
-                            <span className="text-[10.5px] text-emerald-700 font-mono block truncate">
-                              Dosya ID: {canonicalFileId} • Her açılışta ve yedeklemede sabit kullanılır
-                            </span>
-                            <span className="text-[10.5px] text-emerald-800 font-semibold block truncate">
-                              🕒 Son Yedeklenme Tarihi: <span className="font-bold text-emerald-950">{lastDriveBackupDate || lastDriveSyncedAt || 'Henüz kaydedilmedi'}</span>
-                            </span>
-                            <span className="text-[10.5px] text-sky-800 font-semibold block truncate">
-                              📢 Son Öğretmen Yayını: <span className="font-bold text-sky-950">{lastTeacherPublishedDate || 'Henüz yayınlanmadı'}</span>
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-[10.5px] text-amber-700 block mt-0.5">
-                            Ortak dosya bağlantısını girip "Sabitle & Kilitle" yapınız.
-                          </span>
-                        )}
-                      </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* JSON İndir */}
+                  <button
+                    onClick={handleDownloadCurrentStateJson}
+                    className="p-3.5 bg-white hover:bg-emerald-50/50 text-[#2d2c25] hover:text-emerald-900 border border-[#e6e2d3] hover:border-emerald-300 rounded-xl font-bold text-xs shadow-2xs transition-all flex items-center gap-2.5 cursor-pointer active:scale-98 group"
+                    title="Mevcut kütüğü JSON dosyası olarak bilgisayara indir"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Download className="w-4 h-4" />
                     </div>
+                    <div className="text-left min-w-0">
+                      <span className="block font-bold text-xs truncate">Bilgisayara JSON İndir</span>
+                      <span className="block text-[10px] text-[#737265] font-normal truncate">Çevrim dışı tam arşiv</span>
+                    </div>
+                  </button>
 
-                    <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-                      {/* Öğretmene Yayınla Butonu */}
-                      <button
-                        onClick={async () => {
-                          setIsPublishingToTeachers(true);
-                          try {
-                            const res = await publishToTeachersNow();
-                            if (res.success) {
-                              setFeedback({
-                                type: 'success',
-                                message: `✓ Son kütük yedeği başarıyla yayınlandı (${res.publishedDate})! Öğretmen kullanıcılar uygulamaya girerken bu güncel sürümü okuyacaktır.`
-                              });
-                            } else {
-                              setFeedback({ type: 'error', message: res.error || 'Yayınlanamadı' });
-                            }
-                          } catch (e: any) {
-                            setFeedback({ type: 'error', message: 'Yayınlama sırasında bir hata oluştu' });
-                          } finally {
-                            setIsPublishingToTeachers(false);
-                          }
-                        }}
-                        disabled={isPublishingToTeachers}
-                        className="flex-1 sm:flex-initial px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-2xs disabled:opacity-50"
-                        title={`Google Drive üzerindeki kütüğün son sürümünü öğretmenlerin okumasına açar.\nSon Yayın: ${lastTeacherPublishedDate || 'Henüz yayınlanmadı'}`}
-                      >
-                        <Radio className={`w-3.5 h-3.5 ${isPublishingToTeachers ? 'animate-pulse' : ''}`} />
-                        <span>{isPublishingToTeachers ? 'Yayınlanıyor...' : 'Öğretmene Yayınla'}</span>
-                      </button>
+                  {/* JSON Yükle */}
+                  <label className="p-3.5 bg-white hover:bg-sky-50/50 text-[#2d2c25] hover:text-sky-900 border border-[#e6e2d3] hover:border-sky-300 rounded-xl font-bold text-xs shadow-2xs transition-all flex items-center gap-2.5 cursor-pointer active:scale-98 group">
+                    <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <UploadCloud className="w-4 h-4" />
+                    </div>
+                    <div className="text-left min-w-0 flex-1">
+                      <span className="block font-bold text-xs truncate">JSON Yükle / Aktar</span>
+                      <span className="block text-[10px] text-[#737265] font-normal truncate">Dosyadan sisteme aktar</span>
+                    </div>
+                    <input 
+                      type="file" 
+                      accept=".json,application/json" 
+                      onChange={handleUploadJsonFile}
+                      className="hidden" 
+                    />
+                  </label>
 
-                      {/* Fiziki JSON İndir Butonu */}
+                  {/* Yeni Yedek Noktası Formunu Aç/Kapat */}
+                  <button
+                    onClick={() => {
+                      setShowCreateForm(prev => !prev);
+                      if (!isAdvancedOpen) setIsAdvancedOpen(true);
+                    }}
+                    className="p-3.5 bg-white hover:bg-amber-50/50 text-[#2d2c25] hover:text-amber-900 border border-[#e6e2d3] hover:border-amber-300 rounded-xl font-bold text-xs shadow-2xs transition-all flex items-center gap-2.5 cursor-pointer active:scale-98 group"
+                    title="İsimli ve açıklamalı yeni bir arşiv yedekleme noktası oluştur"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Plus className="w-4 h-4" />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <span className="block font-bold text-xs truncate">Yeni Yedek Noktası</span>
+                      <span className="block text-[10px] text-[#737265] font-normal truncate">Sistem anlık arşivi</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* COLLAPSIBLE ADVANCED SETTINGS & ARCHIVE ACCORDION */}
+              <div className="bg-white rounded-2xl border border-[#e6e2d3] overflow-hidden shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setIsAdvancedOpen(prev => !prev)}
+                  className="w-full px-4 py-3 bg-[#FAF9F5]/70 hover:bg-[#FAF9F5] flex items-center justify-between gap-3 transition-colors text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center shrink-0">
+                      <Settings2 className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-bold text-xs text-[#2d2c25] block">
+                        Gelişmiş Dosya, Kütük Kilidi & Arşiv Geçmişi ({cloudBackups.length})
+                      </span>
+                      <span className="text-[10.5px] text-[#737265] block truncate">
+                        Sabit kütük linki, dosya kilidi, Drive bağlantısı ve geçmiş sistem yedekleri
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] font-medium text-[#737265] hidden sm:inline">
+                      {isAdvancedOpen ? 'Gizle' : 'Göster'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isAdvancedOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
+
+                {isAdvancedOpen && (
+                  <div className="p-4 space-y-4 border-t border-[#e6e2d3] bg-white animate-fade-in">
+                    
+                    {/* Quick Utility Action Buttons */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {canonicalFileLink && (
+                        <a
+                          href={canonicalFileLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs border border-emerald-200 flex items-center gap-1.5 transition-colors"
+                          title="Google Drive'da bu dosyayı doğrudan aç"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Drive'da Aç</span>
+                        </a>
+                      )}
+
+                      {canonicalFileLink && (
+                        <button
+                          onClick={handleCopyFileLink}
+                          className="px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-[#2d2c25] rounded-xl font-semibold text-xs border border-gray-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+                          title="Dosya linkini panoya kopyala"
+                        >
+                          {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedLink ? 'Kopyalandı' : 'Linki Kopyala'}</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={async () => {
                           try {
@@ -836,35 +951,23 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                             setFeedback({ type: 'error', message: 'İndirme işlemi sırasında bir hata oluştu.' });
                           }
                         }}
-                        className="flex-1 sm:flex-initial px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-lg font-bold text-[11px] border border-sky-300 flex items-center justify-center gap-1 transition-colors cursor-pointer active:scale-95 shadow-2xs"
+                        className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-xl font-bold text-xs border border-sky-300 flex items-center gap-1.5 transition-colors cursor-pointer"
                         title="Kilitli Google Drive JSON dosyasını fiziki olarak bilgisayara indir (.json)"
                       >
-                        <HardDriveDownload className="w-3 h-3 text-sky-700" />
+                        <HardDriveDownload className="w-3.5 h-3.5 text-sky-700" />
                         <span>Fiziki JSON İndir</span>
                       </button>
 
-                      {canonicalFileLink && (
-                        <>
-                          <a
-                            href={canonicalFileLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-1 sm:flex-initial px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px] border border-emerald-200 flex items-center justify-center gap-1 transition-colors active:scale-95"
-                            title="Google Drive'da bu dosyayı doğrudan aç"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>Drive'da Aç</span>
-                          </a>
-                          <button
-                            onClick={handleCopyFileLink}
-                            className="flex-1 sm:flex-initial px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 rounded-lg font-semibold text-[11px] border border-gray-200 flex items-center justify-center gap-1 transition-colors cursor-pointer active:scale-95"
-                            title="Dosya linkini panoya kopyala"
-                          >
-                            {copiedLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedLink ? 'Kopyalandı' : 'Linki Kopyala'}</span>
-                          </button>
-                        </>
-                      )}
+                      <button
+                        onClick={handleLoadDriveFiles}
+                        disabled={isLoadingDriveFiles}
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs border border-emerald-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Google Drive üzerindeki kütük ve yedek dosyalarını tara"
+                      >
+                        <FolderCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{isLoadingDriveFiles ? 'Drive Taranıyor...' : 'Drive Yedeklerini Listele'}</span>
+                      </button>
+
                       <button
                         onClick={() => {
                           setShowLinkInput(prev => !prev);
@@ -872,501 +975,374 @@ export const CloudBackupModal: React.FC<CloudBackupModalProps> = ({ isOpen, onCl
                             setCustomFileLinkInput(canonicalFileLink);
                           }
                         }}
-                        className={`w-full sm:w-auto px-3 py-1.5 rounded-lg font-bold text-[11px] border flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-2xs active:scale-95 ${
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs border flex items-center gap-1.5 transition-colors cursor-pointer ${
                           isLinkLocked 
-                            ? 'bg-emerald-50 text-emerald-900 border-emerald-400 hover:bg-emerald-100'
+                            ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
                             : 'bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-300'
                         }`}
                         title="Sabit Google Drive bağlantısını görüntüle veya kilitle"
                       >
-                        {isLinkLocked ? <Lock className="w-3 h-3 text-emerald-700" /> : <Link2 className="w-3 h-3 text-emerald-600" />}
-                        <span>{showLinkInput ? 'Kapat' : (isLinkLocked ? 'Sabit Linki Yönet' : 'Ortak Linki Kilitle')}</span>
+                        {isLinkLocked ? <Lock className="w-3.5 h-3.5 text-emerald-700" /> : <Link2 className="w-3.5 h-3.5 text-emerald-600" />}
+                        <span>{showLinkInput ? 'Formu Kapat' : (isLinkLocked ? 'Sabit Linki Düzenle' : 'Ortak Linki Kilitle')}</span>
                       </button>
                     </div>
-                  </div>
 
-                  {/* Custom Link / ID Lock Drawer Form */}
-                  {showLinkInput && (
-                    <form 
-                      onSubmit={(e) => handleLockCanonicalLink(e, false)}
-                      className="p-3.5 bg-emerald-50/90 rounded-xl border border-emerald-300 space-y-2.5 animate-fade-in mt-2"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                        <label className="block text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
-                          <Lock className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>Ortak Google Drive Dosyası Bağlantısı veya ID:</span>
-                          {isLinkLocked && !isEditingLink && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white tracking-wide">
-                              SABİT & KİLİTLİ
-                            </span>
-                          )}
-                        </label>
-                        <button
-                          type="button"
-                          onClick={(e) => handleLockCanonicalLink(e, true)}
-                          disabled={isValidatingLink}
-                          className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
-                          title="Hesabınızdaki paylaşılan kütük dosyasını otomatik ara ve kilitle"
-                        >
-                          <RefreshCw className={`w-3 h-3 ${isValidatingLink ? 'animate-spin' : ''}`} />
-                          <span>Drive'da Otomatik Bul & Kilitle</span>
-                        </button>
+                    {/* Technical Meta Chips */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs bg-[#FAF9F5] p-3 rounded-xl border border-[#e6e2d3]/70">
+                      <div>
+                        <span className="text-[10px] text-[#737265] font-semibold block">Sabit Dosya ID</span>
+                        <span className="font-mono text-emerald-950 font-bold truncate block" title={canonicalFileId || 'Tanımlanmadı'}>
+                          {canonicalFileId ? `${canonicalFileId.slice(0, 16)}...` : 'Tanımlanmadı'}
+                        </span>
                       </div>
+                      <div>
+                        <span className="text-[10px] text-[#737265] font-semibold block">Dosya Sahibi</span>
+                        <span className="font-bold text-[#2d2c25] truncate block" title={liveDriveMeta?.ownerEmail || currentEmail}>
+                          {liveDriveMeta?.ownerName || (liveDriveMeta?.ownerEmail ? liveDriveMeta.ownerEmail.split('@')[0] : 'Süperadmin')}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-[#737265] font-semibold block">Otomatik Senkronizasyon</span>
+                        <span className="font-bold text-[#2d2c25]">30 Saniyede Bir Aktif</span>
+                      </div>
+                    </div>
 
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input 
-                          type="text"
-                          value={customFileLinkInput}
-                          onChange={(e) => setCustomFileLinkInput(e.target.value)}
-                          readOnly={isLinkLocked && !isEditingLink}
-                          placeholder="Örn: https://drive.google.com/file/d/1A2B3C.../view veya dosya ID"
-                          className={`flex-1 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-2xs focus:outline-none ${
-                            isLinkLocked && !isEditingLink
-                              ? 'bg-emerald-100/90 border-2 border-emerald-600 text-emerald-950 font-bold select-all cursor-default'
-                              : 'bg-white border border-emerald-300 focus:border-emerald-600 text-[#2d2c25]'
-                          }`}
-                        />
-                        {isLinkLocked && !isEditingLink ? (
-                          <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Custom Link / ID Lock Drawer Form */}
+                    {showLinkInput && (
+                      <form 
+                        onSubmit={(e) => handleLockCanonicalLink(e, false)}
+                        className="p-3.5 bg-emerald-50/90 rounded-xl border border-emerald-300 space-y-2.5 animate-fade-in"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                          <label className="block text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
+                            <Lock className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>Ortak Google Drive Dosyası Bağlantısı veya ID:</span>
+                            {isLinkLocked && !isEditingLink && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white tracking-wide">
+                                SABİT & KİLİTLİ
+                              </span>
+                            )}
+                          </label>
+                          <button
+                            type="button"
+                            onClick={(e) => handleLockCanonicalLink(e, true)}
+                            disabled={isValidatingLink}
+                            className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
+                            title="Hesabınızdaki paylaşılan kütük dosyasını otomatik ara ve kilitle"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isValidatingLink ? 'animate-spin' : ''}`} />
+                            <span>Drive'da Otomatik Bul & Kilitle</span>
+                          </button>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input 
+                            type="text"
+                            value={customFileLinkInput}
+                            onChange={(e) => setCustomFileLinkInput(e.target.value)}
+                            readOnly={isLinkLocked && !isEditingLink}
+                            placeholder="Örn: https://drive.google.com/file/d/1A2B3C.../view veya dosya ID"
+                            className={`flex-1 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-2xs focus:outline-none ${
+                              isLinkLocked && !isEditingLink
+                                ? 'bg-emerald-100/90 border-2 border-emerald-600 text-emerald-950 font-bold select-all cursor-default'
+                                : 'bg-white border border-emerald-300 focus:border-emerald-600 text-[#2d2c25]'
+                            }`}
+                          />
+                          {isLinkLocked && !isEditingLink ? (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={handleUnlockLink}
+                                className="w-full sm:w-auto px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                                title="Sabit dosya kilidini açıp başka link tanımla"
+                              >
+                                <Unlock className="w-3.5 h-3.5" />
+                                <span>Kilidi Aç ve Değiştir</span>
+                              </button>
+                            </div>
+                          ) : (
                             <button
-                              type="button"
-                              onClick={handleUnlockLink}
-                              className="w-full sm:w-auto px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                              title="Sabit dosya kilidini açıp başka link tanımla"
+                              type="submit"
+                              disabled={isValidatingLink || !customFileLinkInput.trim()}
+                              className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0 active:scale-95"
+                              title="Bu bağlantıyı sabit kütük olarak kilitle"
                             >
-                              <Unlock className="w-3.5 h-3.5" />
-                              <span>Kilidi Aç ve Değiştir</span>
+                              <Lock className={`w-3.5 h-3.5 ${isValidatingLink ? 'animate-spin' : ''}`} />
+                              <span>{isValidatingLink ? 'Doğrulanıyor...' : 'Sabitle & Kilitle'}</span>
                             </button>
-                            <span className="hidden sm:flex items-center gap-1 px-3 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs">
-                              <Lock className="w-3.5 h-3.5" />
-                              <span>Sabit Kilitli</span>
-                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-[10.5px] text-emerald-800 leading-relaxed">
+                          Bu bağlantı sisteme sabitlendiğinde tüm yöneticiler daima bu tek dosya üzerinden eşitlenir; çift dosya ve kütük çakışmaları engellenir.
+                        </p>
+                      </form>
+                    )}
+
+                    {/* Google Drive Found Files Section */}
+                    {driveFilesList.length > 0 && (
+                      <div className="p-4 bg-emerald-50/70 border border-emerald-300 rounded-2xl space-y-3 animate-fade-in">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <FolderCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                            <h4 className="font-bold text-xs text-emerald-950 font-serif">
+                              Google Drive Üzerindeki Kütük & Yedek Dosyaları ({driveFilesList.length})
+                            </h4>
                           </div>
-                        ) : (
+                          <button
+                            onClick={() => setDriveFilesList([])}
+                            className="text-[11px] text-emerald-800 hover:text-emerald-950 font-bold cursor-pointer underline"
+                          >
+                            Kapat
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                          {driveFilesList.map((file) => {
+                            const isBusy = driveFileActionLoadingId === file.id;
+                            return (
+                              <div 
+                                key={file.id}
+                                className="p-2.5 bg-white rounded-xl border border-emerald-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                              >
+                                <div className="min-w-0">
+                                  <span className="font-bold text-emerald-950 truncate block">{file.name}</span>
+                                  <span className="text-[10px] text-emerald-700 block">
+                                    Değiştirilme: {file.modifiedTime ? formatDate(file.modifiedTime) : formatDate(file.createdTime)} {file.size ? `• ${(Number(file.size) / 1024).toFixed(1)} KB` : ''}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                                  {file.webViewLink && (
+                                    <a
+                                      href={file.webViewLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[11px] font-semibold border border-emerald-200 flex items-center gap-1"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                      <span>Aç</span>
+                                    </a>
+                                  )}
+                                  <button
+                                    onClick={() => handleRestoreFromDriveFile(file)}
+                                    disabled={isBusy}
+                                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50 active:scale-95"
+                                    title="Bu dosyayı indirip aktif kütük olarak sisteme yükle"
+                                  >
+                                    <Download className={`w-3 h-3 ${isBusy ? 'animate-bounce' : ''}`} />
+                                    <span>{isBusy ? 'Yükleniyor...' : 'Kütük Olarak Yükle'}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Create Snapshot Form */}
+                    {showCreateForm && (
+                      <form 
+                        onSubmit={handleCreateSnapshot}
+                        className="p-4 bg-[#FAF9F5] rounded-2xl border border-[#B08D57]/40 space-y-3 animate-fade-in"
+                      >
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-[#5a5a40] mb-1">
+                              Yedek Adı (İsteğe Bağlı):
+                            </label>
+                            <input 
+                              type="text" 
+                              value={snapshotName}
+                              onChange={(e) => setSnapshotName(e.target.value)}
+                              placeholder="Örn: 1. Dönem Deneme 3 Öncesi Kütük"
+                              className="w-full bg-white border border-[#e6e2d3] rounded-xl px-3 py-2 text-xs text-[#2d2c25] focus:outline-none focus:border-[#B08D57]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-[#5a5a40] mb-1">
+                              Açıklama / Not:
+                            </label>
+                            <input 
+                              type="text" 
+                              value={snapshotNote}
+                              onChange={(e) => setSnapshotNote(e.target.value)}
+                              placeholder="Örn: 8. sınıf LGS optik okuma sonrası arşiv"
+                              className="w-full bg-white border border-[#e6e2d3] rounded-xl px-3 py-2 text-xs text-[#2d2c25] focus:outline-none focus:border-[#B08D57]"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowCreateForm(false)}
+                            className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
+                          >
+                            Vazgeç
+                          </button>
                           <button
                             type="submit"
-                            disabled={isValidatingLink || !customFileLinkInput.trim()}
-                            className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0 active:scale-95"
-                            title="Bu bağlantıyı sabit kütük olarak kilitle"
+                            disabled={isCreatingSnapshot}
+                            className="px-4 py-1.5 bg-[#B08D57] hover:bg-[#8d6f3e] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                           >
-                            <Lock className={`w-3.5 h-3.5 ${isValidatingLink ? 'animate-spin' : ''}`} />
-                            <span>{isValidatingLink ? 'Doğrulanıyor...' : 'Sabitle & Kilitle'}</span>
+                            <RefreshCw className={`w-3.5 h-3.5 ${isCreatingSnapshot ? 'animate-spin' : ''}`} />
+                            <span>{isCreatingSnapshot ? 'Kaydediliyor...' : 'Yedek Noktasını Kaydet'}</span>
                           </button>
-                        )}
-                      </div>
-
-                      <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-300/80 text-[10.5px] text-emerald-900 leading-relaxed space-y-1">
-                        <div className="flex items-center gap-1.5 font-bold text-emerald-950">
-                          <Lock className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                          <span>Sabit & Kilitli Google Drive Bağlantısı:</span>
                         </div>
-                        <p>
-                          Bu bölümde kaydedilen Google Drive linki sisteme <strong>sabitlenir ve kilitlenir</strong>. Her uygulama açılışında ve tüm admin dosya yedeklemelerinde (canlı kütük, anlık eşitleme, sistem arşivleri) daima bu <strong>sabit Google linki</strong> kullanılır; çift dosya oluşumu veya kütük karışıklığı kesin olarak engellenir.
-                        </p>
-                      </div>
-                    </form>
-                  )}
-                </div>
+                      </form>
+                    )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-200/60 text-xs">
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200/50">
-                    <span className="text-[10px] text-emerald-700 font-semibold block">Eşitleme Sıklığı</span>
-                    <span className="font-bold text-emerald-950">30 Saniyede Bir Otomatik</span>
-                  </div>
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200/50">
-                    <span className="text-[10px] text-emerald-700 font-semibold block">Drive Sunucu Saati</span>
-                    <span className="font-bold text-emerald-950">{liveDriveMeta?.modifiedTime || lastDriveSyncedAt || 'Beklemede'}</span>
-                  </div>
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200/50">
-                    <span className="text-[10px] text-emerald-700 font-semibold block">Dosya Sahibi</span>
-                    <span className="font-bold text-emerald-950 truncate block" title={liveDriveMeta?.ownerEmail || currentEmail}>
-                      {liveDriveMeta?.ownerName || (liveDriveMeta?.ownerEmail ? liveDriveMeta.ownerEmail.split('@')[0] : 'Süperadmin')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* PILLAR 2: GOOGLE DRIVE (ÖĞRETMENLERE YAYINLAMA) */}
-              <div className="bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/30 rounded-2xl p-4 sm:p-5 border border-emerald-200 shadow-2xs space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
-                      <Radio className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-sm text-emerald-950 font-serif">
-                          2. Google Drive — Öğretmen Kullanıcılara Yayınlama (0 Firebase Kotası)
-                        </h3>
-                        {hasPendingChanges ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 border border-emerald-300 animate-pulse">
-                            {pendingSyncCount} Değişiklik Yayına Hazır
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            ✓ Öğretmenler Güncel
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-emerald-900 mt-1 leading-relaxed">
-                        İdarecilerin girdiği öğrenci kütüğü, deneme sınavları, salon yerleşimleri ve optik sonuçlar doğrudan <strong>Google Drive canlı kütük dosyasına</strong> aktarılır. Öğretmenler verileri doğrudan Google Drive üzerinden çeker (Firebase kotası harcamaz).
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handlePublishToTeachers}
-                    disabled={isPublishingToTeachers}
-                    className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0 active:scale-95"
-                    title="Google Drive canlı kütüğünü öğretmenlerin okumasına aç"
-                  >
-                    <Radio className={`w-4 h-4 ${isPublishingToTeachers ? 'animate-pulse' : ''}`} />
-                    <span>{isPublishingToTeachers ? 'Yayınlanıyor...' : 'Öğretmene Yayınla (Google Drive)'}</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-200/60 text-xs">
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200/50">
-                    <span className="text-[10px] text-emerald-700 font-semibold block">Yayın Deposu</span>
-                    <span className="font-bold text-emerald-950">Google Drive Canlı JSON</span>
-                  </div>
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200/50">
-                    <span className="text-[10px] text-emerald-700 font-semibold block">Son Yayın Zamanı</span>
-                    <span className="font-bold text-emerald-950">{lastTeacherPublishedDate || lastSyncedAt || 'Henüz yayınlanmadı'}</span>
-                  </div>
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200/50">
-                    <span className="text-[10px] text-emerald-700 font-semibold block">Öğretmen Kotası</span>
-                    <span className="font-bold text-emerald-950">0 Firebase Kotası (Limitsiz)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* CURRENT LOCAL STATE SUMMARY CHIPS */}
-              <div className="bg-[#FAF9F5] p-3 sm:p-3.5 rounded-2xl border border-[#e6e2d3] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 text-xs shadow-2xs">
-                <span className="font-semibold text-[#5a5a40] flex items-center gap-1.5">
-                  <Database className="w-3.5 h-3.5 text-[#B08D57]" />
-                  Mevcut Okul Kütüğü:
-                </span>
-                <div className="flex items-center gap-2 sm:gap-3 font-bold text-[#2d2c25] flex-wrap">
-                  <span className="bg-white px-2 py-0.5 rounded-md border border-[#e6e2d3]">{state.students?.length || 0} Öğrenci</span>
-                  <span className="bg-white px-2 py-0.5 rounded-md border border-[#e6e2d3]">{state.exams?.length || 0} Sınav</span>
-                  <span className="bg-white px-2 py-0.5 rounded-md border border-[#e6e2d3]">{state.results?.length || 0} Sonuç</span>
-                  <span className="bg-white px-2 py-0.5 rounded-md border border-[#e6e2d3]">{state.examHalls?.length || 0} Salon</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ============================================================ */}
-          {/* 1. ADMIN VIEW - TAB 2: GEÇMİŞ YAYINLAR & SİSTEM YEDEKLERİ    */}
-          {/* ============================================================ */}
-          {isAdmin && activeTab === 'archive' && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-bold text-xs uppercase tracking-wider text-[#737265]">
-                    Geçmiş Yayın Noktaları & Yedekler ({cloudBackups.length})
-                  </h3>
-                  <p className="text-[11px] text-[#737265]">
-                    İstediğiniz zaman arşivdeki bir noktaya geri dönebilir veya doğrudan JSON dosyası yükleyip indirebilirsiniz.
-                  </p>
-                </div>
-                
-                <div className="flex items-center gap-2 flex-wrap self-end sm:self-center">
-                  {/* Direct JSON Import Button */}
-                  <label className="px-3 py-1.5 bg-white hover:bg-gray-50 text-[#5a5a40] font-bold text-xs rounded-xl border border-[#e6e2d3] shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer">
-                    <Download className="w-3.5 h-3.5 text-emerald-600 rotate-180" />
-                    <span>JSON Yükle / Geri Yükle</span>
-                    <input 
-                      type="file" 
-                      accept=".json,application/json" 
-                      onChange={handleUploadJsonFile}
-                      className="hidden" 
-                    />
-                  </label>
-
-                  {/* Direct Current State Export Button */}
-                  <button
-                    onClick={handleDownloadCurrentStateJson}
-                    className="px-3 py-1.5 bg-white hover:bg-gray-50 text-[#5a5a40] font-bold text-xs rounded-xl border border-[#e6e2d3] shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
-                    title="Mevcut kütüğü JSON dosyası olarak indir"
-                  >
-                    <Download className="w-3.5 h-3.5 text-sky-600" />
-                    <span>Mevcut Kütüğü İndir</span>
-                  </button>
-
-                  {/* Google Drive Scan & List Button */}
-                  <button
-                    onClick={handleLoadDriveFiles}
-                    disabled={isLoadingDriveFiles}
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl border border-emerald-300 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
-                    title="Google Drive üzerindeki kütük ve yedek dosyalarını tara"
-                  >
-                    <FolderCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{isLoadingDriveFiles ? 'Drive Taranıyor...' : 'Drive Yedeklerini Listele'}</span>
-                  </button>
-
-                  {/* Create Snapshot Button */}
-                  <button
-                    onClick={() => setShowCreateForm(prev => !prev)}
-                    className="px-3.5 py-1.5 bg-[#B08D57] hover:bg-[#8d6f3e] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{showCreateForm ? 'İptal' : 'Yeni Yedek Noktası'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Google Drive Found Files Section */}
-              {driveFilesList.length > 0 && (
-                <div className="p-4 bg-emerald-50/70 border border-emerald-300 rounded-2xl space-y-3 animate-fade-in">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <FolderCheck className="w-4 h-4 text-emerald-700 shrink-0" />
-                      <h4 className="font-bold text-xs text-emerald-950 font-serif">
-                        Google Drive Üzerindeki Kütük & Yedek Dosyaları ({driveFilesList.length})
-                      </h4>
-                    </div>
-                    <button
-                      onClick={() => setDriveFilesList([])}
-                      className="text-[11px] text-emerald-800 hover:text-emerald-950 font-bold cursor-pointer underline"
-                    >
-                      Kapat
-                    </button>
-                  </div>
-
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {driveFilesList.map((file) => {
-                      const isBusy = driveFileActionLoadingId === file.id;
-                      return (
-                        <div 
-                          key={file.id}
-                          className="p-2.5 bg-white rounded-xl border border-emerald-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
-                        >
-                          <div className="min-w-0">
-                            <span className="font-bold text-emerald-950 truncate block">{file.name}</span>
-                            <span className="text-[10px] text-emerald-700 block">
-                              Değiştirilme: {file.modifiedTime ? formatDate(file.modifiedTime) : formatDate(file.createdTime)} {file.size ? `• ${(Number(file.size) / 1024).toFixed(1)} KB` : ''}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                            {file.webViewLink && (
-                              <a
-                                href={file.webViewLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[11px] font-semibold border border-emerald-200 flex items-center gap-1"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                <span>Aç</span>
-                              </a>
-                            )}
-                            <button
-                              onClick={() => handleRestoreFromDriveFile(file)}
-                              disabled={isBusy}
-                              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50 active:scale-95"
-                              title="Bu dosyayı indirip aktif kütük olarak sisteme yükle"
-                            >
-                              <Download className={`w-3 h-3 ${isBusy ? 'animate-bounce' : ''}`} />
-                              <span>{isBusy ? 'Yükleniyor...' : 'Kütük Olarak Yükle'}</span>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Create Snapshot Form */}
-              {showCreateForm && (
-                <form 
-                  onSubmit={handleCreateSnapshot}
-                  className="p-4 bg-[#FAF9F5] rounded-2xl border border-[#B08D57]/40 space-y-3 animate-fade-in"
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-[#5a5a40] mb-1">
-                        Yedek Adı (İsteğe Bağlı):
-                      </label>
-                      <input 
-                        type="text" 
-                        value={snapshotName}
-                        onChange={(e) => setSnapshotName(e.target.value)}
-                        placeholder="Örn: 1. Dönem Deneme 3 Öncesi Kütük"
-                        className="w-full bg-white border border-[#e6e2d3] rounded-xl px-3 py-2 text-xs text-[#2d2c25] focus:outline-none focus:border-[#B08D57]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-[#5a5a40] mb-1">
-                        Açıklama / Not:
-                      </label>
-                      <input 
-                        type="text" 
-                        value={snapshotNote}
-                        onChange={(e) => setSnapshotNote(e.target.value)}
-                        placeholder="Örn: 8. sınıf LGS optik okuma sonrası arşiv"
-                        className="w-full bg-white border border-[#e6e2d3] rounded-xl px-3 py-2 text-xs text-[#2d2c25] focus:outline-none focus:border-[#B08D57]"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowCreateForm(false)}
-                      className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-xl"
-                    >
-                      Vazgeç
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isCreatingSnapshot}
-                      className="px-4 py-1.5 bg-[#B08D57] hover:bg-[#8d6f3e] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isCreatingSnapshot ? 'animate-spin' : ''}`} />
-                      <span>{isCreatingSnapshot ? 'Kaydediliyor...' : 'Yedek Noktasını Kaydet'}</span>
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Restore Confirmation Dialog */}
-              {confirmRestoreBackup && (
-                <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-3 animate-fade-in">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-bold text-sm text-amber-900">
-                        Bu Yedeği Sisteme Geri Yüklemek İstiyor Musunuz?
-                      </h4>
-                      <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-                        <strong>"{confirmRestoreBackup.name}"</strong> ({formatDate(confirmRestoreBackup.createdAt)}) tarihli kütük sisteme geri yüklenecektir.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => setConfirmRestoreBackup(null)}
-                      className="px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 rounded-xl cursor-pointer"
-                    >
-                      İptal
-                    </button>
-                    <button
-                      onClick={handleConfirmRestore}
-                      disabled={actionLoadingId === confirmRestoreBackup.id}
-                      className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${actionLoadingId === confirmRestoreBackup.id ? 'animate-spin' : ''}`} />
-                      <span>{actionLoadingId === confirmRestoreBackup.id ? 'Geri Yükleniyor...' : 'Evet, Geri Yükle'}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Backup List */}
-              {cloudBackups.length === 0 ? (
-                <div className="p-8 text-center bg-[#FAF9F5] rounded-2xl border border-dashed border-[#e6e2d3] space-y-2">
-                  <div className="w-10 h-10 rounded-full bg-amber-100 text-[#B08D57] mx-auto flex items-center justify-center">
-                    <Cloud className="w-5 h-5" />
-                  </div>
-                  <h4 className="font-bold text-xs text-[#5a5a40]">Henüz Arşivlenmiş Yedek Noktası Yok</h4>
-                  <p className="text-[11px] text-[#737265] max-w-sm mx-auto">
-                    Öğretmenlere yayınlanan kütükler veya yukarıdaki butonla oluşturacağınız yedek noktaları burada arşivlenir.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {cloudBackups.map((record) => {
-                    const isBusy = actionLoadingId === record.id;
-                    const isConfirmDelete = confirmDeleteId === record.id;
-
-                    return (
-                      <div 
-                        key={record.id}
-                        className="p-3.5 bg-white rounded-2xl border border-[#e6e2d3] hover:border-[#B08D57]/40 transition-all shadow-2xs space-y-2.5"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    {/* Restore Confirmation Dialog */}
+                    {confirmRestoreBackup && (
+                      <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-3 animate-fade-in">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                           <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-bold text-xs text-[#2d2c25]">{record.name}</h4>
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#FAF9F5] text-[#5a5a40] border border-[#e6e2d3]">
-                                {formatDate(record.createdAt)}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-[#737265] mt-0.5">
-                              Yayınlayan: <span className="font-medium text-[#2d2c25]">{record.createdByEmail}</span>
-                              {record.note && <span className="italic text-[#B08D57]"> • {record.note}</span>}
+                            <h4 className="font-bold text-sm text-amber-900">
+                              Bu Yedeği Sisteme Geri Yüklemek İstiyor Musunuz?
+                            </h4>
+                            <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                              <strong>"{confirmRestoreBackup.name}"</strong> ({formatDate(confirmRestoreBackup.createdAt)}) tarihli kütük sisteme geri yüklenecektir.
                             </p>
                           </div>
-
-                          <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
-                            <button
-                              onClick={() => handleDownloadBackupJson(record)}
-                              className="px-2.5 py-1.5 bg-gray-50 hover:bg-gray-100 text-[#5a5a40] font-semibold rounded-xl text-xs border border-gray-200 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
-                              title="JSON olarak indir"
-                            >
-                              <Download className="w-3.5 h-3.5 text-sky-600" />
-                              <span className="hidden sm:inline">JSON</span>
-                            </button>
-
-                            <button
-                              onClick={() => setConfirmRestoreBackup(record)}
-                              disabled={isBusy}
-                              className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-xs border border-amber-200 transition-all flex items-center gap-1 cursor-pointer"
-                              title="Sisteme geri yükle"
-                            >
-                              <RefreshCw className={`w-3.5 h-3.5 ${isBusy ? 'animate-spin' : ''}`} />
-                              <span>Geri Yükle</span>
-                            </button>
-
-                            {isConfirmDelete ? (
-                              <div className="flex items-center gap-1 bg-rose-50 p-1 rounded-xl border border-rose-200">
-                                <span className="text-[10px] text-rose-700 font-bold px-1">Silinsin mi?</span>
-                                <button
-                                  onClick={() => handleDeleteSnapshot(record.id)}
-                                  className="px-2 py-0.5 bg-rose-600 text-white rounded-lg text-[10px] font-bold"
-                                >
-                                  Evet
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDeleteId(null)}
-                                  className="px-2 py-0.5 bg-white text-gray-700 rounded-lg text-[10px]"
-                                >
-                                  Hayır
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => setConfirmDeleteId(record.id)}
-                                className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                                title="Sil"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
                         </div>
-
-                        <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
-                          <div className="bg-[#FAF9F5] p-1.5 rounded-xl border border-[#e6e2d3]/60">
-                            <span className="font-bold text-[#2d2c25]">{record.summary?.studentCount ?? record.data?.students?.length ?? 0}</span>
-                            <span className="text-[10px] text-[#737265] block">Öğrenci</span>
-                          </div>
-                          <div className="bg-[#FAF9F5] p-1.5 rounded-xl border border-[#e6e2d3]/60">
-                            <span className="font-bold text-[#2d2c25]">{record.summary?.examCount ?? record.data?.exams?.length ?? 0}</span>
-                            <span className="text-[10px] text-[#737265] block">Sınav</span>
-                          </div>
-                          <div className="bg-[#FAF9F5] p-1.5 rounded-xl border border-[#e6e2d3]/60">
-                            <span className="font-bold text-[#2d2c25]">{record.summary?.resultCount ?? record.data?.results?.length ?? 0}</span>
-                            <span className="text-[10px] text-[#737265] block">Sonuç</span>
-                          </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => setConfirmRestoreBackup(null)}
+                            className="px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 rounded-xl cursor-pointer"
+                          >
+                            İptal
+                          </button>
+                          <button
+                            onClick={handleConfirmRestore}
+                            disabled={actionLoadingId === confirmRestoreBackup.id}
+                            className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${actionLoadingId === confirmRestoreBackup.id ? 'animate-spin' : ''}`} />
+                            <span>{actionLoadingId === confirmRestoreBackup.id ? 'Geri Yükleniyor...' : 'Evet, Geri Yükle'}</span>
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    )}
+
+                    {/* Past Backups / Archive Section */}
+                    <div className="pt-2 border-t border-[#e6e2d3]/70 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-xs text-[#2d2c25]">
+                          Geçmiş Yayın Noktaları & Yedekler ({cloudBackups.length})
+                        </h4>
+                        <span className="text-[10.5px] text-[#737265]">
+                          Herhangi bir arşive geri dönebilir veya indirebilirsiniz
+                        </span>
+                      </div>
+
+                      {cloudBackups.length === 0 ? (
+                        <div className="p-6 text-center bg-[#FAF9F5] rounded-xl border border-dashed border-[#e6e2d3] space-y-1.5">
+                          <div className="w-8 h-8 rounded-full bg-amber-100 text-[#B08D57] mx-auto flex items-center justify-center">
+                            <Cloud className="w-4 h-4" />
+                          </div>
+                          <h5 className="font-bold text-xs text-[#5a5a40]">Henüz Arşivlenmiş Yedek Noktası Yok</h5>
+                          <p className="text-[10.5px] text-[#737265] max-w-sm mx-auto">
+                            Öğretmenlere yayınlanan kütükler veya yukarıdaki butonla oluşturacağınız yedek noktaları burada arşivlenir.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                          {cloudBackups.map((record) => {
+                            const isBusy = actionLoadingId === record.id;
+                            const isConfirmDelete = confirmDeleteId === record.id;
+
+                            return (
+                              <div 
+                                key={record.id}
+                                className="p-3 bg-white rounded-xl border border-[#e6e2d3] hover:border-[#B08D57]/40 transition-all shadow-2xs space-y-2"
+                              >
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h5 className="font-bold text-xs text-[#2d2c25]">{record.name}</h5>
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#FAF9F5] text-[#5a5a40] border border-[#e6e2d3]">
+                                        {formatDate(record.createdAt)}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10.5px] text-[#737265] mt-0.5">
+                                      Yayınlayan: <span className="font-medium text-[#2d2c25]">{record.createdByEmail}</span>
+                                      {record.note && <span className="italic text-[#B08D57]"> • {record.note}</span>}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                                    <button
+                                      onClick={() => handleDownloadBackupJson(record)}
+                                      className="px-2.5 py-1 bg-gray-50 hover:bg-gray-100 text-[#5a5a40] font-semibold rounded-lg text-xs border border-gray-200 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                                      title="JSON olarak indir"
+                                    >
+                                      <Download className="w-3 h-3 text-sky-600" />
+                                      <span className="hidden sm:inline">JSON</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => setConfirmRestoreBackup(record)}
+                                      disabled={isBusy}
+                                      className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg text-xs border border-amber-200 transition-all flex items-center gap-1 cursor-pointer"
+                                      title="Sisteme geri yükle"
+                                    >
+                                      <RefreshCw className={`w-3 h-3 ${isBusy ? 'animate-spin' : ''}`} />
+                                      <span>Geri Yükle</span>
+                                    </button>
+
+                                    {isConfirmDelete ? (
+                                      <div className="flex items-center gap-1 bg-rose-50 p-1 rounded-lg border border-rose-200">
+                                        <span className="text-[10px] text-rose-700 font-bold px-1">Silinsin mi?</span>
+                                        <button
+                                          onClick={() => handleDeleteSnapshot(record.id)}
+                                          className="px-2 py-0.5 bg-rose-600 text-white rounded text-[10px] font-bold"
+                                        >
+                                          Evet
+                                        </button>
+                                        <button
+                                          onClick={() => setConfirmDeleteId(null)}
+                                          className="px-2 py-0.5 bg-white text-gray-700 rounded text-[10px]"
+                                        >
+                                          Hayır
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => setConfirmDeleteId(record.id)}
+                                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Sil"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
+                                  <div className="bg-[#FAF9F5] p-1 rounded-lg border border-[#e6e2d3]/60">
+                                    <span className="font-bold text-[#2d2c25]">{record.summary?.studentCount ?? record.data?.students?.length ?? 0}</span>
+                                    <span className="text-[9.5px] text-[#737265] block">Öğrenci</span>
+                                  </div>
+                                  <div className="bg-[#FAF9F5] p-1 rounded-lg border border-[#e6e2d3]/60">
+                                    <span className="font-bold text-[#2d2c25]">{record.summary?.examCount ?? record.data?.exams?.length ?? 0}</span>
+                                    <span className="text-[9.5px] text-[#737265] block">Sınav</span>
+                                  </div>
+                                  <div className="bg-[#FAF9F5] p-1 rounded-lg border border-[#e6e2d3]/60">
+                                    <span className="font-bold text-[#2d2c25]">{record.summary?.resultCount ?? record.data?.results?.length ?? 0}</span>
+                                    <span className="text-[9.5px] text-[#737265] block">Sonuç</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

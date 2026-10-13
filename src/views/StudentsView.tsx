@@ -1467,7 +1467,7 @@ export const StudentsView = () => {
 
                       {/* No */}
                       <td className="py-2 px-3">
-                        <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200/80">
+                        <span className="font-mono font-bold text-xs bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-700">
                           {student.no || '-'}
                         </span>
                       </td>
@@ -1481,13 +1481,13 @@ export const StudentsView = () => {
                               setEditingStudentId(student.id);
                               setIsStudentModalOpen(true);
                             }}
-                            className="font-bold text-slate-800 hover:text-indigo-600 text-left cursor-pointer transition-colors text-xs hover:underline truncate max-w-[200px]"
+                            className="font-bold text-slate-800 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 text-left cursor-pointer transition-colors text-xs hover:underline truncate max-w-[200px]"
                           >
                             {student.name || 'İsimsiz Öğrenci'}
                           </button>
                           {hasMissingHall && (
                             <span 
-                              className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200 shrink-0" 
+                              className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.2 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 shrink-0" 
                               title="Salonsuz Sınavı Var"
                             >
                               Salonsuz
@@ -1498,7 +1498,7 @@ export const StudentsView = () => {
 
                       {/* Class */}
                       <td className="py-2 px-3">
-                        <span className="font-bold text-[11px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        <span className="font-bold text-[11px] px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/60">
                           {(() => {
                             if (!student.className) return '-';
                             const m = student.className.match(/(\d+)\s*(?:\.|\/|-|\s)*\s*([A-ZÇĞİÖŞÜ])/i);
@@ -1513,17 +1513,17 @@ export const StudentsView = () => {
                         <div className="flex flex-wrap gap-1 items-center">
                           {studentHalls.length > 0 ? (
                             studentHalls.map(hall => (
-                              <span key={hall.id} className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
-                                <DoorOpen className="w-2.5 h-2.5 text-indigo-600" />
+                              <span key={hall.id} className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                                <DoorOpen className="w-2.5 h-2.5 text-indigo-600 dark:text-indigo-400" />
                                 <span className="truncate max-w-[100px]">{hall.name}</span>
                               </span>
                             ))
                           ) : registrations.length > 0 ? (
-                            <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                            <span className="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-800/60">
                               Salonsuz
                             </span>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-slate-400 dark:text-slate-500">-</span>
                           )}
                         </div>
                       </td>
@@ -1540,8 +1540,8 @@ export const StudentsView = () => {
                                 key={reg.examId} 
                                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
                                   reg.isPaid 
-                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
-                                    : 'bg-rose-50 border-rose-200 text-rose-900'
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-300' 
+                                    : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800/60 text-rose-900 dark:text-rose-300'
                                 }`}
                               >
                                 <span className="font-bold truncate max-w-[90px]">{examName}</span>
