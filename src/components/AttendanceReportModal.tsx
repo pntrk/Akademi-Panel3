@@ -48,6 +48,36 @@ export const AttendanceReportModal: React.FC<AttendanceReportModalProps> = ({
     return exams[0]?.id || '';
   });
 
+  // initialExamId prop değiştiğinde seçili sınavı senkronize et
+  React.useEffect(() => {
+    if (initialExamId && exams.some(e => e.id === initialExamId)) {
+      setSelectedExamId(initialExamId);
+    }
+  }, [initialExamId, exams]);
+
+  // Sınavları güncel/yaklaşan ve geçmiş sınav arşivi olarak kategorize et
+  const { currentOrUpcomingExams, pastExams } = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const currentOrUpcoming: Exam[] = [];
+    const past: Exam[] = [];
+
+    const sorted = [...exams].sort((a, b) => {
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    sorted.forEach(e => {
+      if (!e.date || e.date >= todayStr) {
+        currentOrUpcoming.push(e);
+      } else {
+        past.push(e);
+      }
+    });
+
+    return { currentOrUpcomingExams: currentOrUpcoming, pastExams: past };
+  }, [exams]);
+
   // 2. Sekme: 'halls' (Salona göre) | 'classes' (Sınıfa göre devamsızlar / e-Okul)
   const [activeTab, setActiveTab] = useState<'halls' | 'classes'>('halls');
 
@@ -688,24 +718,55 @@ export const AttendanceReportModal: React.FC<AttendanceReportModalProps> = ({
 
         {/* SINAV SEÇİMİ & KONTROL ÇUBUĞU */}
         <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#15171C] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Sınav Açılır Kutusu */}
-          <div className="flex items-center gap-2 flex-1 max-w-md">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-400 whitespace-nowrap">
-              Sınav:
+          {/* Sınav Açılır Kutusu / Arşiv Seçimi */}
+          <div className="flex items-center gap-2 flex-1 max-w-lg">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-400 whitespace-nowrap flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Sınav / Arşiv:</span>
             </span>
             <div className="relative flex-1">
               <select
                 value={selectedExamId}
                 onChange={(e) => setSelectedExamId(e.target.value)}
-                className="w-full bg-slate-100/80 dark:bg-slate-800/80 text-xs font-bold text-slate-800 dark:text-slate-100 py-2 pl-3 pr-8 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+                className="w-full bg-slate-100/90 dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-100 py-2 pl-3 pr-8 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+                title="Raporlanacak sınavı seçin"
               >
-                {exams.map(exam => (
-                  <option key={exam.id} value={exam.id}>
-                    {exam.name} {exam.date ? `(${exam.date})` : ''}
-                  </option>
-                ))}
+                {currentOrUpcomingExams.length > 0 && (
+                  <optgroup label="📅 Aktif & Yaklaşan Sınavlar" className="font-bold text-slate-800 dark:text-slate-200">
+                    {currentOrUpcomingExams.map(exam => {
+                      const examAtts = (Object.values(attendances) as HallAttendance[]).filter(a => a.examId === exam.id && a.status === 'submitted');
+                      const submittedCount = examAtts.length;
+                      return (
+                        <option key={exam.id} value={exam.id}>
+                          {exam.name} {exam.date ? `(${exam.date})` : ''} {submittedCount > 0 ? `• [${submittedCount} Salon Teslim Edildi]` : '• [Yoklama Bekleniyor]'}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                )}
+                {pastExams.length > 0 && (
+                  <optgroup label="🗄️ Geçmiş Sınavlar Arşivi" className="font-bold text-slate-600 dark:text-slate-400">
+                    {pastExams.map(exam => {
+                      const examAtts = (Object.values(attendances) as HallAttendance[]).filter(a => a.examId === exam.id && a.status === 'submitted');
+                      const submittedCount = examAtts.length;
+                      return (
+                        <option key={exam.id} value={exam.id}>
+                          {exam.name} {exam.date ? `(${exam.date})` : ''} {submittedCount > 0 ? `• [${submittedCount} Salon Arşiv Kaydı]` : ''}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                )}
               </select>
             </div>
+
+            {/* Seçili sınavın teslim özeti rozeti */}
+            {selectedExam && (
+              <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 shrink-0">
+                <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span>{summaryStats.submittedHalls}/{summaryStats.totalHalls} Salon</span>
+              </span>
+            )}
           </div>
 
           {/* Sekme Değiştirici (Salona Göre / Sınıfa Göre) */}

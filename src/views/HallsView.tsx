@@ -178,6 +178,12 @@ export const HallsView = () => {
   const [isSendingNotification, setIsSendingNotification] = useState(false);
   const [simulationDateStr, setSimulationDateStr] = useState<string>(''); // Test simülasyonu için
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportExamId, setReportExamId] = useState<string>('');
+
+  const openReportModal = (examId?: string) => {
+    setReportExamId(examId || '');
+    setIsReportModalOpen(true);
+  };
 
   const capacity = columns.reduce((acc, col) => acc + (col.deskCount * col.seatsPerDesk), 0);
 
@@ -445,19 +451,19 @@ export const HallsView = () => {
     setHighlightStudentQuery('');
 
     // Otomatik Sınav ve Gün Tespiti:
-    // Salona ait bugünkü sınavı veya seçilen sınavı tespit et
-    const detectedTodayExam = specificExam || findTodayExamForHall(hall, state.exams, effectiveCalendarDate);
+    // Salona ait bugünkü sınavı veya seçilen sınavı tespit et (yoksa sınavlar listesindeki ilk sınav)
+    const detectedTodayExam = specificExam || findTodayExamForHall(hall, state.exams, effectiveCalendarDate) || state.exams[0] || null;
     const matchedExam = detectedTodayExam || null;
     setActiveExamForAttendance(matchedExam);
 
-    // Eğer bu sınav ve salon için önceden kaydedilmiş yoklama varsa devamsızları yükle
+    // Sınava Özel Yoklama:
+    // SADECE ve SADECE bu sınavın ve bu salonun kaydı varsa devamsızları yükle!
+    // Asla başka bir sınavın geçmiş yoklaması (fallbackRecord) yeni sınava sızdırılmaz.
     const existingKey = matchedExam ? `${matchedExam.id}_${hall.id}` : '';
     const existingRecord = existingKey ? attendances[existingKey] : undefined;
-    const fallbackRecord = (Object.values(attendances) as HallAttendance[]).find(a => a.hallId === hall.id);
-    const targetRecord = existingRecord || fallbackRecord;
 
-    if (targetRecord && targetRecord.absentStudents && targetRecord.absentStudents.length > 0) {
-      setAbsentStudentIds(targetRecord.absentStudents.map(s => s.studentId));
+    if (existingRecord && existingRecord.absentStudents && existingRecord.absentStudents.length > 0) {
+      setAbsentStudentIds(existingRecord.absentStudents.map(s => s.studentId));
     } else {
       setAbsentStudentIds([]);
     }
@@ -487,6 +493,25 @@ export const HallsView = () => {
     openEditModal(hall, 'attendance', exam);
   };
 
+  // Yoklama modalı açıkken gözetmenin veya yöneticinin sınavı değiştirmesi
+  const handleSwitchExamForAttendance = (newExamId: string) => {
+    const newExam = state.exams.find(e => e.id === newExamId) || null;
+    setActiveExamForAttendance(newExam);
+    if (editingHallId && newExam) {
+      const key = `${newExam.id}_${editingHallId}`;
+      const rec = attendances[key];
+      if (rec && rec.absentStudents && rec.absentStudents.length > 0) {
+        setAbsentStudentIds(rec.absentStudents.map(s => s.studentId));
+        showToast(`ℹ "${newExam.name}" sınavının kayıtlı yoklaması yüklendi (${rec.absentStudents.length} devamsız).`);
+      } else {
+        setAbsentStudentIds([]);
+        showToast(`ℹ "${newExam.name}" sınavı seçildi. Bu sınav için henüz yoklama alınmamış (0 devamsız).`);
+      }
+    } else {
+      setAbsentStudentIds([]);
+    }
+  };
+
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingHallId(null);
@@ -495,14 +520,13 @@ export const HallsView = () => {
     setActiveExamForAttendance(null);
   };
 
-  // Aktif salona ait kaydedilmiş yoklamadaki devamsız öğrenci ID'leri (Oturma Planı sekmesinde de kırmızı çerçeve ile gösterilir)
+  // Aktif salona ait seçili sınavın kaydedilmiş yoklamasındaki devamsız öğrenci ID'leri (Oturma Planı sekmesinde sınava özel kırmızı çerçeve ile gösterilir)
   const savedAbsentStudentIds = useMemo(() => {
-    if (!editingHallId) return [];
-    const relatedAttendances = (Object.values(attendances) as HallAttendance[]).filter(a => a.hallId === editingHallId);
-    if (relatedAttendances.length === 0) return [];
-    const latest = relatedAttendances.sort((a, b) => new Date(b.takenAt).getTime() - new Date(a.takenAt).getTime())[0];
-    return latest?.absentStudents?.map(s => s.studentId) || [];
-  }, [editingHallId, attendances]);
+    if (!editingHallId || !activeExamForAttendance) return [];
+    const key = `${activeExamForAttendance.id}_${editingHallId}`;
+    const targetAtt = attendances[key];
+    return targetAtt?.absentStudents?.map(s => s.studentId) || [];
+  }, [editingHallId, activeExamForAttendance, attendances]);
 
   // Keep active modal seating plan synced when state updates from Firebase
   useEffect(() => {
@@ -1237,7 +1261,7 @@ export const HallsView = () => {
             <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end shrink-0">
               <button 
                 type="button"
-                onClick={() => setIsReportModalOpen(true)} 
+                onClick={() => openReportModal()} 
                 className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-[11px] sm:text-xs font-bold shadow-2xs transition-all cursor-pointer whitespace-nowrap"
                 title="Tüm salonlardan gelen yoklamaları birleştirip rapor ve devamsızlık listesi oluştur"
               >
@@ -1259,7 +1283,7 @@ export const HallsView = () => {
             <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end shrink-0 flex-wrap sm:flex-nowrap">
               <button
                 type="button"
-                onClick={() => setIsReportModalOpen(true)}
+                onClick={() => openReportModal()}
                 className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/90 rounded-xl text-[11px] sm:text-xs font-bold active:scale-95 shadow-2xs transition-all cursor-pointer touch-manipulation whitespace-nowrap"
                 title="Sınav Yoklama Raporunu Görüntüle"
               >
@@ -1555,22 +1579,37 @@ export const HallsView = () => {
                           </p>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openAttendanceModal(hall, todayExam);
-                          }}
-                          className={`w-full xs:w-auto px-3 py-1.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 transition-all active:scale-95 shadow-xs cursor-pointer touch-manipulation ${
-                            hallAttendance
-                              ? 'bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300'
-                              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
-                          }`}
-                          title="Bu Salon İçin Yoklama Al / Güncelle"
-                        >
-                          <UserCheck className="w-3.5 h-3.5" />
-                          <span>{hallAttendance ? 'Yoklamayı Güncelle' : 'Yoklama Al'}</span>
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0 w-full xs:w-auto">
+                          {hallAttendance && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openReportModal(todayExam.id);
+                              }}
+                              className="px-2 py-1.5 rounded-xl text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 font-bold text-xs flex items-center justify-center transition-all cursor-pointer"
+                              title={`"${todayExam.name}" sınavının yoklama raporunu aç`}
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openAttendanceModal(hall, todayExam);
+                            }}
+                            className={`flex-1 xs:flex-initial px-3 py-1.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs cursor-pointer touch-manipulation ${
+                              hallAttendance
+                                ? 'bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
+                            }`}
+                            title="Bu Salon İçin Yoklama Al / Güncelle"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>{hallAttendance ? 'Yoklamayı Güncelle' : 'Yoklama Al'}</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Anlık Canlı Yoklama Detayı: Tüm öğretmenlerin kimlerin salonda olup olmadığını görmesi */}
@@ -2193,18 +2232,42 @@ export const HallsView = () => {
                   <div className="mb-2 sm:mb-3 p-2.5 sm:p-3 bg-gradient-to-r from-amber-500/10 via-white to-rose-500/10 border border-amber-300/80 rounded-xl sm:rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
                     <div className="space-y-1.5 min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <span className="text-[10px] sm:text-xs font-bold text-brand-ink/70">Sınav:</span>
-                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white border border-brand-border/80 rounded-lg sm:rounded-xl shadow-2xs max-w-full truncate">
-                          <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-700 shrink-0" />
-                          <span className="text-[11px] sm:text-xs font-bold text-brand-ink truncate">
-                            {activeExamForAttendance?.name || 'Günün Sınavı'}
-                          </span>
-                          {activeExamForAttendance?.date && (
-                            <span className="text-[9px] sm:text-[10px] text-brand-ink/50 font-medium shrink-0 border-l border-brand-border/60 pl-1.5 hidden xs:inline">
-                              {activeExamForAttendance.date}
-                            </span>
-                          )}
+                        <span className="text-[10px] sm:text-xs font-bold text-brand-ink/70">Yoklama Sınavı:</span>
+                        <div className="relative inline-flex items-center max-w-full">
+                          <Calendar className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 absolute left-2.5 pointer-events-none z-10 shrink-0" />
+                          <select
+                            value={activeExamForAttendance?.id || ''}
+                            onChange={(e) => handleSwitchExamForAttendance(e.target.value)}
+                            className="bg-white dark:bg-slate-800 text-[11px] sm:text-xs font-bold text-brand-ink dark:text-white py-1 sm:py-1.5 pl-8 pr-7 rounded-xl border border-brand-border/90 hover:border-amber-400 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 cursor-pointer max-w-[210px] sm:max-w-xs truncate"
+                            title="Yoklama alınacak sınavı seçin veya değiştirin"
+                          >
+                            {state.exams.length === 0 ? (
+                              <option value="">Sınav Bulunamadı</option>
+                            ) : (
+                              state.exams.map(exam => (
+                                <option key={exam.id} value={exam.id}>
+                                  {exam.name} {exam.date ? `(${exam.date})` : ''}
+                                </option>
+                              ))
+                            )}
+                          </select>
                         </div>
+
+                        {/* Seçili sınavın bu salondaki yoklama durumu rozeti */}
+                        {(() => {
+                          if (!activeExamForAttendance || !editingHallId) return null;
+                          const key = `${activeExamForAttendance.id}_${editingHallId}`;
+                          const isRecorded = Boolean(attendances[key]);
+                          return (
+                            <span className={`text-[9.5px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 transition-all ${
+                              isRecorded
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300'
+                                : 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300'
+                            }`}>
+                              {isRecorded ? '✓ Kayıtlı Yoklama' : 'Yeni Yoklama (Sıfır Devamsız)'}
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       {/* Canlı Sayaçlar ve Doğrulanmış Gözetmen Bilgisi */}
@@ -2726,12 +2789,15 @@ export const HallsView = () => {
       {/* Birleştirilmiş Sınav Yoklama Raporu Modalı */}
       <AttendanceReportModal
         isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
+        onClose={() => {
+          setIsReportModalOpen(false);
+          setReportExamId('');
+        }}
         exams={state.exams}
         examHalls={state.examHalls}
         students={state.students}
         attendances={attendances}
-        initialExamId={examsOnSelectedDate[0]?.id || state.exams[0]?.id}
+        initialExamId={reportExamId || activeExamForAttendance?.id || examsOnSelectedDate[0]?.id || state.exams[0]?.id}
         onRefreshAttendances={async () => {
           const fresh = await fetchAllAttendances('main', true);
           if (fresh && Object.keys(fresh).length > 0) {

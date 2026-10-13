@@ -1,6 +1,6 @@
 {
-  "summary": "Karanlık Tema Kapsamlı Görsel İyileştirme Planı (Gece Mavisi & Lacivert Tonları):\n1. Renk Paleti & Temel Değişkenler: Arka planlar için derin gece mavisi (#0B0F19), kart ve paneller için katmanlı lacivert/arduvaz tonları (#111827, #1E293B), net kenarlıklar (#334155 / border-slate-800).\n2. Tipografi & Kontrast İyileştirmeleri: Boğuk ve okunaksız gri metinlerin yerine canlı ve berrak metin hiyerarşisi (text-slate-100, text-slate-300, text-slate-400), yüksek kontrastlı rozetler ve butonlar.\n3. Form Girdileri, Tablolar ve Kartlar: Tüm sayfalarda girdi alanları, açılır menüler, tablolar ve veri kartlarının karanlık temaya tam uyumu.\n4. Modallar & Gezinme Alanları: Kenar çubuğu, ayarlar modalı, bulut yedekleme modalı ve açılır pencerelerin gece mavisi estetiğiyle mükemmelleştirilmesi.",
-  "updatedAt": "2026-10-13T19:02:35.633798441Z",
+  "summary": "Sınav Bazlı Bağımsız Yoklama ve Arşiv/Raporlama Mimarisi Planı:\n1. Yoklama İzolasyonu: Eski sınavların yoklamasının yeni sınava sızmasını önleyen katı examId_hallId filtrelemesi (fallbackRecord iptali).\n2. Salon Modalında Sınav Seçici: Otomatik günün sınavı tespiti, istenildiğinde listeden başka bir sınav seçebilme ve seçilen sınava ait yoklama verilerinin anında dinamik yüklenmesi.\n3. Oturma Planı & Salon Kartlarında Sınava Özel Devamsız İşaretleme: Sadece aktif seçili sınavın devamsızlık durumunun yansıtılması.\n4. Yoklama Raporu (AttendanceReportModal): Her sınav için izole arşiv/rapor görünümü, geçmiş sınav seçimi ve sınava özel devamsız analizleri.",
+  "updatedAt": "2026-10-13T19:31:13.302685555Z",
   "requestFeedback": true,
   "userFacing": true
 }
