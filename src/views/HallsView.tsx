@@ -451,9 +451,12 @@ export const HallsView = () => {
     setHighlightStudentQuery('');
 
     // Otomatik Sınav ve Gün Tespiti:
-    // Salona ait bugünkü sınavı veya seçilen sınavı tespit et (yoksa sınavlar listesindeki ilk sınav)
-    const detectedTodayExam = specificExam || findTodayExamForHall(hall, state.exams, effectiveCalendarDate) || state.exams[0] || null;
-    const matchedExam = detectedTodayExam || null;
+    // Salona ait bugünkü takvim sınavını tespit et (Bugüne uyan sınav)
+    const detectedTodayExam = specificExam || findTodayExamForHall(hall, state.exams, effectiveCalendarDate);
+    
+    // Öğretmenlerde sınav günü haricinde kesinlikle sınav seçilmez (null kalır)
+    // Sınav günü haricinde öğretmene yoklama modalı AÇILMAZ, sadece salon önizlemesi görünür!
+    const matchedExam = detectedTodayExam || (isReadOnly ? null : (state.exams[0] || null));
     setActiveExamForAttendance(matchedExam);
 
     // Sınava Özel Yoklama:
@@ -469,18 +472,22 @@ export const HallsView = () => {
     }
 
     // Modal Sekmesi Seçimi:
-    // 1. initialTab parametre olarak açıkça verildiyse onu kullan.
-    // 2. Öğretmen kullanıcılar (isReadOnly):
-    //    - Eğer bugün salonda aktif sınav varsa (detectedTodayExam) -> Varsayılan: 'attendance' (Sınav Yoklaması)
-    //    - Sınav olmayan günlerde -> Varsayılan: 'layout' (Oturma Planı Önizlemesi)
-    // 3. İdareciler (Admin): Varsayılan: 'layout' (Salon Düzenleme)
+    // Öğretmen kullanıcılar (isReadOnly):
+    //    - Eğer bugün salonda aktif sınav varsa ve attendance istendiyse -> 'attendance'
+    //    - Sınav günü haricinde -> ZORUNLU OLARAK 'layout' (Oturma Planı Önizlemesi), yoklama asla açılamaz!
+    // İdareciler (Admin): Varsayılan initialTab veya 'layout'
     let modeToOpen: 'layout' | 'attendance' = 'layout';
-    if (initialTab) {
-      modeToOpen = initialTab;
-    } else if (isReadOnly) {
-      modeToOpen = detectedTodayExam ? 'attendance' : 'layout';
+    if (isReadOnly) {
+      if (detectedTodayExam && initialTab === 'attendance') {
+        modeToOpen = 'attendance';
+      } else if (detectedTodayExam && !initialTab) {
+        modeToOpen = 'attendance';
+      } else {
+        // Sınav günü haricinde öğretmene SADECE salon önizlemesi görünür
+        modeToOpen = 'layout';
+      }
     } else {
-      modeToOpen = 'layout';
+      modeToOpen = initialTab || 'layout';
     }
 
     setModalMode(modeToOpen);
@@ -495,6 +502,15 @@ export const HallsView = () => {
 
   // Yoklama modalı açıkken gözetmenin veya yöneticinin sınavı değiştirmesi
   const handleSwitchExamForAttendance = (newExamId: string) => {
+    // Öğretmen kontrolü: Öğretmenler geçmiş veya gün dışı sınavları seçemez!
+    if (isReadOnly) {
+      const allowedToday = state.exams.find(e => e.id === newExamId && isExamDateMatches(e.date, effectiveCalendarDate));
+      if (!allowedToday) {
+        showToast('⚠️ Öğretmen kullanıcılar yalnızca günün aktif sınavı için yoklama alabilir.', 'error');
+        return;
+      }
+    }
+
     const newExam = state.exams.find(e => e.id === newExamId) || null;
     setActiveExamForAttendance(newExam);
     if (editingHallId && newExam) {
@@ -1440,7 +1456,13 @@ export const HallsView = () => {
           return (
             <div 
               key={hall.id} 
-              onClick={() => openEditModal(hall)}
+              onClick={() => {
+                if (isReadOnly && !todayExam) {
+                  openEditModal(hall, 'layout');
+                } else {
+                  openEditModal(hall, todayExam ? 'attendance' : 'layout', todayExam || undefined);
+                }
+              }}
               className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-2xs sm:shadow-xs border border-brand-border/70 hover:border-indigo-400 hover:shadow-md flex flex-col justify-between transition-all group relative hover:-translate-y-0.5 cursor-pointer touch-manipulation"
             >
               {/* Card Header Row */}
@@ -2241,14 +2263,34 @@ export const HallsView = () => {
                             className="bg-white dark:bg-slate-800 text-[11px] sm:text-xs font-bold text-brand-ink dark:text-white py-1 sm:py-1.5 pl-8 pr-7 rounded-xl border border-brand-border/90 hover:border-amber-400 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 cursor-pointer max-w-[210px] sm:max-w-xs truncate"
                             title="Yoklama alınacak sınavı seçin veya değiştirin"
                           >
-                            {state.exams.length === 0 ? (
-                              <option value="">Sınav Bulunamadı</option>
+                            {isReadOnly ? (
+                              // Öğretmen kullanıcılar: Sadece günün sınavı gösterilir, geçmiş sınavlar gizlidir
+                              state.exams.filter(e => isExamDateMatches(e.date, effectiveCalendarDate)).length === 0 ? (
+                                <option value="">Bugün İçin Aktif Sınav Bulunamadı</option>
+                              ) : (
+                                state.exams.filter(e => isExamDateMatches(e.date, effectiveCalendarDate)).map(exam => (
+                                  <option key={exam.id} value={exam.id}>
+                                    {exam.name} {exam.date ? `(${exam.date})` : ''} • [Bugün]
+                                  </option>
+                                ))
+                              )
                             ) : (
-                              state.exams.map(exam => (
-                                <option key={exam.id} value={exam.id}>
-                                  {exam.name} {exam.date ? `(${exam.date})` : ''}
-                                </option>
-                              ))
+                              // İdareciler: Tüm sınavlar durum etiketleriyle
+                              state.exams.length === 0 ? (
+                                <option value="">Sınav Bulunamadı</option>
+                              ) : (
+                                state.exams.map(exam => {
+                                  const isToday = isExamDateMatches(exam.date, effectiveCalendarDate);
+                                  const d = parseDateObj(exam.date);
+                                  const isPast = d ? (new Date(d).setHours(0,0,0,0) < new Date(effectiveCalendarDate).setHours(0,0,0,0)) : false;
+                                  const tag = isToday ? '• [Bugün]' : isPast ? '• [Geçmiş]' : '• [Henüz Vakti Gelmedi]';
+                                  return (
+                                    <option key={exam.id} value={exam.id}>
+                                      {exam.name} {exam.date ? `(${exam.date})` : ''} {tag}
+                                    </option>
+                                  );
+                                })
+                              )
                             )}
                           </select>
                         </div>
@@ -2797,7 +2839,8 @@ export const HallsView = () => {
         examHalls={state.examHalls}
         students={state.students}
         attendances={attendances}
-        initialExamId={reportExamId || activeExamForAttendance?.id || examsOnSelectedDate[0]?.id || state.exams[0]?.id}
+        userRole={userRole}
+        initialExamId={reportExamId || activeExamForAttendance?.id || examsOnSelectedDate[0]?.id || (isReadOnly ? undefined : state.exams[0]?.id)}
         onRefreshAttendances={async () => {
           const fresh = await fetchAllAttendances('main', true);
           if (fresh && Object.keys(fresh).length > 0) {
