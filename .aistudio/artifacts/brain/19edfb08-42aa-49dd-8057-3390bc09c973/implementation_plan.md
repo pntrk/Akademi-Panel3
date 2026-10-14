@@ -1,108 +1,113 @@
-# Optik Tarama Motoru İyileştirme ve Dinamik Kontrast Kalibrasyon Planı
+# Optik Tarama Motoru Boş Soru ve Sahte İşaretleme (False Positive) Önleme Planı
 
-Kurum içi çok dersli LGS ve TYT formatındaki sınavlarda (90-120 soru) tüm cevapları "A" olarak doldurulmuş test optiklerinde bazı soruların boş/okunmamış olarak algılanması sorununu kökten çözen; baloncuk arama penceresi toleransını, dinamik kontrast kalibrasyonunu ve arka plan örnekleme mimarisini güçlendiren kapsamlı iyileştirme planı.
+Kurum içi çok dersli sınavlarda ve düz yataklı/beslemeli tarayıcılardan (Scanner/ADF) alınan optik formlarda boş bırakılan soruların rastgele şıklar olarak algılanması problemini çözen; baloncuk çekirdek alanı örneklemesi, basılı glif/çember filtresi, medyan arka plan kalibrasyonu ve mutlak grafit doğrulama mimarisini içeren iyileştirme planı.
 
-## Kullanıcı Tercihleri ve Tespit Edilen Kritik Kararlar
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> Kullanıcı ile yapılan netleştirme görüşmesinde aşağıdaki yönelimler doğrulanmıştır:
-> - **Sorun Belirtisi**: Eşleşmeyen sorular tarama ekranında **boş veya okunmamış** olarak algılanmaktadır (işaretin varlığına rağmen eşik altına düşmektedir).
-> - **Sınav Yapısı**: LGS veya TYT formatında çok dersli, 4 sütunlu, **90 veya 120 soruluk** yoğun optik form.
-> - **Öncelikli Odak**: **Baloncuk kontrast toleransı ve dinamik eşik kalibrasyonu**.
+> Kullanıcı ile yapılan soru-cevap neticesinde belirlenen temel parametreler:
+> - **Hata Karakteristiği**: Boş bırakılan sorular tek bir harf (örn. A) yerine satırdaki baskı veya tarama gürültüsüne bağlı olarak **rastgele şıklar** (A, B, C, D, E) olarak algılanmaktadır.
+> - **Çözüm Yaklaşımı**: Boş soruların yanlış okunmasını önlemek için **minimum doluluk eşiğini artırma ve bağıl kontrast kontrolü** esas alınacaktır.
+> - **Görsel Kaynağı**: Formlar ağırlıklı olarak **düz yataklı veya beslemeli tarayıcılardan (Flatbed / ADF Scanner)** alınan yüksek netlikteki PDF veya resim dosyalarıdır.
+
+- **Onaylanan Karar 1**: Baloncuk örnekleme yarıçapı çember dış çizgisine basmayacak şekilde çekirdek odaklı (%72) olarak daraltılacak, böylece basılı harf (A-B-C-D-E) ve çember çizgisi kaynaklı yalancı doluluk (false positive) tamamen elenecektir.
+- **Onaylanan Karar 2**: Arka plan koyuluğunda `Math.min` yerine medyan/ortalama kullanılarak kağıt dokusu veya tarayıcı zemin tonu yapay olarak grafit gibi hesaplanmayacaktır.
+- **Onaylanan Karar 3**: Bir satırdaki tüm şıklar için "Mutlak Grafit Eşiği" (Absolute Graphite Threshold) kontrolü getirilecek; çekirdek doluluk ve koyuluğu kurşun kalem yoğunluğunu karşılamayan sorular kesin olarak boş kabul edilecektir.
 
 ---
 
-### 1. Temel Sorun Analizi & Kök Nedenler (Root Causes)
+## 1. Overview & Core Concept
 
-Yapılan derin kod ve algoritma incelemesinde tespit edilen 4 kritik teknik kök neden:
-
-1. **Aşırı Dar Merkez Kaydırma Arama Penceresi (Micro Offset)**:
-   - Yoğun 90-120 soruluk formlarda (özellikle 3. ve 4. sütunlarda ve alt satırlarda) telefon kamerası lens distorsiyonu veya kağıt eğimi nedeniyle baloncuk merkezleri 4 köşe çapa dönüşümünden 3-6 piksel sapabilmektedir.
-   - Mevcut motorda arama toleransı maksimum 1-2 piksel ile sınırlandırılmıştır (`Math.min(2, ...)`). Baloncuk hafif saptığında örnekleme çemberi beyaz kağıda taşmakta, doluluk oranı yapay olarak %25'in altına düşmektedir.
-
-2. **Bitişik Satır Arka Plan Örnekleme Kirlenmesi (Neighbor Row Contamination)**:
-   - Mevcut arka plan örnekleyici, soru satırının üst ve altından 2.8 mm mesafeden örnek almaktadır.
-   - Soru satır aralığı 4.65 mm olduğundan, 2.8 mm'lik örnek tam bir önceki veya sonraki satırın baloncuk sınırına basmaktadır.
-   - Tüm sorular "A" işaretlendiğinde, N. sorunun arka planını örnekleyen nokta N-1. sorunun grafit karalamasına denk gelerek yerel kağıt karanlığını yapay olarak yükseltmekte ve N. sorunun göreli kontrastını yok etmektedir.
-
-3. **Katı İkili Eşikler ve Boş Şık Glif Karışıklığı**:
-   - `meetsAbsoluteMarkThreshold` ve `meetsContrastThreshold` katı sınır değerler (12.0 puan, 15.0 koyuluk, %30 doluluk) kullanmaktadır.
-   - Açık tonlu HB kurşun kalemle doldurulmuş veya optik form matbaa baskısında harf glifi (A, B, C, D) belirgin olan kağıtlarda, "A" şıkkı ile diğer şıklar arasındaki fark katı oranın (1.85x) veya katı puanın milimetrik altında kaldığında soru doğrudan "BOŞ" kabul edilmektedir.
-
-4. **Kayıp Satır Hizalama Sensörü (Unused TrueRowY)**:
-   - Görseldeki cetvel/satır işaretçilerini takip eden `getTrueRowY` fonksiyonu tanımlanmış olmasına rağmen soru döngüsüne entegre edilmemiştir; homografi matrisi tek başına kullanıldığında optik eğrilikler düzeltilememektedir.
+- **Problem**: Düz yataklı veya beslemeli tarayıcılardan taranan optik formlarda, optik formun üzerindeki basılı baloncuk çerçevesi ve baloncuk içindeki basılı harf fontu (A, B, C, D, E) yüksek kontrastlıdır. Boş bırakılan bir soruda tüm şıklar boş olsa dahi, arama penceresi baloncuk kenarına kaydığında veya bir şıktaki baskı diğerinden 1-2 piksel daha kalın olduğunda, bağıl kontrast farkı oluşarak o şıkkı işaretlenmiş sanmaktadır.
+- **Çözüm**:
+  1. **Çekirdek Bölge Örneklemesi (Core Bubble Sampling)**: Örnekleme alanı baloncuk yarıçapının %72'si ile sınırlandırılarak dış siyah çember hattı örnekleme dışı bırakılır.
+  2. **Basılı Font / Çember Ayıklama Filtresi**: Boş baloncuğun basılı harf vuruşları (stroke) dar ve incedir; gerçek kurşun kalem ise baloncuk merkezini homojen doldurur. Doluluk alanı en az %30 ve çekirdek koyuluğu en az 16 birim olmayan şıklar doğrudan elenir.
+  3. **Satır Düzeyinde Mutlak Grafit Eşiği**: Bir soruda en yüksek puan alan şık dahi olsa, mutlak grafit varlığı kanıtlanmamışsa soru kesinlikle "Boş" (`""`) olarak işaretlenir.
+  4. **Güvenli Arka Plan Medyanı**: Satır içi beyazlık örneklerinin en düşüğü yerine güvenilir medyanı alınarak yapay bağıl kontrast sıçramaları önlenir.
 
 ---
 
-### 2. İyileştirme Çözüm Mimarisi & Veri Akışı
+## 2. User Experience & Visual Design
+
+- **Görsel Geri Bildirim**:
+  - Taranan form üzerinde gerçekten kurşun kalemle işaretlenmiş sorular yeşil odak dairesiyle vurgulanır.
+  - Boş bırakılan sorular için hiçbir şıkkın üzerine sahte lazer/odak noktası konulmaz; soru temiz ve boş olarak gösterilir.
+  - Kullanıcı tarama önizleme kartında ve sonuç listesinde boş soruları net bir gri tire (`-`) veya `Boş` etiketiyle görür.
+- **Doğruluk ve Kararlılık**:
+  - 90 veya 120 soruluk sınavlarda tümü A kodlanmış test kağıdında, yalnızca işaretlenen A şıkları okunur; işaretlenmemiş bırakılan tüm ders veya sorular %0 hata payıyla boş kalır.
+
+---
+
+## 3. Key Product Decisions & Trade-Offs
+
+- **Karar 1: Örnekleme Yarıçapının %88'den %72'ye Çekilmesi**
+  - *Gerekçe*: %88 yarıçap baloncuk çeperine temas etmekte ve basılı çember çizgisini "koyuluk" olarak saymaktadır. %72 yarıçap ise çember çizgisinden tamamen yalıtılmış olup sadece kurşun kalem karalamasını hedefler.
+  - *Alternatif*: Çemberi silmek için morfolojik filtreleme yapmak CPU'yu yavaşlatacağı için saf geometrik çekirdek alanı seçilmiştir.
+- **Karar 2: Mutlak Grafit Eşiği (Absolute Graphite Threshold)**
+  - *Gerekçe*: Bağıl fark (lead/diff) tek başına yanıltıcıdır; 5 şıkkın hepsi boşken biri baskı hatasından ötürü diğerlerinden 3 puan yüksek olabilir. Mutlak grafit eşiği, en az bir şıkkın gerçek kurşun kalem yoğunluğuna (belirli bir minimum doluluk ve merkez koyuluğuna) sahip olmasını zorunlu kılar.
+- **Karar 3: Arka Plan Örneklemesinde Medyan Hesaplama**
+  - *Gerekçe*: `Math.min` kağıdın en beyaz noktasını (örneğin kenar boşluğu) baz alarak baloncuk kolonundaki hafif tarayıcı grileşmesini sahte sinyale dönüştürüyordu. Satır içi medyan kağıdın gerçek tonunu yansıtır.
+
+---
+
+## 4. Technical Architecture & Data Strategy
+
+### Mimari Akış Şeması
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       OPTİK TARAMA İYİLEŞTİRME MİMARİSİ                     │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. ADAPTİF ÇİFT GEÇİŞLİ ARAMA (Two-Pass Multi-Scale Bubble Center Finder)   │
-│    - 1. Geçiş: Genişletilmiş ±5px arama penceresi ile merkez bulma          │
-│    - 2. Geçiş: Baloncuk çekirdeği (%40) ve iç halka (%65) ağırlıklı tarama  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. AKILLI ARKA PLAN VE KONTRAST İZOLASYONU                                  │
-│    - Bitişik soru sıralarından arındırılmış güvenli yatay örnekleme         │
-│    - Her soru için satır içi medyan kağıt beyazlığı kalibrasyonu            │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. DİNAMİK EŞİK VE HB KALEM ADAPTASYONU (Dynamic Document Baseline)         │
-│    - Form genelindeki belirgin işaretlemelerden öğrenilen grafit profili    │
-│    - Şıklar arası Göreli Z-Skor ve Kontrast Oranı (Fark Eşiği: 3.5 -> 2.5)  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. TEŞHİS VE CANLI ÖNİZLEME (Diagnostic Visual Feedback)                    │
-│    - Tarama ekranında şüpheli/düşük kontrastlı soruları renklendirme         │
-│    - Baloncuk koordinat lazer çizgilerinde kesin merkezleme göstergesi      │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│              Optik Form Görüntüsü (PDF / Resim)          │
+└───────────────────────────┬─────────────────────────────┘
+                            │ Homografi & Perspektif Düzeltme
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│        Soru Satırı & Baloncuk Koordinatları (A..E)      │
+└───────────────────────────┬─────────────────────────────┘
+                            │
+       ┌────────────────────┴────────────────────┐
+       ▼                                         ▼
+┌───────────────────────────────┐ ┌───────────────────────────────┐
+│  Medyan Arka Plan Analizi     │ │ Çekirdek Alanı Örnekleme     │
+│  (Satır içi şıklar arası)     │ │ (R = R_bubble * 0.72)         │
+└──────────────┬────────────────┘ └──────────────┬────────────────┘
+               └────────────────────┬────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│     Baloncuk Metrikleri (CoreDarkness, FillRatio, HeavyRatio)   │
+└───────────────────────────────────┬─────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Mutlak Grafit Kontrolü (Gate)                   │
+│  - En yüksek şık (Best) mutlak grafit eşiğini aşıyor mu?        │
+│  - FillRatio >= %30 VE CoreDarkness >= 16 VE HeavyRatio >= %8?  │
+└─────────────────┬─────────────────────────────┬─────────────────┘
+                  │ EVET                        │ HAYIR
+                  ▼                             ▼
+┌───────────────────────────────────┐ ┌───────────────────────────┐
+│     Bağıl Kontrast Doğrulaması    │ │       BOŞ SORU ("")       │
+│  (Lead >= 4.0, İkinci şık silgi   │ │ (Hiçbir şık işaretli     │
+│   ise geçerli, çift ise geçersiz) │ │  sayılmaz, gürültü yok)   │
+└─────────────────┬─────────────────┘ └───────────────────────────┘
+                  │
+                  ▼
+┌───────────────────────────────────┐
+│    Nihai Cevap (A, B, C, D veya E)│
+└───────────────────────────────────┘
 ```
 
----
+### Kod Düzeyinde Değişecek Fonksiyonlar
+1. `src/lib/omrEngine.ts`:
+   - `evaluateBubbleFill`: Örnekleme yarıçapını çember çizgisine çarpmayacak `0.72 * bubbleRadiusPx` değerine çekme; `darkThresh` ve `heavyThresh` değerlerini tarayıcı kağıt gürültüsüne karşı optimize etme.
+   - `evaluateQuestionAnswer`:
+     - Arka plan için `Math.min` yerine medyan hesabı.
+     - Mutlak Grafit Eşiği (Absolute Graphite Threshold): En iyi şık dahi olsa minimum kurşun kalem doluluğu ve çekirdek yoğunluğu taşımıyorsa soruyu anında boş (`""`) kabul etme.
+     - Sahte işaretleme ve basılı glif elenmesi.
 
-### 3. Yapılacak Teknik Değişiklikler ve Adımlar
-
-#### Adım 1: Güvenli ve Bitişik Satırdan Arındırılmış Arka Plan Örnekleme (`sampleLocalBackground`)
-- `evaluateQuestionAnswer` içinde soru satırının üst/alt dikey aralığındaki örnekleme yarıçapı, satır yüksekliğinin güvenli orta noktasına (`±1.6 mm`) çekilecek; bitişik soruların işaretlenmiş baloncuklarına basması engellenecek.
-- Yatayda şıklar arasındaki net beyaz boşluklardan (`A-B`, `B-C`, `C-D` arası) 3 nokta ve sütun kenarından 1 nokta olmak üzere saf kağıt beyazlığı hesaplanacak.
-
-#### Adım 2: Çift Kademeli Dinamik Baloncuk Örnekleme (`evaluateBubbleFill`)
-- Arama penceresi (`maxOffset`), `scalePxPerMm` değerine bağlı olarak dinamik şekilde `Math.round(bubbleRadiusPx * 0.38)` (ortalama 4-5 piksel) seviyesine yükseltilecek.
-- Baloncuk çekirdeği analizi çift katmanlı hale getirilecek:
-  - İç Çekirdek (Yarıçapın %40'ı): Harf glifinden etkilenmeyen saf grafit yoğunluğu.
-  - Dış Halka (Yarıçapın %65'i): Çember çizgisi taşmalarını filtreleyen doldurma doğrulaması.
-- Boş şık glifi filtresi optimize edilecek: İnce harf çizgileri ile homojen grafit lekesi arasındaki varyans/standart sapma analiziyle silik kurşun kalemler kurtarılacak.
-
-#### Adım 3: Çok Dersli 90-120 Soru Formları İçin Göreli Kontrast Kalibrasyonu
-- `meetsAbsoluteMarkThreshold`:
-  - En yüksek puanlı şıkkın skoru için minimum taban 12.0'den 8.5'e uyarlanacak; ancak diğer 3-4 şıkka göre farkı (`scoreDiff >= 4.0` veya `scoreRatio >= 1.55`) gözetilerek yanlış pozitif üretilmeyecek.
-- Tümü "A" işaretlenen serilerde (veya ardışık aynı şık işaretlemelerinde) satır satır birbirini nötrleme riski tamamen ortadan kaldırılacak.
-
-#### Adım 4: Canlı Tarama ve Toplu Okuma Entegrasyonu (`ScanView.tsx`)
-- `processSinglePageDirect` ve canlı kamera döngüsündeki `processImage` fonksiyonları güncellenmiş OMR motoru ile tam senkron çalışacak şekilde bağlanacak.
-- Taranan formda okunan her sorunun güven skoru (confidence score) hesaplanacak; şüpheli sınırda kalan sorular tarama özetinde kullanıcıya açıkça raporlanacak.
-
----
-
-### 4. Doğrulama ve Test Senaryoları
-
-1. **Tümü "A" İşaretli Test Formu Doğrulaması**:
-   - 90 soruluk LGS ve 120 soruluk TYT formlarında tüm soruların istisnasız A olarak algılandığı, hiçbir sorunun boş kalmadığı test edilecek.
-2. **Boş Form / Hayalet İşaretleme Doğrulaması**:
-   - Hiçbir işaret konulmamış optik formda basılı matbaa harflerinin (A, B, C, D) yanlışlıkla işaretli algılanmadığı (`0 doğru, 0 yanlış, tümü boş`) teyit edilecek.
-3. **Silik / Açık Renk Kurşun Kalem Testi**:
-   - Düşük kontrastlı veya silik işaretlemelerin yüksek kontrastlı arka plan gürültüsü içinde doğru şekilde ayrıştırıldığı doğrulanacak.
-4. **Kod Tabanı Derleme ve Lint Doğrulaması**:
-   - `compile_applet` ve `lint_applet` çalıştırılarak sıfır hata ile tamamlandığı kontrol edilecek.
+### Doğrulama ve Test Adımları
+- Tümü "A" işaretlenmiş ve geri kalan soruları boş bırakılmış test formunda:
+  1. A işaretlenen tüm soruların eksiksiz algılandığı doğrulanacak.
+  2. Boş bırakılan soruların hiçbirinde rastgele şık algılanmadığı, hepsinin temiz boş çıktığı doğrulanacak.
+  3. Çift işaretleme ve silgi ayrımının korunduğu doğrulanacak.
+  4. Uygulama TypeScript derlemesi (`compile_applet`) hatasız tamamlanacak.

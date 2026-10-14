@@ -1,6 +1,6 @@
 {
-  "summary": "Optik tarama motorunun 90-120 soruluk LGS/TYT kurum içi sınavlarda tümü 'A' işaretli formlarda bazı soruları boş/okunmamış algılama sorununu çözen, baloncuk kontrast toleransı, dinamik eşik kalibrasyonu, yerel satır kayma optimizasyonu ve çift geçişli adaptif tanıma mimarisi uygulama planı.",
-  "updatedAt": "2026-10-14T09:14:28.159880800Z",
+  "summary": "Optik tarama motorunda boş bırakılan soruların hatalı olarak dolu algılanmasını (false positive) engelleyen, basılı harf/çember filtresi, çekirdek odaklı örnekleme, dinamik arka plan medyanı ve mutlak grafit eşiği kalibrasyon planı.",
+  "updatedAt": "2026-10-14T10:15:19.181552116Z",
   "requestFeedback": true,
   "userFacing": true
 }

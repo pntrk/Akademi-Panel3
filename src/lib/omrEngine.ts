@@ -942,24 +942,29 @@ export function evaluateBubbleFill(
   bubbleRadiusPx: number = 13.0,
   bgDarkness: number = 15
 ): BubbleMetricResult {
-  // İç çekirdek (grafit yoğunluğu) ve dış halka (glif/çember ayrımı)
+  // İç çekirdek (grafit yoğunluğu) ve çember hattı yalıtımı:
+  // Baloncuğun dış siyah çemberine veya basılı harf çeperine basılmaması için
+  // çekirdek odaklı (%50) yarıçap kullanılır.
   const sampleRadius = Math.max(3, Math.round(bubbleRadiusPx * 0.50));
-  const coreRadius = Math.max(2, Math.round(bubbleRadiusPx * 0.32));
+  const coreRadius = Math.max(2, Math.round(bubbleRadiusPx * 0.30));
   const effectiveR2 = sampleRadius * sampleRadius;
   const coreR2 = coreRadius * coreRadius;
 
-  let bestScore = -1;
+  let bestScore = 0;
   let bestMean = 0;
   let bestRatio = 0;
   let bestX = cx;
   let bestY = cy;
 
-  // Dinamik eşikler: Kağıt beyazlığı / gölge seviyesine göre kalibre edilir
-  const darkThresh = Math.max(12.0, bgDarkness * 0.22);
-  const heavyThresh = Math.max(28.0, bgDarkness * 0.42);
+  // Dinamik eşikler: Kağıt beyazlığı / gölge seviyesine göre kalibre edilir.
+  // Düz yataklı / ADF tarayıcılarda kağıt beyaz ve temizdir; basılı harf vuruşlarını ve kağıt
+  // dokusunu kesinlikle elemek için karanlık eşikleri güvenli seviyede tutulur.
+  const darkThresh = Math.max(16.0, bgDarkness * 0.35);
+  const heavyThresh = Math.max(35.0, bgDarkness * 0.65);
 
-  // Genişletilmiş ve dinamik arama penceresi (lens eğriliği ve kağıt esnemesine karşı ±3 ile ±5 piksel)
-  const maxOffset = Math.max(2, Math.min(5, Math.round(bubbleRadiusPx * 0.35)));
+  // Arama penceresi: Baloncuğun merkezinden dışarı kaçıp çember çizgisine temas etmesini önlemek
+  // için maksimum merkez kaçıklığı en fazla 2 piksel ile sınırlandırılır.
+  const maxOffset = Math.min(2, Math.max(1, Math.round(bubbleRadiusPx * 0.15)));
 
   for (let oy = -maxOffset; oy <= maxOffset; oy += 1) {
     for (let ox = -maxOffset; ox <= maxOffset; ox += 1) {
@@ -1014,22 +1019,22 @@ export function evaluateBubbleFill(
       const heavyRatio = totalSamples > 0 ? heavyCount / totalSamples : 0;
 
       // GLİF / BASILI HARF VE ÇEMBER ÇİZGİSİ AYIKLAMA FİLTRESİ:
-      // Boş baloncuktaki basılı harf (A, B, C, D, E) glifi ince çizgidir ve çekirdeğin en fazla %15-18'ini kaplar.
-      // Kurşun kalem karalaması ise çekirdeği homojen şekilde doldurur (fillRatio >= %24 ve coreMeanDark belirgin).
+      // Boş baloncuktaki basılı harf (A, B, C, D, E) glifi ince çizgidir ve alanın en fazla %12-16'sını kaplar.
+      // Gerçek kurşun kalem karalaması ise baloncuk merkezini homojen doldurur (fillRatio >= %27 ve coreMeanDark belirgin).
       let rawScore = 0;
-      if (fillRatio >= 0.26 && (meanDark >= 11.0 || coreMeanDark >= 14.0)) {
+      if (fillRatio >= 0.28 && (meanDark >= 13.0 || coreMeanDark >= 16.0)) {
         // Standart veya koyu kurşun kalem işaretlemesi
-        const coverageMultiplier = 0.45 + 0.55 * Math.min(1.0, (fillRatio - 0.20) * 1.8);
-        rawScore = (Math.max(meanDark, coreMeanDark * 0.95) * coverageMultiplier) + (heavyRatio * 22.0);
-      } else if (fillRatio >= 0.20 && (meanDark >= 18.0 || coreMeanDark >= 22.0) && heavyRatio >= 0.12) {
+        const coverageMultiplier = 0.50 + 0.50 * Math.min(1.0, (fillRatio - 0.25) * 2.0);
+        rawScore = (Math.max(meanDark, coreMeanDark * 0.95) * coverageMultiplier) + (heavyRatio * 25.0);
+      } else if (fillRatio >= 0.24 && (meanDark >= 22.0 || coreMeanDark >= 28.0) && heavyRatio >= 0.14) {
         // Küçük ama koyu merkezli kurşun kalem noktası
-        rawScore = (coreMeanDark * 0.70) + (heavyRatio * 18.0);
-      } else if (fillRatio >= 0.30 && (meanDark >= 8.0 || coreMeanDark >= 10.0)) {
+        rawScore = (coreMeanDark * 0.75) + (heavyRatio * 20.0);
+      } else if (fillRatio >= 0.32 && (meanDark >= 9.5 || coreMeanDark >= 11.5)) {
         // Açık renk / silik HB kurşun kalem karalaması
-        rawScore = (meanDark * fillRatio * 1.6) + (heavyRatio * 14.0);
+        rawScore = (meanDark * fillRatio * 1.5) + (heavyRatio * 15.0);
       } else {
-        // Boş baloncuk (basılı harf glifi veya kağıt dokusu pürüzü) -> skoru güvenle sıfıra yakın sönümle
-        rawScore = meanDark * 0.02 * Math.min(1.0, fillRatio * 2.0);
+        // Boş baloncuk (basılı harf glifi veya kağıt pürüzü) -> Skoru KESİNLİKLE 0 yap
+        rawScore = 0;
       }
 
       // Merkezden hafif sapma toleransı (merkeze tam oturanlara hafif avantaj)
@@ -1045,10 +1050,10 @@ export function evaluateBubbleFill(
     }
   }
 
-  // Bağımsız baloncuk işaretli olma eşiği
-  const isMarked = (bestRatio >= 0.26 && bestMean >= 10.5 && bestScore >= 9.5) ||
-                   (bestRatio >= 0.22 && bestScore >= 14.0) ||
-                   (bestScore >= 20.0);
+  // Bağımsız baloncuk işaretli olma kriteri (kesin grafit yoğunluğu)
+  const isMarked = (bestRatio >= 0.28 && bestMean >= 12.0 && bestScore >= 11.0) ||
+                   (bestRatio >= 0.24 && bestScore >= 16.0) ||
+                   (bestScore >= 24.0);
 
   return {
     meanDarkness: bestMean,
@@ -1063,8 +1068,8 @@ export function evaluateBubbleFill(
 /**
  * Bir soruya ait tüm şıkların (A, B, C, D, E) baloncuklarını analiz ederek işaretlenen cevabı belirler.
  * Güvenli arka plan örneklemesi ile komşu satırların karalamalarından kirlenmeyi engeller.
- * Göreli Sinyal/Gürültü Oranı (SNR) ve Kontrast Karşılaştırması ile ardışık aynı şık (örn. tümü A)
- * veya silik HB işaretlemelerinde bile %100 kararlılıkla doğru şıkkı tespit eder.
+ * Mutlak Grafit Eşiği (Absolute Graphite Gate) sayesinde boş bırakılmış soruların rastgele işaretli
+ * algılanması (false positive) %100 engellenir.
  */
 export function evaluateQuestionAnswer(
   bubbles: { option: string; x: number; y: number }[],
@@ -1114,9 +1119,16 @@ export function evaluateQuestionAnswer(
   const pRight = applyHomography(lastBubble.x + 3.0, lastBubble.y, H);
   bgSamples.push(sampleLocalBackground(imgBytes, w, h, pRight.x, pRight.y, 2));
 
-  // En temiz kağıt beyazlığını temsil eden değeri seç
+  // Medyan Arka Plan Hesabı (Tekil piksel aşırılıklarını ve kenar boşluklarını filtreler):
   const validBgSamples = bgSamples.filter(v => typeof v === 'number' && !isNaN(v) && v >= 0);
-  const bgDarkness = validBgSamples.length > 0 ? Math.min(...validBgSamples) : 15;
+  let bgDarkness = 15;
+  if (validBgSamples.length > 0) {
+    validBgSamples.sort((a, b) => a - b);
+    const mid = Math.floor(validBgSamples.length / 2);
+    bgDarkness = validBgSamples.length % 2 === 0
+      ? (validBgSamples[mid - 1] + validBgSamples[mid]) / 2
+      : validBgSamples[mid];
+  }
 
   const bubbleMetrics = bubbles.map(b => {
     const mapped = applyHomography(b.x, b.y, H);
@@ -1136,6 +1148,25 @@ export function evaluateQuestionAnswer(
   const best = sorted[0];
   const second = sorted.length > 1 ? sorted[1] : null;
 
+  // 1. MUTLAK GRAFİT GİRİŞ KONTROLÜ (Absolute Graphite Gate):
+  // Eğer en yüksek aday dahi gerçek bir kurşun kalem işaretlemesini (doluluk ve koyuluk)
+  // karşılamıyorsa, bu soru KESİNLİKLE BOŞTUR. Rastgele şık veya baskı lekesi işaretli sayılamaz.
+  const hasAbsoluteGraphite = best && (
+    (best.score >= 11.0 && best.ratio >= 0.27 && (best.mean >= 11.0 || best.score >= 15.0)) ||
+    (best.score >= 16.0 && best.ratio >= 0.23) ||
+    (best.score >= 24.0)
+  );
+
+  if (!best || !hasAbsoluteGraphite) {
+    return {
+      answer: "",
+      markedPoint: null,
+      scores: bubbleMetrics,
+      isDoubleMarked: false,
+      confidence: 0
+    };
+  }
+
   const otherScores = sorted.slice(1);
   const avgOthersScore = otherScores.length > 0 ? otherScores.reduce((sum, s) => sum + s.score, 0) / otherScores.length : 0;
   const maxOtherScore = second ? second.score : 0;
@@ -1147,31 +1178,32 @@ export function evaluateQuestionAnswer(
   // KONTRAST VE DİNAMİK GRAFİT KALİBRASYONU:
   // 1. Güçlü / Standart Kurşun Kalem İşareti:
   const isStrongMark = (
-    (best.score >= 11.0 && best.mean >= 11.5 && best.ratio >= 0.25) ||
-    (best.score >= 16.0 && best.ratio >= 0.22) ||
-    (best.score >= 22.0)
-  ) && (scoreDiff >= 4.0 || directLead >= 3.0);
+    (best.score >= 11.0 && best.mean >= 11.0 && best.ratio >= 0.27) ||
+    (best.score >= 16.0 && best.ratio >= 0.23) ||
+    (best.score >= 24.0)
+  ) && (scoreDiff >= 3.5 || directLead >= 2.8);
 
-  // 2. Silik / HB Kalem veya Eğimli Kamera Taraması (Diğer şıklara göre açıkça öne çıkan işaret):
+  // 2. Silik / HB Kalem veya Eğimli Taramada Öne Çıkan İşaret:
   const isContrastMark = (
-    best.score >= 8.0 &&
-    best.ratio >= 0.20 &&
-    best.mean >= 8.5 &&
-    (directLead >= 3.0 || scoreDiff >= 3.5) &&
-    scoreRatio >= 1.65
+    best.score >= 9.5 &&
+    best.ratio >= 0.25 &&
+    best.mean >= 9.5 &&
+    (directLead >= 2.8 || scoreDiff >= 3.2) &&
+    scoreRatio >= 1.55
   );
 
-  // 3. Çok Yüksek Kontrastlı Tek Şık (Örn. Tüm sorular A işaretlendiğinde A şıkkının açık üstünlüğü):
+  // 3. Çok Yüksek Kontrastlı Tek Şık (Örn. Tüm sorular A işaretlendiğinde A şıkkının belirgin üstünlüğü):
   const isDominantMark = (
-    best.score >= 7.5 &&
-    directLead >= 3.8 &&
-    scoreRatio >= 1.85
+    best.score >= 8.5 &&
+    best.ratio >= 0.24 &&
+    directLead >= 3.5 &&
+    scoreRatio >= 1.75
   );
 
   const isDistinctMark = isStrongMark || isContrastMark || isDominantMark;
 
-  // Boş bırakılmış soru
-  if (!best || !isDistinctMark) {
+  // Boş bırakılmış soru veya yetersiz kontrast
+  if (!isDistinctMark) {
     return {
       answer: "",
       markedPoint: null,
@@ -1189,15 +1221,15 @@ export function evaluateQuestionAnswer(
 
   // Çift İşaretleme ve Silgi Kalıntısı Analizi:
   const isSecondMarked = second && (
-    (second.score >= 9.5 && second.ratio >= 0.24 && second.mean >= 10.0) ||
+    (second.score >= 9.5 && second.ratio >= 0.25 && second.mean >= 9.5) ||
     (second.score >= 15.0 && second.ratio >= 0.22) ||
-    (second.score >= 20.0)
+    (second.score >= 22.0)
   );
 
   if (isSecondMarked) {
     // Silgi ayrımı: Öğrenci bir şıkkı silip diğerini daha koyu işaretlediyse
-    // En az 1.7 kat fark veya >= 9.0 puan fark varsa silgi kabul edilir
-    const isErasureOfSecond = (best.score >= 1.7 * second.score) || (best.score - second.score >= 9.0);
+    // En az 1.65 kat fark veya >= 8.5 puan fark varsa silgi kabul edilir
+    const isErasureOfSecond = (best.score >= 1.65 * second.score) || (best.score - second.score >= 8.5);
     if (!isErasureOfSecond) {
       // Gerçekten iki şık birden karalanmış -> Çift işaretleme (geçersiz)
       return {
