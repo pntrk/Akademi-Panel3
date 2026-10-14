@@ -1369,7 +1369,8 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
         let rowOffset = 0;
         if (isInternal && bubbles.length > 0) {
-          const rowAlign = calculateTrueRowY(bubbles[0].y, H, imgBytes, finalRotW, finalRotH, 5.5);
+          const refX = Math.max(2.0, bubbles[0].x - 3.0);
+          const rowAlign = calculateTrueRowY(bubbles[0].y, H, imgBytes, finalRotW, finalRotH, refX);
           rowOffset = rowAlign.offset;
         }
 
@@ -2293,7 +2294,8 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
             let rowOffset = 0;
             if (isInternal && bubbles.length > 0) {
-              const rowAlign = calculateTrueRowY(bubbles[0].y, currentH, imgBytes, cvs.width, cvs.height, 5.5);
+              const refX = Math.max(2.0, bubbles[0].x - 3.0);
+              const rowAlign = calculateTrueRowY(bubbles[0].y, currentH, imgBytes, cvs.width, cvs.height, refX);
               rowOffset = rowAlign.offset;
             }
 

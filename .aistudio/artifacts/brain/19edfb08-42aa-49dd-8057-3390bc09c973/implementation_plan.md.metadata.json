@@ -1,6 +1,6 @@
 {
-  "summary": "OptikAI OMR tarama motorunun kurum içi deneme sınavlarına özel olarak entegrasyonu için detaylı uygulama planı. OptikAI karar kuralı (maxD >= 40 ve diff >= 15), grafit kontrolü, getTrueRowY satır hizalama ve karekod öncelikli öğrenci eşleme adımlarını içerir.",
-  "updatedAt": "2026-10-14T10:39:28.580903336Z",
+  "summary": "OptikAI OMR tarama motorundaki katı eşik sınırından kaynaklanan boş soru algılama hatalarını düzeltmek için dinamik bağıl kontrast, esnek taban eşiği (26.0) ve genişletilmiş mikro arama kapsayan detaylı uygulama planı.",
+  "updatedAt": "2026-10-14T12:13:31.860026359Z",
   "requestFeedback": true,
   "userFacing": true
 }

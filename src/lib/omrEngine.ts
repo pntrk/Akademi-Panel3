@@ -1306,7 +1306,7 @@ export function calculateTrueRowY(
     }
   }
 
-  if (maxDarkness > 75) {
+  if (maxDarkness > 35) {
     return { trueY: bestY, offset: bestY - mapped.y };
   }
   return { trueY: mapped.y, offset: 0 };
@@ -1317,9 +1317,11 @@ export function calculateTrueRowY(
  * Karar Kuralı:
  * - Her baloncuk için en koyu çekirdek değeri (maxD) hesaplanır (whiteness tersi: 255 - max(R,G,B)).
  * - En yüksek şıkkın maxD >= 40.0 olması zorunludur (Grafit eşiği).
- * - İkinci en koyu şıkla fark (diff) >= 15.0 ise bu şık KESİN işaretli kabul edilir.
- * - İkinci şık da >= 40.0 ve diff < 15.0 ise ÇİFT İŞARETLEME (geçersiz) olarak işaretlenir.
- * - maxD < 40.0 ise soru KESİNLİKLE BOŞTUR ("").
+ * - Her baloncuk için en koyu çekirdek değeri (maxD) dinamik arama ızgarasıyla (+-4px) hesaplanır.
+ * - Kağıt taban koyuluğu (paperBase) soru düzeyinde en açık şıkların ortalaması ile ölçülür.
+ * - Esnek Grafit Taban Eşiği: maxD >= 25.0 VE net koyuluk (best - paperBase) >= 9.0 şartı aranır.
+ * - Çift işaretleme: İkinci şık net >= 9.0 ve fark < 12.0 ise çift işaretleme olarak değerlendirilir.
+ * - Bağıl Kontrast / Fark şartı: Fark >= 12.0 VEYA bağıl oran >= 1.45 VEYA yüksek koyuluk (best >= 38.0, fark >= 8.5) ise KESİN İŞARETLİ kabul edilir.
  */
 export function evaluateQuestionAnswerOptikAI(
   bubbles: { option: string; x: number; y: number }[],
@@ -1358,8 +1360,9 @@ export function evaluateQuestionAnswerOptikAI(
     return dSum / (dCnt || 1);
   };
 
-  const coreRadius = Math.max(2, Math.round(bubbleRadiusPx * 0.42));
-  const searchLimit = 2; // +-2 px mikro arama
+  const coreRadius = Math.max(2, Math.round(bubbleRadiusPx * 0.38));
+  const searchLimitX = Math.max(4, Math.round(bubbleRadiusPx * 0.40));
+  const searchLimitY = Math.max(5, Math.round(bubbleRadiusPx * 0.48));
 
   const bubbleMetrics = bubbles.map(b => {
     const mapped = applyHomography(b.x, b.y, H);
@@ -1370,8 +1373,8 @@ export function evaluateQuestionAnswerOptikAI(
     let bestX = baseX;
     let bestY = baseY;
 
-    for (let sy = -searchLimit; sy <= searchLimit; sy++) {
-      for (let sx = -searchLimit; sx <= searchLimit; sx++) {
+    for (let sy = -searchLimitY; sy <= searchLimitY; sy++) {
+      for (let sx = -searchLimitX; sx <= searchLimitX; sx++) {
         const dark = getFastAvg(baseX + sx, baseY + sy, coreRadius);
         if (dark > bestDark) {
           bestDark = dark;
@@ -1391,13 +1394,24 @@ export function evaluateQuestionAnswerOptikAI(
     };
   });
 
+  // Kağıt taban koyuluğu hesabı (soruya ait en açık şıkların ortalaması)
+  const sortedAsc = [...bubbleMetrics].map(m => m.score).sort((a, b) => a - b);
+  const paperBase = sortedAsc.length >= 2
+    ? (sortedAsc[0] + sortedAsc[1]) / 2
+    : (sortedAsc[0] || 10.0);
+
   const sorted = [...bubbleMetrics].sort((a, b) => b.score - a.score);
   const best = sorted[0];
   const second = sorted.length > 1 ? sorted[1] : null;
-  const diff = second ? (best.score - second.score) : best.score;
+  const secondScore = second ? second.score : paperBase;
 
-  // 1. MUTLAK GRAFİT EŞİĞİ: maxD >= 40.0
-  if (!best || best.score < 40.0) {
+  const diff = best ? (best.score - secondScore) : 0;
+  const bestNet = best ? (best.score - paperBase) : 0;
+  const secondNet = second ? (second.score - paperBase) : 0;
+
+  // 1. DİNAMİK / ESNEK GRAFİT TABAN EŞİĞİ:
+  // Mutlak koyuluk maxD >= 25.0 VE kağıt tabanından net fark >= 9.0 olmalıdır.
+  if (!best || best.score < 25.0 || bestNet < 9.0) {
     return {
       answer: "",
       markedPoint: null,
@@ -1408,8 +1422,9 @@ export function evaluateQuestionAnswerOptikAI(
   }
 
   // 2. ÇİFT İŞARETLEME KONTROLÜ:
-  // Eğer ikinci şık da 40.0 üzerinde ve fark 15.0'dan küçükse -> Çift işaretleme (geçersiz)
-  if (second && second.score >= 40.0 && diff < 15.0) {
+  // Eğer ikinci şık da belirgin bir karalama ise (ikinci net >= 9.0 ve fark < 12.0 veya baskınlık oranı < 1.35)
+  const isSecondSubstantial = second && second.score >= 24.0 && secondNet >= 9.0;
+  if (isSecondSubstantial && (diff < 12.0 || (second.score / best.score) >= 0.72)) {
     return {
       answer: "",
       markedPoint: { x: best.x, y: best.y },
@@ -1419,9 +1434,18 @@ export function evaluateQuestionAnswerOptikAI(
     };
   }
 
-  // 3. FARK ŞARTI: diff >= 15.0 VEYA belirgin tek şık (best >= 50.0 ve second < 28.0)
-  if (diff >= 15.0 || (best.score >= 50.0 && (!second || second.score < 28.0))) {
-    const confidence = Math.min(100, Math.round(50 + diff * 1.5 + (best.score - 40)));
+  // 3. FARK VE BAĞIL KONTRAST ŞARTLARI:
+  // A) Fark >= 12.0 VE net koyuluk >= 9.0
+  // B) Yüksek koyuluk: best >= 38.0 VE fark >= 8.5
+  // C) Oransal üstünlük: best / secondScore >= 1.45 VE net koyuluk >= 11.0
+  const isRatioValid = (best.score / Math.max(1, secondScore)) >= 1.45 && bestNet >= 11.0;
+  const isValidMark = (diff >= 12.0 && bestNet >= 9.0) ||
+                      (best.score >= 38.0 && diff >= 8.5) ||
+                      isRatioValid;
+
+  if (isValidMark) {
+    const rawConf = 50 + (diff * 1.8) + (bestNet * 1.2);
+    const confidence = Math.min(100, Math.max(50, Math.round(rawConf)));
     return {
       answer: best.option,
       markedPoint: { x: best.x, y: best.y },
@@ -1431,7 +1455,7 @@ export function evaluateQuestionAnswerOptikAI(
     };
   }
 
-  // Eşik farkını karşılayamayan belirsiz durum
+  // Belirsiz durum (eşik farklarını dolduramadıysa boş say)
   return {
     answer: "",
     markedPoint: null,
