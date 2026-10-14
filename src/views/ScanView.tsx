@@ -1284,8 +1284,15 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
     }
 
     const isHazirExam = normalizeTurkish(targetExam.name).includes('hazirbulunus') || String(targetExam.id) === '1';
-    if (!targetExam.keys?.A || targetExam.keys.A.length < 90 || targetExam.keys.A.every((k: string) => !k) || (isHazirExam && targetExam.keys.A[47] === 'B')) {
-      targetExam.keys = { ...targetExam.keys, A: HAZIRBULUNUSLUK_ANSWER_KEYS_A };
+    if (isHazirExam) {
+      if (!targetExam.keys?.A || targetExam.keys.A.length < 90 || targetExam.keys.A.every((k: string) => !k) || targetExam.keys.A[47] === 'B') {
+        targetExam.keys = { ...targetExam.keys, A: HAZIRBULUNUSLUK_ANSWER_KEYS_A };
+      }
+    } else if (!targetExam.keys?.A || targetExam.keys.A.length === 0 || targetExam.keys.A.every((k: string) => !k)) {
+      const anyKey = targetExam.keys ? Object.values(targetExam.keys).find(k => Array.isArray(k) && k.some(Boolean)) : null;
+      if (anyKey) {
+        targetExam.keys = { ...targetExam.keys, A: anyKey };
+      }
     }
 
     // Milimetrik ve Hafızadaki OMR_MAP kullanımı
@@ -2141,8 +2148,15 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         detectedExamRef.current = targetExam;
 
         const isHazirExam = normalizeTurkish(targetExam.name).includes('hazirbulunus') || String(targetExam.id) === '1';
-        if (!targetExam.keys?.A || targetExam.keys.A.length < 90 || targetExam.keys.A.every((k: string) => !k) || (isHazirExam && targetExam.keys.A[47] === 'B')) {
-          targetExam.keys = { ...targetExam.keys, A: HAZIRBULUNUSLUK_ANSWER_KEYS_A };
+        if (isHazirExam) {
+          if (!targetExam.keys?.A || targetExam.keys.A.length < 90 || targetExam.keys.A.every((k: string) => !k) || targetExam.keys.A[47] === 'B') {
+            targetExam.keys = { ...targetExam.keys, A: HAZIRBULUNUSLUK_ANSWER_KEYS_A };
+          }
+        } else if (!targetExam.keys?.A || targetExam.keys.A.length === 0 || targetExam.keys.A.every((k: string) => !k)) {
+          const anyKey = targetExam.keys ? Object.values(targetExam.keys).find(k => Array.isArray(k) && k.some(Boolean)) : null;
+          if (anyKey) {
+            targetExam.keys = { ...targetExam.keys, A: anyKey };
+          }
         }
 
         // Hedef sınavın güncel OMR koordinat haritasını (omrMap) baz al

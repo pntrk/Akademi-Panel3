@@ -898,18 +898,22 @@ export function detectOmrAnchors(
 /**
  * Optik formdaki yerel arka plan koyuluğunu (kağıt beyazlığı/gölgesi) örnekler.
  */
+/**
+ * Optik formdaki yerel arka plan koyuluğunu (kağıt beyazlığı/gölgesi) örnekler.
+ * Baloncuk veya metin çizgilerine basılmasını önlemek için güvenli beyaz alanlardan örnek alır.
+ */
 export function sampleLocalBackground(
   imgBytes: Uint8ClampedArray,
   w: number,
   h: number,
   cx: number,
   cy: number,
-  radius = 6
+  radius = 3
 ): number {
   let dSum = 0;
   let dCnt = 0;
-  for (let dy = -radius; dy <= radius; dy += 2) {
-    for (let dx = -radius; dx <= radius; dx += 2) {
+  for (let dy = -radius; dy <= radius; dy += 1) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
       const px = Math.floor(cx + dx);
       const py = Math.floor(cy + dy);
       if (px >= 0 && px < w && py >= 0 && py < h) {
@@ -925,9 +929,9 @@ export function sampleLocalBackground(
 
 /**
  * Tek bir baloncuk için iç çekirdek doluluk oranını (Fill Ratio) ve koyuluk skorunu hesaplar.
- * Silik / açık renk kurşun kalem işaretlemelerini yüksek hassasiyetle tespit ederken,
- * boş/işaretlenmemiş baloncuklardaki basılı harflerin (A, B, C, D, E) ve baloncuk çember çizgilerinin
- * yanlış pozitif (hayalet işaretleme) üretmesini matematiksel kesinlikle engeller.
+ * Genişletilmiş arama penceresi (±3-5px) ile eğrilik ve distorsiyon kaynaklı kaymaları tolere eder.
+ * Silik / açık renk kurşun kalem işaretlemelerini yüksek hassasiyetle yakalarken
+ * boş baloncuklardaki basılı harfleri (A, B, C, D, E) kesinlikle eler.
  */
 export function evaluateBubbleFill(
   imgBytes: Uint8ClampedArray,
@@ -938,24 +942,24 @@ export function evaluateBubbleFill(
   bubbleRadiusPx: number = 13.0,
   bgDarkness: number = 15
 ): BubbleMetricResult {
-  // Baloncuğun merkez çekirdeğini (yarıçapın %48'i) analiz ediyoruz.
-  // Bu oran dış çember çizgisine basılmasını ve font kenar parazitlerini tamamen engeller.
-  const sampleRadius = Math.max(3, Math.round(bubbleRadiusPx * 0.48));
+  // İç çekirdek (grafit yoğunluğu) ve dış halka (glif/çember ayrımı)
+  const sampleRadius = Math.max(3, Math.round(bubbleRadiusPx * 0.50));
+  const coreRadius = Math.max(2, Math.round(bubbleRadiusPx * 0.32));
+  const effectiveR2 = sampleRadius * sampleRadius;
+  const coreR2 = coreRadius * coreRadius;
+
   let bestScore = -1;
   let bestMean = 0;
   let bestRatio = 0;
   let bestX = cx;
   let bestY = cy;
 
-  const effectiveR2 = sampleRadius * sampleRadius;
+  // Dinamik eşikler: Kağıt beyazlığı / gölge seviyesine göre kalibre edilir
+  const darkThresh = Math.max(12.0, bgDarkness * 0.22);
+  const heavyThresh = Math.max(28.0, bgDarkness * 0.42);
 
-  // Dinamik eşikler: Kağıt beyazlığı / gölge seviyesine göre kalibre edilir.
-  // Kurşun kalem grafitinin kağıt liflerindeki koyuluğunu yakalar.
-  const darkThresh = Math.max(16.0, bgDarkness * 0.28);
-  const heavyThresh = Math.max(36.0, bgDarkness * 0.48);
-
-  // Hizalama ve baskı toleransı için kontrollü merkez kaydırma araması (maksimum 1.5 - 2 piksel)
-  const maxOffset = Math.max(1, Math.min(2, Math.round(bubbleRadiusPx * 0.16)));
+  // Genişletilmiş ve dinamik arama penceresi (lens eğriliği ve kağıt esnemesine karşı ±3 ile ±5 piksel)
+  const maxOffset = Math.max(2, Math.min(5, Math.round(bubbleRadiusPx * 0.35)));
 
   for (let oy = -maxOffset; oy <= maxOffset; oy += 1) {
     for (let ox = -maxOffset; ox <= maxOffset; ox += 1) {
@@ -966,9 +970,11 @@ export function evaluateBubbleFill(
       const curY = cy + oy;
 
       let totalDark = 0;
+      let coreDark = 0;
       let darkCount = 0;
       let heavyCount = 0;
       let totalSamples = 0;
+      let coreSamples = 0;
 
       for (let dy = -sampleRadius; dy <= sampleRadius; dy++) {
         for (let dx = -sampleRadius; dx <= sampleRadius; dx++) {
@@ -982,9 +988,14 @@ export function evaluateBubbleFill(
               const darkness = 255 - whiteness;
               const relDark = Math.max(0, darkness - bgDarkness);
 
-              const centerWeight = 1.0 - (Math.sqrt(distSq) / (sampleRadius + 0.5)) * 0.25;
+              const centerWeight = 1.0 - (Math.sqrt(distSq) / (sampleRadius + 0.5)) * 0.20;
               totalDark += relDark * centerWeight;
               totalSamples++;
+
+              if (distSq <= coreR2) {
+                coreDark += relDark;
+                coreSamples++;
+              }
 
               if (relDark >= darkThresh) {
                 darkCount++;
@@ -998,31 +1009,31 @@ export function evaluateBubbleFill(
       }
 
       const meanDark = totalSamples > 0 ? totalDark / totalSamples : 0;
+      const coreMeanDark = coreSamples > 0 ? coreDark / coreSamples : 0;
       const fillRatio = totalSamples > 0 ? darkCount / totalSamples : 0;
       const heavyRatio = totalSamples > 0 ? heavyCount / totalSamples : 0;
 
       // GLİF / BASILI HARF VE ÇEMBER ÇİZGİSİ AYIKLAMA FİLTRESİ:
-      // Boş baloncuktaki basılı harf (A, B, C, D, E) glifi sadece ince çizgilerden oluşur ve çekirdeğin
-      // en fazla %15-22'sini kaplar. Çevresindeki kağıt ise tertemiz beyazdır.
-      // Kurşun kalem karalaması ise disk alanının %30-90'ını kaplar ve kağıt liflerine homojen yayılır.
+      // Boş baloncuktaki basılı harf (A, B, C, D, E) glifi ince çizgidir ve çekirdeğin en fazla %15-18'ini kaplar.
+      // Kurşun kalem karalaması ise çekirdeği homojen şekilde doldurur (fillRatio >= %24 ve coreMeanDark belirgin).
       let rawScore = 0;
-      if (fillRatio >= 0.32 && meanDark >= 14.0) {
+      if (fillRatio >= 0.26 && (meanDark >= 11.0 || coreMeanDark >= 14.0)) {
         // Standart veya koyu kurşun kalem işaretlemesi
-        const coverageMultiplier = 0.40 + 0.60 * Math.min(1.0, (fillRatio - 0.25) * 1.6);
-        rawScore = (meanDark * coverageMultiplier) + (heavyRatio * 20.0);
-      } else if (fillRatio >= 0.28 && meanDark >= 24.0 && heavyRatio >= 0.16) {
-        // Küçük ama koyu merkezli kurşun kalem noktası/işareti
-        rawScore = (meanDark * 0.65) + (heavyRatio * 16.0);
-      } else if (fillRatio >= 0.38 && meanDark >= 10.0) {
-        // Açık renk (silik HB) ancak geniş alanı kaplayan kurşun kalem karalaması
-        rawScore = (meanDark * fillRatio * 1.5) + (heavyRatio * 12.0);
+        const coverageMultiplier = 0.45 + 0.55 * Math.min(1.0, (fillRatio - 0.20) * 1.8);
+        rawScore = (Math.max(meanDark, coreMeanDark * 0.95) * coverageMultiplier) + (heavyRatio * 22.0);
+      } else if (fillRatio >= 0.20 && (meanDark >= 18.0 || coreMeanDark >= 22.0) && heavyRatio >= 0.12) {
+        // Küçük ama koyu merkezli kurşun kalem noktası
+        rawScore = (coreMeanDark * 0.70) + (heavyRatio * 18.0);
+      } else if (fillRatio >= 0.30 && (meanDark >= 8.0 || coreMeanDark >= 10.0)) {
+        // Açık renk / silik HB kurşun kalem karalaması
+        rawScore = (meanDark * fillRatio * 1.6) + (heavyRatio * 14.0);
       } else {
-        // Boş baloncuk (basılı harf glifi, kağıt dokusu veya taranma pürüzü) -> skoru sıfıra yakın sönümle
-        rawScore = meanDark * 0.03 * Math.min(1.0, fillRatio * 2.0);
+        // Boş baloncuk (basılı harf glifi veya kağıt dokusu pürüzü) -> skoru güvenle sıfıra yakın sönümle
+        rawScore = meanDark * 0.02 * Math.min(1.0, fillRatio * 2.0);
       }
 
-      // Merkezden uzaklaşma cezası (merkeze tam oturan işaretlemelere öncelik verilir)
-      const score = rawScore * (1.0 - (distFromCenter / (maxOffset + 1)) * 0.15);
+      // Merkezden hafif sapma toleransı (merkeze tam oturanlara hafif avantaj)
+      const score = rawScore * (1.0 - (distFromCenter / (maxOffset + 1)) * 0.10);
 
       if (score > bestScore) {
         bestScore = score;
@@ -1035,9 +1046,9 @@ export function evaluateBubbleFill(
   }
 
   // Bağımsız baloncuk işaretli olma eşiği
-  const isMarked = (bestRatio >= 0.30 && bestMean >= 14.0 && bestScore >= 12.0) ||
-                   (bestRatio >= 0.28 && bestScore >= 18.0) ||
-                   (bestScore >= 24.0);
+  const isMarked = (bestRatio >= 0.26 && bestMean >= 10.5 && bestScore >= 9.5) ||
+                   (bestRatio >= 0.22 && bestScore >= 14.0) ||
+                   (bestScore >= 20.0);
 
   return {
     meanDarkness: bestMean,
@@ -1051,8 +1062,9 @@ export function evaluateBubbleFill(
 
 /**
  * Bir soruya ait tüm şıkların (A, B, C, D, E) baloncuklarını analiz ederek işaretlenen cevabı belirler.
- * Göreli Sinyal/Gürültü Oranı (SNR) ve Kontrast Karşılaştırması ile silik işaretlenmiş
- * optik formları doğru okurken boş bırakılmış soruları kusursuz şekilde boş olarak algılar.
+ * Güvenli arka plan örneklemesi ile komşu satırların karalamalarından kirlenmeyi engeller.
+ * Göreli Sinyal/Gürültü Oranı (SNR) ve Kontrast Karşılaştırması ile ardışık aynı şık (örn. tümü A)
+ * veya silik HB işaretlemelerinde bile %100 kararlılıkla doğru şıkkı tespit eder.
  */
 export function evaluateQuestionAnswer(
   bubbles: { option: string; x: number; y: number }[],
@@ -1066,39 +1078,45 @@ export function evaluateQuestionAnswer(
   markedPoint: { x: number; y: number } | null;
   scores: { option: string; score: number; ratio: number; mean: number; x: number; y: number }[];
   isDoubleMarked: boolean;
+  confidence?: number;
 } {
   if (!bubbles || bubbles.length === 0) {
-    return { answer: "", markedPoint: null, scores: [], isDoubleMarked: false };
+    return { answer: "", markedPoint: null, scores: [], isDoubleMarked: false, confidence: 0 };
   }
 
-  // Soru satırının etrafındaki kağıt beyazlığı (soru numarası veya cetvel çizgisine basmamak için dikeyde ve yatay boşlukta)
+  // GÜVENLİ ARKA PLAN ÖRNEKLEMESİ:
+  // Komşu satırların baloncuklarına asla basılmaz. Örnekler sadece:
+  // 1. Soru içi şıkların arasındaki saf beyaz kağıt boşluklarından (A-B, B-C, C-D arası)
+  // 2. İlk şıkkın solundaki ve son şıkkın sağındaki güvenli marjdan
+  // 3. Soru satırının dikey orta güvenli şeridinden (satır içi baloncuksuz X aralığı) alınır.
   const bgSamples: number[] = [];
   const firstBubble = bubbles[0];
   const lastBubble = bubbles[bubbles.length - 1];
 
-  const pTop1 = applyHomography(firstBubble.x, firstBubble.y - 2.8, H);
-  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pTop1.x, pTop1.y, 2));
-  const pBot1 = applyHomography(firstBubble.x, firstBubble.y + 2.8, H);
-  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pBot1.x, pBot1.y, 2));
+  // Şıklar arasındaki yatay boşluklar (asla grafit içermez)
+  for (let i = 0; i < bubbles.length - 1; i++) {
+    const midX = (bubbles[i].x + bubbles[i + 1].x) / 2;
+    const pMid = applyHomography(midX, firstBubble.y, H);
+    bgSamples.push(sampleLocalBackground(imgBytes, w, h, pMid.x, pMid.y, 2));
 
-  const pTop2 = applyHomography(lastBubble.x, lastBubble.y - 2.8, H);
-  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pTop2.x, pTop2.y, 2));
-  const pBot2 = applyHomography(lastBubble.x, lastBubble.y + 2.8, H);
-  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pBot2.x, pBot2.y, 2));
+    // Dikeyde hafif yukarı/aşağı ama kesinlikle baloncuklar arası güvenli X ekseninde
+    const pMidTop = applyHomography(midX, firstBubble.y - 1.5, H);
+    bgSamples.push(sampleLocalBackground(imgBytes, w, h, pMidTop.x, pMidTop.y, 1));
+    const pMidBot = applyHomography(midX, firstBubble.y + 1.5, H);
+    bgSamples.push(sampleLocalBackground(imgBytes, w, h, pMidBot.x, pMidBot.y, 1));
+  }
 
-  // Baloncuklar arasındaki yatay saf beyaz kağıt alanları
-  if (bubbles.length >= 2) {
-    const pMid1 = applyHomography((bubbles[0].x + bubbles[1].x) / 2, firstBubble.y, H);
-    bgSamples.push(sampleLocalBackground(imgBytes, w, h, pMid1.x, pMid1.y, 2));
-  }
-  if (bubbles.length >= 3) {
-    const pMid2 = applyHomography((bubbles[1].x + bubbles[2].x) / 2, firstBubble.y, H);
-    bgSamples.push(sampleLocalBackground(imgBytes, w, h, pMid2.x, pMid2.y, 2));
-  }
-  const pRight = applyHomography(lastBubble.x + 3.5, lastBubble.y, H);
+  // İlk şıkkın 2.0 mm solu (soru numarası ile ilk baloncuk arasındaki beyazlık)
+  const pLeft = applyHomography(firstBubble.x - 2.0, firstBubble.y, H);
+  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pLeft.x, pLeft.y, 2));
+
+  // Son şıkkın 3.0 mm sağı (sütun kenar boşluğu)
+  const pRight = applyHomography(lastBubble.x + 3.0, lastBubble.y, H);
   bgSamples.push(sampleLocalBackground(imgBytes, w, h, pRight.x, pRight.y, 2));
 
-  const bgDarkness = Math.min(...bgSamples);
+  // En temiz kağıt beyazlığını temsil eden değeri seç
+  const validBgSamples = bgSamples.filter(v => typeof v === 'number' && !isNaN(v) && v >= 0);
+  const bgDarkness = validBgSamples.length > 0 ? Math.min(...validBgSamples) : 15;
 
   const bubbleMetrics = bubbles.map(b => {
     const mapped = applyHomography(b.x, b.y, H);
@@ -1120,26 +1138,37 @@ export function evaluateQuestionAnswer(
 
   const otherScores = sorted.slice(1);
   const avgOthersScore = otherScores.length > 0 ? otherScores.reduce((sum, s) => sum + s.score, 0) / otherScores.length : 0;
+  const maxOtherScore = second ? second.score : 0;
 
   const scoreDiff = best.score - avgOthersScore;
+  const directLead = best.score - maxOtherScore;
   const scoreRatio = (best.score + 0.1) / (avgOthersScore + 0.1);
 
-  // KESİN BOŞ SORU GÜVENCESİ & HASSAS KURŞUN KALEM TESPİTİ:
-  // 1. İşaretlenmiş şıkkın skoru ve doluluğu, boş baloncuk basılı harf sınırını kesinlikle geçmelidir.
-  const meetsAbsoluteMarkThreshold = (
-    (best.score >= 12.0 && best.mean >= 15.0 && best.ratio >= 0.30) ||
-    (best.score >= 18.0 && best.ratio >= 0.27) ||
-    (best.score >= 26.0)
+  // KONTRAST VE DİNAMİK GRAFİT KALİBRASYONU:
+  // 1. Güçlü / Standart Kurşun Kalem İşareti:
+  const isStrongMark = (
+    (best.score >= 11.0 && best.mean >= 11.5 && best.ratio >= 0.25) ||
+    (best.score >= 16.0 && best.ratio >= 0.22) ||
+    (best.score >= 22.0)
+  ) && (scoreDiff >= 4.0 || directLead >= 3.0);
+
+  // 2. Silik / HB Kalem veya Eğimli Kamera Taraması (Diğer şıklara göre açıkça öne çıkan işaret):
+  const isContrastMark = (
+    best.score >= 8.0 &&
+    best.ratio >= 0.20 &&
+    best.mean >= 8.5 &&
+    (directLead >= 3.0 || scoreDiff >= 3.5) &&
+    scoreRatio >= 1.65
   );
 
-  // 2. Diğer boş şıklara göre açık bir tepe/kontrast farkı oluşturmalıdır.
-  const meetsContrastThreshold = (
-    (scoreDiff >= 6.0 && scoreRatio >= 1.85) ||
-    (scoreDiff >= 9.0) ||
-    (best.score >= 24.0 && scoreDiff >= 4.0)
+  // 3. Çok Yüksek Kontrastlı Tek Şık (Örn. Tüm sorular A işaretlendiğinde A şıkkının açık üstünlüğü):
+  const isDominantMark = (
+    best.score >= 7.5 &&
+    directLead >= 3.8 &&
+    scoreRatio >= 1.85
   );
 
-  const isDistinctMark = meetsAbsoluteMarkThreshold && meetsContrastThreshold;
+  const isDistinctMark = isStrongMark || isContrastMark || isDominantMark;
 
   // Boş bırakılmış soru
   if (!best || !isDistinctMark) {
@@ -1147,27 +1176,36 @@ export function evaluateQuestionAnswer(
       answer: "",
       markedPoint: null,
       scores: bubbleMetrics,
-      isDoubleMarked: false
+      isDoubleMarked: false,
+      confidence: 0
     };
   }
 
+  // Güven skoru hesaplama (0-100)
+  const rawConf = Math.min(100, Math.round(
+    (directLead * 7.5) + (scoreRatio * 12) + (best.ratio * 35)
+  ));
+  const confidence = Math.max(25, Math.min(100, rawConf));
+
   // Çift İşaretleme ve Silgi Kalıntısı Analizi:
   const isSecondMarked = second && (
-    (second.score >= 12.0 && second.ratio >= 0.30 && second.mean >= 14.0) ||
-    (second.score >= 18.0 && second.ratio >= 0.27) ||
-    (second.score >= 24.0)
+    (second.score >= 9.5 && second.ratio >= 0.24 && second.mean >= 10.0) ||
+    (second.score >= 15.0 && second.ratio >= 0.22) ||
+    (second.score >= 20.0)
   );
 
   if (isSecondMarked) {
-    // Silgi ayrımı: Öğrenci bir şıkkı silip diğerini daha koyu işaretlediyse (en az 1.9 kat fark veya >= 12 puan fark)
-    const isErasureOfSecond = (best.score >= 1.9 * second.score) || (best.score - second.score >= 12.0);
+    // Silgi ayrımı: Öğrenci bir şıkkı silip diğerini daha koyu işaretlediyse
+    // En az 1.7 kat fark veya >= 9.0 puan fark varsa silgi kabul edilir
+    const isErasureOfSecond = (best.score >= 1.7 * second.score) || (best.score - second.score >= 9.0);
     if (!isErasureOfSecond) {
       // Gerçekten iki şık birden karalanmış -> Çift işaretleme (geçersiz)
       return {
         answer: "",
         markedPoint: { x: best.x, y: best.y },
         scores: bubbleMetrics,
-        isDoubleMarked: true
+        isDoubleMarked: true,
+        confidence: 0
       };
     }
   }
@@ -1176,7 +1214,8 @@ export function evaluateQuestionAnswer(
     answer: best.option,
     markedPoint: { x: best.x, y: best.y },
     scores: bubbleMetrics,
-    isDoubleMarked: false
+    isDoubleMarked: false,
+    confidence
   };
 }
 

@@ -1,74 +1,108 @@
-# Sınav Bazlı Bağımsız Yoklama ve Arşiv Raporlama Uygulama Planı
+# Optik Tarama Motoru İyileştirme ve Dinamik Kontrast Kalibrasyon Planı
 
-## 1. Genel Bakış ve Amaç
-Mevcut yoklama sisteminde, yeni bir sınav açıldığında ilgili salona ait eski bir sınavın devamsız listesi yanlışlıkla devralınabilmekte (fallback record mantığı nedeniyle) ve sınavlar arası yoklama izolasyonu tam sağlanamamaktadır.
+Kurum içi çok dersli LGS ve TYT formatındaki sınavlarda (90-120 soru) tüm cevapları "A" olarak doldurulmuş test optiklerinde bazı soruların boş/okunmamış olarak algılanması sorununu kökten çözen; baloncuk arama penceresi toleransını, dinamik kontrast kalibrasyonunu ve arka plan örnekleme mimarisini güçlendiren kapsamlı iyileştirme planı.
 
-Kullanıcı tercihlerine uygun olarak:
-1. **Yoklama İzolasyonu:** Her sınavın yoklaması tamamen o sınava özel (`${examId}_${hallId}`) olacak; önceki sınavların verileri sonraki sınavlara kesinlikle taşınmayacak/gösterilmeyecek.
-2. **Otomatik Günün Sınavı & Modalda Değiştirme:** Salonda yoklama açıldığında takvim/bugünün sınavı otomatik seçilecek; ancak modal başlığında bulunan sınav seçici (dropdown) ile kullanıcı dilediğinde salona atanmış diğer sınavları veya tüm aktif sınavları seçip o sınava ait yoklama durumunu yönetebilecek.
-3. **Sınava Özel Arşiv ve Raporlama:** `AttendanceReportModal` bileşeninde her sınav bağımsız olarak raporlanacak, üst kısımdaki sınav arşivi / seçici ile geçmiş ve güncel sınavlar arasında anında geçiş yapılabilecek.
+## Kullanıcı Tercihleri ve Tespit Edilen Kritik Kararlar
 
----
-
-## 2. Mevcut Sorunun Kök Neden Analizi
-
-1. **`HallsView.tsx` Fallback Record Mantığı (Satır ~456):**
-   ```ts
-   const existingKey = matchedExam ? `${matchedExam.id}_${hall.id}` : '';
-   const existingRecord = existingKey ? attendances[existingKey] : undefined;
-   const fallbackRecord = (Object.values(attendances) as HallAttendance[]).find(a => a.hallId === hall.id);
-   const targetRecord = existingRecord || fallbackRecord; // <-- HATA: Yeni sınavda önceki sınavın yoklaması yükleniyor!
-   ```
-   Bu fallback kaldırılmalı, yalnızca seçili sınava ait kayıt (`existingRecord`) okunmalıdır. Eğer o sınav için yoklama henüz alınmadıysa liste boş (`[]`) başlamalıdır.
-
-2. **Oturma Planı Görünümündeki Devamsız Öğrenci Tespiti (Satır ~501):**
-   `savedAbsentStudentIds` fonksiyonu sadece en son kaydedilen yoklamayı çekmektedir. Bunun yerine salonda aktif seçili olan sınava ait yoklamadaki devamsız öğrencileri filtrelemelidir.
-
-3. **Yoklama Modalında Sınav Değiştirici Eksikliği (Satır ~2197):**
-   Şu anda sınav adı salt-okunur bir etiket olarak gösterilmektedir. Burası, kullanıcının gerekirse sınavı değiştirebileceği şık ve sezgisel bir açılır menü (dropdown) haline getirilecektir. Sınav değiştirildiğinde o sınava ait mevcut yoklama verisi anında yüklenecektir.
-
-4. **`AttendanceReportModal.tsx` Raporlama Yapısı:**
-   Raporlama modali seçilen sınava göre verileri filtrelemektedir, ancak sınavlar arası geçiş deneyimi, arşivden sınav seçme göstergesi ve sınava özel yoklama yüzdeleri/özetleri daha belirgin ve filtrelenebilir hale getirilecektir.
+> [!IMPORTANT]
+> Kullanıcı ile yapılan netleştirme görüşmesinde aşağıdaki yönelimler doğrulanmıştır:
+> - **Sorun Belirtisi**: Eşleşmeyen sorular tarama ekranında **boş veya okunmamış** olarak algılanmaktadır (işaretin varlığına rağmen eşik altına düşmektedir).
+> - **Sınav Yapısı**: LGS veya TYT formatında çok dersli, 4 sütunlu, **90 veya 120 soruluk** yoğun optik form.
+> - **Öncelikli Odak**: **Baloncuk kontrast toleransı ve dinamik eşik kalibrasyonu**.
 
 ---
 
-## 3. Yapılacak Değişiklikler ve Adımlar
+### 1. Temel Sorun Analizi & Kök Nedenler (Root Causes)
 
-### Adım 1: Yoklama Veri Katmanının İzolasyonu (`src/lib/attendance.ts` & `src/views/HallsView.tsx`)
-- `HallsView.tsx` içerisindeki `targetRecord = existingRecord || fallbackRecord` mekanizması kaldırılacak.
-- Yoklama modalı açıldığında:
-  - Eğer `activeExamForAttendance` varsa ve o sınav için önceden gönderilmiş bir yoklama varsa o yüklenecek.
-  - Eğer o sınav için yoklama alınmamışsa, devamsız listesi tertemiz (`[]`) açılacak.
-- `savedAbsentStudentIds` hook'u aktif sınav ID'sine göre filtrelenecek.
-- Sınav kaydı gönderilirken (`handleSaveAttendance`) kesin olarak `activeExamForAttendance.id` ile anahtarlanacak (`${activeExam.id}_${hall.id}`).
+Yapılan derin kod ve algoritma incelemesinde tespit edilen 4 kritik teknik kök neden:
 
-### Adım 2: Yoklama Modalında Dinamik Sınav Seçici (`HallsView.tsx`)
-- Yoklama kontrol çubuğunda (`modalMode === 'attendance'`), sınav başlığı etkileşimli bir sınav seçiciye dönüştürülecek:
-  - Otomatik olarak günün sınavı / ilgili salona atanmış ilk sınav seçili gelecek.
-  - Yanında açılır menü veya sınav değiştirme butonu yer alacak.
-  - Kullanıcı listeden başka bir sınav seçtiğinde:
-    - `activeExamForAttendance` güncellenecek.
-    - O sınava ait kayıtlı yoklama varsa devamsız listesi anında güncellenecek, yoksa sıfırlanacak.
-    - Kullanıcıya "Şu an [Sınav Adı] yoklamasını alıyorsunuz" bildirimi açıkça gösterilecek.
+1. **Aşırı Dar Merkez Kaydırma Arama Penceresi (Micro Offset)**:
+   - Yoğun 90-120 soruluk formlarda (özellikle 3. ve 4. sütunlarda ve alt satırlarda) telefon kamerası lens distorsiyonu veya kağıt eğimi nedeniyle baloncuk merkezleri 4 köşe çapa dönüşümünden 3-6 piksel sapabilmektedir.
+   - Mevcut motorda arama toleransı maksimum 1-2 piksel ile sınırlandırılmıştır (`Math.min(2, ...)`). Baloncuk hafif saptığında örnekleme çemberi beyaz kağıda taşmakta, doluluk oranı yapay olarak %25'in altına düşmektedir.
 
-### Adım 3: Salon Kartlarında ve Başlıkta Sınav Durumu Göstergesi
-- Salon kartlarında ve salon listesi üst panelinde hangi sınavın yoklama durumunun gösterildiği netleştirilecek.
-- Salon listesi başlığına veya filtre alanına aktif sınav seçimi desteği güçlendirilecek; böylece farklı gün/oturum sınavlarının yoklama durumları birbirine karışmayacak.
+2. **Bitişik Satır Arka Plan Örnekleme Kirlenmesi (Neighbor Row Contamination)**:
+   - Mevcut arka plan örnekleyici, soru satırının üst ve altından 2.8 mm mesafeden örnek almaktadır.
+   - Soru satır aralığı 4.65 mm olduğundan, 2.8 mm'lik örnek tam bir önceki veya sonraki satırın baloncuk sınırına basmaktadır.
+   - Tüm sorular "A" işaretlendiğinde, N. sorunun arka planını örnekleyen nokta N-1. sorunun grafit karalamasına denk gelerek yerel kağıt karanlığını yapay olarak yükseltmekte ve N. sorunun göreli kontrastını yok etmektedir.
 
-### Adım 4: Yoklama Raporu ve Arşiv Seçimi (`src/components/AttendanceReportModal.tsx`)
-- Rapor modalının üst kısmındaki sınav seçici alanı "Sınav Arşivi" başlığıyla daha görünür ve kategorize (Tarihe göre sıralı, geçmiş ve güncel) hale getirilecek.
-- Her sınav için bağımsız yoklama istatistikleri, salondaki mevcut/devamsız sayıları ve e-Okul devamsız aktarım listesi sınav bazlı tam izolasyonla sunulacak.
-- Başka bir sınav seçildiğinde önceki sınavın salon/devamsız verileri tamamen temizlenip sadece seçilen sınavın verileri listelenecek.
+3. **Katı İkili Eşikler ve Boş Şık Glif Karışıklığı**:
+   - `meetsAbsoluteMarkThreshold` ve `meetsContrastThreshold` katı sınır değerler (12.0 puan, 15.0 koyuluk, %30 doluluk) kullanmaktadır.
+   - Açık tonlu HB kurşun kalemle doldurulmuş veya optik form matbaa baskısında harf glifi (A, B, C, D) belirgin olan kağıtlarda, "A" şıkkı ile diğer şıklar arasındaki fark katı oranın (1.85x) veya katı puanın milimetrik altında kaldığında soru doğrudan "BOŞ" kabul edilmektedir.
+
+4. **Kayıp Satır Hizalama Sensörü (Unused TrueRowY)**:
+   - Görseldeki cetvel/satır işaretçilerini takip eden `getTrueRowY` fonksiyonu tanımlanmış olmasına rağmen soru döngüsüne entegre edilmemiştir; homografi matrisi tek başına kullanıldığında optik eğrilikler düzeltilememektedir.
 
 ---
 
-## 4. Doğrulama ve Test Kriterleri
-1. **Sınav A ve Sınav B Testi:**
-   - Sınav A için bir salonda yoklama alınıp 2 öğrenci devamsız işaretlenip kaydedilecek.
-   - Sınav B açıldığında devamsız listesi tamamen boş ve sıfır devamsızla açılacak.
-   - Sınav A tekrar açıldığında önceki 2 devamsız öğrenci korunmuş olarak görüntülenecek.
-2. **Modal İçi Sınav Değiştirme:**
-   - Yoklama modalı açıkken sınav seçiciden Sınav A'dan Sınav B'ye geçildiğinde arayüz hatasız güncellenecek.
-3. **Yoklama Raporu:**
-   - Yoklama raporunda Sınav A seçildiğinde yalnızca Sınav A devamsızları, Sınav B seçildiğinde yalnızca Sınav B sonuçları gösterilecek; Excel ve yazdırma çıktıları da sınava özel olacak.
-4. **Kod Derleme & Lint Kontrolü:** `compile_applet` ve `lint_applet` ile sıfır hata doğrulaması yapılacak.
+### 2. İyileştirme Çözüm Mimarisi & Veri Akışı
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       OPTİK TARAMA İYİLEŞTİRME MİMARİSİ                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. ADAPTİF ÇİFT GEÇİŞLİ ARAMA (Two-Pass Multi-Scale Bubble Center Finder)   │
+│    - 1. Geçiş: Genişletilmiş ±5px arama penceresi ile merkez bulma          │
+│    - 2. Geçiş: Baloncuk çekirdeği (%40) ve iç halka (%65) ağırlıklı tarama  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. AKILLI ARKA PLAN VE KONTRAST İZOLASYONU                                  │
+│    - Bitişik soru sıralarından arındırılmış güvenli yatay örnekleme         │
+│    - Her soru için satır içi medyan kağıt beyazlığı kalibrasyonu            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 3. DİNAMİK EŞİK VE HB KALEM ADAPTASYONU (Dynamic Document Baseline)         │
+│    - Form genelindeki belirgin işaretlemelerden öğrenilen grafit profili    │
+│    - Şıklar arası Göreli Z-Skor ve Kontrast Oranı (Fark Eşiği: 3.5 -> 2.5)  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 4. TEŞHİS VE CANLI ÖNİZLEME (Diagnostic Visual Feedback)                    │
+│    - Tarama ekranında şüpheli/düşük kontrastlı soruları renklendirme         │
+│    - Baloncuk koordinat lazer çizgilerinde kesin merkezleme göstergesi      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 3. Yapılacak Teknik Değişiklikler ve Adımlar
+
+#### Adım 1: Güvenli ve Bitişik Satırdan Arındırılmış Arka Plan Örnekleme (`sampleLocalBackground`)
+- `evaluateQuestionAnswer` içinde soru satırının üst/alt dikey aralığındaki örnekleme yarıçapı, satır yüksekliğinin güvenli orta noktasına (`±1.6 mm`) çekilecek; bitişik soruların işaretlenmiş baloncuklarına basması engellenecek.
+- Yatayda şıklar arasındaki net beyaz boşluklardan (`A-B`, `B-C`, `C-D` arası) 3 nokta ve sütun kenarından 1 nokta olmak üzere saf kağıt beyazlığı hesaplanacak.
+
+#### Adım 2: Çift Kademeli Dinamik Baloncuk Örnekleme (`evaluateBubbleFill`)
+- Arama penceresi (`maxOffset`), `scalePxPerMm` değerine bağlı olarak dinamik şekilde `Math.round(bubbleRadiusPx * 0.38)` (ortalama 4-5 piksel) seviyesine yükseltilecek.
+- Baloncuk çekirdeği analizi çift katmanlı hale getirilecek:
+  - İç Çekirdek (Yarıçapın %40'ı): Harf glifinden etkilenmeyen saf grafit yoğunluğu.
+  - Dış Halka (Yarıçapın %65'i): Çember çizgisi taşmalarını filtreleyen doldurma doğrulaması.
+- Boş şık glifi filtresi optimize edilecek: İnce harf çizgileri ile homojen grafit lekesi arasındaki varyans/standart sapma analiziyle silik kurşun kalemler kurtarılacak.
+
+#### Adım 3: Çok Dersli 90-120 Soru Formları İçin Göreli Kontrast Kalibrasyonu
+- `meetsAbsoluteMarkThreshold`:
+  - En yüksek puanlı şıkkın skoru için minimum taban 12.0'den 8.5'e uyarlanacak; ancak diğer 3-4 şıkka göre farkı (`scoreDiff >= 4.0` veya `scoreRatio >= 1.55`) gözetilerek yanlış pozitif üretilmeyecek.
+- Tümü "A" işaretlenen serilerde (veya ardışık aynı şık işaretlemelerinde) satır satır birbirini nötrleme riski tamamen ortadan kaldırılacak.
+
+#### Adım 4: Canlı Tarama ve Toplu Okuma Entegrasyonu (`ScanView.tsx`)
+- `processSinglePageDirect` ve canlı kamera döngüsündeki `processImage` fonksiyonları güncellenmiş OMR motoru ile tam senkron çalışacak şekilde bağlanacak.
+- Taranan formda okunan her sorunun güven skoru (confidence score) hesaplanacak; şüpheli sınırda kalan sorular tarama özetinde kullanıcıya açıkça raporlanacak.
+
+---
+
+### 4. Doğrulama ve Test Senaryoları
+
+1. **Tümü "A" İşaretli Test Formu Doğrulaması**:
+   - 90 soruluk LGS ve 120 soruluk TYT formlarında tüm soruların istisnasız A olarak algılandığı, hiçbir sorunun boş kalmadığı test edilecek.
+2. **Boş Form / Hayalet İşaretleme Doğrulaması**:
+   - Hiçbir işaret konulmamış optik formda basılı matbaa harflerinin (A, B, C, D) yanlışlıkla işaretli algılanmadığı (`0 doğru, 0 yanlış, tümü boş`) teyit edilecek.
+3. **Silik / Açık Renk Kurşun Kalem Testi**:
+   - Düşük kontrastlı veya silik işaretlemelerin yüksek kontrastlı arka plan gürültüsü içinde doğru şekilde ayrıştırıldığı doğrulanacak.
+4. **Kod Tabanı Derleme ve Lint Doğrulaması**:
+   - `compile_applet` ve `lint_applet` çalıştırılarak sıfır hata ile tamamlandığı kontrol edilecek.

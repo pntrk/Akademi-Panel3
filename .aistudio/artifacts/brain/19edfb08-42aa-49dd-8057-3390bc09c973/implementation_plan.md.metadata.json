@@ -1,6 +1,6 @@
 {
-  "summary": "Sınav Bazlı Bağımsız Yoklama ve Arşiv/Raporlama Mimarisi Planı:\n1. Yoklama İzolasyonu: Eski sınavların yoklamasının yeni sınava sızmasını önleyen katı examId_hallId filtrelemesi (fallbackRecord iptali).\n2. Salon Modalında Sınav Seçici: Otomatik günün sınavı tespiti, istenildiğinde listeden başka bir sınav seçebilme ve seçilen sınava ait yoklama verilerinin anında dinamik yüklenmesi.\n3. Oturma Planı & Salon Kartlarında Sınava Özel Devamsız İşaretleme: Sadece aktif seçili sınavın devamsızlık durumunun yansıtılması.\n4. Yoklama Raporu (AttendanceReportModal): Her sınav için izole arşiv/rapor görünümü, geçmiş sınav seçimi ve sınava özel devamsız analizleri.",
-  "updatedAt": "2026-10-13T19:31:13.302685555Z",
+  "summary": "Optik tarama motorunun 90-120 soruluk LGS/TYT kurum içi sınavlarda tümü 'A' işaretli formlarda bazı soruları boş/okunmamış algılama sorununu çözen, baloncuk kontrast toleransı, dinamik eşik kalibrasyonu, yerel satır kayma optimizasyonu ve çift geçişli adaptif tanıma mimarisi uygulama planı.",
+  "updatedAt": "2026-10-14T09:14:28.159880800Z",
   "requestFeedback": true,
   "userFacing": true
 }
