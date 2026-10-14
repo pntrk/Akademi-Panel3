@@ -1,6 +1,6 @@
 {
-  "summary": "Optik tarama motorunda boş bırakılan soruların hatalı olarak dolu algılanmasını (false positive) engelleyen, basılı harf/çember filtresi, çekirdek odaklı örnekleme, dinamik arka plan medyanı ve mutlak grafit eşiği kalibrasyon planı.",
-  "updatedAt": "2026-10-14T10:15:19.181552116Z",
+  "summary": "OptikAI OMR tarama motorunun kurum içi deneme sınavlarına özel olarak entegrasyonu için detaylı uygulama planı. OptikAI karar kuralı (maxD >= 40 ve diff >= 15), grafit kontrolü, getTrueRowY satır hizalama ve karekod öncelikli öğrenci eşleme adımlarını içerir.",
+  "updatedAt": "2026-10-14T10:39:28.580903336Z",
   "requestFeedback": true,
   "userFacing": true
 }

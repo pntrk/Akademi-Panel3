@@ -1252,6 +1252,196 @@ export function evaluateQuestionAnswer(
 }
 
 /**
+ * Sınavın kurum içi deneme sınavı olup olmadığını belirler.
+ */
+export function isInternalExam(exam?: Exam | null): boolean {
+  if (!exam) return false;
+  if (exam.examType === 'internal') return true;
+  if (!exam.publisher && exam.keys && Object.keys(exam.keys).length > 0) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * OptikAI Satır Hizalama Fonksiyonu (calculateTrueRowY):
+ * Formun sol kenar referansı veya satır başı civarındaki gerçek satır koyuluğunu
+ * dikeyde +-15 piksel tarayarak satırın gerçek Y kaymasını bulur.
+ */
+export function calculateTrueRowY(
+  expectedY_mm: number,
+  H: number[],
+  imgBytes: Uint8ClampedArray,
+  w: number,
+  h: number,
+  refX_mm: number = 5.5
+): { trueY: number; offset: number } {
+  const mapped = applyHomography(refX_mm, expectedY_mm, H);
+  let bestY = mapped.y;
+  let maxDarkness = -1;
+
+  for (let dy = -15; dy <= 15; dy++) {
+    const py = Math.floor(mapped.y + dy);
+    const px = Math.floor(mapped.x);
+    if (px >= 0 && px < w && py >= 0 && py < h) {
+      let dSum = 0;
+      let dCnt = 0;
+      for (let sy = -2; sy <= 2; sy++) {
+        for (let sx = -2; sx <= 2; sx++) {
+          const cy = py + sy;
+          const cx = px + sx;
+          if (cx >= 0 && cx < w && cy >= 0 && cy < h) {
+            const idx = (cy * w + cx) * 4;
+            const whiteness = Math.max(imgBytes[idx], imgBytes[idx + 1], imgBytes[idx + 2]);
+            dSum += (255 - whiteness);
+            dCnt++;
+          }
+        }
+      }
+      const avg = dSum / (dCnt || 1);
+      if (avg > maxDarkness) {
+        maxDarkness = avg;
+        bestY = mapped.y + dy;
+      }
+    }
+  }
+
+  if (maxDarkness > 75) {
+    return { trueY: bestY, offset: bestY - mapped.y };
+  }
+  return { trueY: mapped.y, offset: 0 };
+}
+
+/**
+ * Kurum içi deneme sınavları için OptikAI OMR Karar Motoru.
+ * Karar Kuralı:
+ * - Her baloncuk için en koyu çekirdek değeri (maxD) hesaplanır (whiteness tersi: 255 - max(R,G,B)).
+ * - En yüksek şıkkın maxD >= 40.0 olması zorunludur (Grafit eşiği).
+ * - İkinci en koyu şıkla fark (diff) >= 15.0 ise bu şık KESİN işaretli kabul edilir.
+ * - İkinci şık da >= 40.0 ve diff < 15.0 ise ÇİFT İŞARETLEME (geçersiz) olarak işaretlenir.
+ * - maxD < 40.0 ise soru KESİNLİKLE BOŞTUR ("").
+ */
+export function evaluateQuestionAnswerOptikAI(
+  bubbles: { option: string; x: number; y: number }[],
+  H: number[],
+  imgBytes: Uint8ClampedArray,
+  w: number,
+  h: number,
+  bubbleRadiusPx: number = 13.0,
+  rowYOffset: number = 0
+): {
+  answer: string;
+  markedPoint: { x: number; y: number } | null;
+  scores: { option: string; score: number; ratio: number; mean: number; x: number; y: number }[];
+  isDoubleMarked: boolean;
+  confidence: number;
+} {
+  if (!bubbles || bubbles.length === 0) {
+    return { answer: "", markedPoint: null, scores: [], isDoubleMarked: false, confidence: 0 };
+  }
+
+  const getFastAvg = (cx: number, cy: number, radius: number): number => {
+    let dSum = 0;
+    let dCnt = 0;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const px = Math.floor(cx + dx);
+        const py = Math.floor(cy + dy);
+        if (px >= 0 && px < w && py >= 0 && py < h) {
+          const i = (py * w + px) * 4;
+          const whiteness = Math.max(imgBytes[i], imgBytes[i + 1], imgBytes[i + 2]);
+          dSum += (255 - whiteness);
+          dCnt++;
+        }
+      }
+    }
+    return dSum / (dCnt || 1);
+  };
+
+  const coreRadius = Math.max(2, Math.round(bubbleRadiusPx * 0.42));
+  const searchLimit = 2; // +-2 px mikro arama
+
+  const bubbleMetrics = bubbles.map(b => {
+    const mapped = applyHomography(b.x, b.y, H);
+    const baseX = mapped.x;
+    const baseY = mapped.y + rowYOffset;
+
+    let bestDark = 0;
+    let bestX = baseX;
+    let bestY = baseY;
+
+    for (let sy = -searchLimit; sy <= searchLimit; sy++) {
+      for (let sx = -searchLimit; sx <= searchLimit; sx++) {
+        const dark = getFastAvg(baseX + sx, baseY + sy, coreRadius);
+        if (dark > bestDark) {
+          bestDark = dark;
+          bestX = baseX + sx;
+          bestY = baseY + sy;
+        }
+      }
+    }
+
+    return {
+      option: b.option,
+      score: bestDark,
+      ratio: Math.min(1, bestDark / 100),
+      mean: bestDark,
+      x: bestX,
+      y: bestY
+    };
+  });
+
+  const sorted = [...bubbleMetrics].sort((a, b) => b.score - a.score);
+  const best = sorted[0];
+  const second = sorted.length > 1 ? sorted[1] : null;
+  const diff = second ? (best.score - second.score) : best.score;
+
+  // 1. MUTLAK GRAFİT EŞİĞİ: maxD >= 40.0
+  if (!best || best.score < 40.0) {
+    return {
+      answer: "",
+      markedPoint: null,
+      scores: bubbleMetrics,
+      isDoubleMarked: false,
+      confidence: 0
+    };
+  }
+
+  // 2. ÇİFT İŞARETLEME KONTROLÜ:
+  // Eğer ikinci şık da 40.0 üzerinde ve fark 15.0'dan küçükse -> Çift işaretleme (geçersiz)
+  if (second && second.score >= 40.0 && diff < 15.0) {
+    return {
+      answer: "",
+      markedPoint: { x: best.x, y: best.y },
+      scores: bubbleMetrics,
+      isDoubleMarked: true,
+      confidence: 0
+    };
+  }
+
+  // 3. FARK ŞARTI: diff >= 15.0 VEYA belirgin tek şık (best >= 50.0 ve second < 28.0)
+  if (diff >= 15.0 || (best.score >= 50.0 && (!second || second.score < 28.0))) {
+    const confidence = Math.min(100, Math.round(50 + diff * 1.5 + (best.score - 40)));
+    return {
+      answer: best.option,
+      markedPoint: { x: best.x, y: best.y },
+      scores: bubbleMetrics,
+      isDoubleMarked: false,
+      confidence
+    };
+  }
+
+  // Eşik farkını karşılayamayan belirsiz durum
+  return {
+    answer: "",
+    markedPoint: null,
+    scores: bubbleMetrics,
+    isDoubleMarked: false,
+    confidence: 0
+  };
+}
+
+/**
  * Optik form görüntüsünü 4 köşe çapa noktasına göre standart A4 boyutuna normalize eden
  * perspektif düzeltme (Warp Perspective) fonksiyonu.
  */

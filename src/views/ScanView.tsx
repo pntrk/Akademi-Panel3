@@ -2,7 +2,31 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import jsQR from 'jsqr';
 import QRCode from 'qrcode';
 import { Exam, Anchors, Point, LaserMark, Student, ExamResult, OmrStudent } from '../types';
-import { DEFAULT_OMR, OMR_SPECS, OPTS_4, OPTS_5, getHomography, applyHomography, getQuestionsLayout, calculateScore, formatClassSec, createUnifiedExamResult, getBookletBubblePositions, getQrCodeBox, warpPerspectiveToCanvas, evaluateQuestionAnswer, evaluateBubbleFill, sampleLocalBackground, detectOmrAnchors, HAZIRBULUNUSLUK_STUDENTS, HAZIRBULUNUSLUK_ANSWER_KEYS_A, normalizeTurkish } from '../lib/omrEngine';
+import { 
+  DEFAULT_OMR, 
+  OMR_SPECS, 
+  OPTS_4, 
+  OPTS_5, 
+  getHomography, 
+  applyHomography, 
+  getQuestionsLayout, 
+  calculateScore, 
+  formatClassSec, 
+  createUnifiedExamResult, 
+  getBookletBubblePositions, 
+  getQrCodeBox, 
+  warpPerspectiveToCanvas, 
+  evaluateQuestionAnswer, 
+  evaluateBubbleFill, 
+  sampleLocalBackground, 
+  detectOmrAnchors, 
+  HAZIRBULUNUSLUK_STUDENTS, 
+  HAZIRBULUNUSLUK_ANSWER_KEYS_A, 
+  normalizeTurkish,
+  isInternalExam,
+  evaluateQuestionAnswerOptikAI,
+  calculateTrueRowY
+} from '../lib/omrEngine';
 import { useAppContext } from '../context/AppContext';
 import { generateId } from '../lib/utils';
 import {
@@ -631,7 +655,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
   };
 
   // Optik Formdaki Kodlanmış Öğrenci No, Adı Soyadı ve Kitapçık Baloncuklarını Okuma
-  const scanInfoFields = (ctx: CanvasRenderingContext2D, H: number[], omrToUse = OMR_SPECS, isPreprinted = false) => {
+  const scanInfoFields = (ctx: CanvasRenderingContext2D, H: number[], omrToUse = OMR_SPECS, isPreprinted = false, isInternal = false) => {
     try {
       const imgBytes = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height).data;
       const w = ctx.canvas.width;
@@ -669,10 +693,12 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             const others = colScores.slice(1);
             const avgOthers = others.length > 0 ? others.reduce((s, x) => s + x.score, 0) / others.length : 0;
 
-            const isMarkedCol = best && (
-              (best.score >= 22.0 && best.mean >= 40.0 && best.ratio >= 0.40 && (best.score - avgOthers >= 12.0)) ||
-              (best.score >= 35.0)
-            );
+            const isMarkedCol = isInternal
+              ? (best && best.mean >= 40.0 && ((best.mean - (others[0]?.mean || 0) >= 15.0) || (best.mean >= 50.0 && (!others[0] || others[0].mean < 28.0))))
+              : (best && (
+                  (best.score >= 22.0 && best.mean >= 40.0 && best.ratio >= 0.40 && (best.score - avgOthers >= 12.0)) ||
+                  (best.score >= 35.0)
+                ));
 
             if (isMarkedCol) {
               bubbledNo += best.item;
@@ -742,10 +768,12 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         const others = colScores.slice(1);
         const avgOthers = others.length > 0 ? others.reduce((s, x) => s + x.score, 0) / others.length : 0;
 
-        const isMarkedCol = best && (
-          (best.score >= 12.0 && best.mean >= 15.0 && best.ratio >= 0.28 && (best.score - avgOthers >= 5.0)) ||
-          (best.score >= 22.0)
-        );
+        const isMarkedCol = isInternal
+          ? (best && best.mean >= 40.0 && ((best.mean - (others[0]?.mean || 0) >= 15.0) || (best.mean >= 50.0 && (!others[0] || others[0].mean < 28.0))))
+          : (best && (
+              (best.score >= 12.0 && best.mean >= 15.0 && best.ratio >= 0.28 && (best.score - avgOthers >= 5.0)) ||
+              (best.score >= 22.0)
+            ));
 
         if (isMarkedCol) {
           bubbledBk = best.item;
@@ -1297,6 +1325,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
     // Milimetrik ve Hafızadaki OMR_MAP kullanımı
     const omrToUse = (targetExam?.omrMap?.specs) ? { ...OMR_SPECS, ...targetExam.omrMap.specs } : OMR_SPECS;
+    const isInternal = isInternalExam(targetExam);
     let mebiCodedBk: string | null = null;
     const scalePxPerMm = finalRotW / (omrToUse.paperW || 210);
     const bubbleRadiusPx = (omrToUse.questions?.bubbleRadius || 1.6) * scalePxPerMm;
@@ -1304,14 +1333,23 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
     // 1. Kitapçık Türü Tespiti (A - B - C - D) - Sınavın omr_map haritasından veya standart şablondan
     const bookletPositions = targetExam?.omrMap?.bookletPositions || getBookletBubblePositions(omrToUse);
-    const bkEval = evaluateQuestionAnswer(
-      bookletPositions.map((bp: any) => ({ option: bp.booklet || bp.option, x: bp.x, y: bp.y })),
-      H,
-      imgBytes,
-      finalRotW,
-      finalRotH,
-      bookletRadiusPx
-    );
+    const bkEval = isInternal
+      ? evaluateQuestionAnswerOptikAI(
+          bookletPositions.map((bp: any) => ({ option: bp.booklet || bp.option, x: bp.x, y: bp.y })),
+          H,
+          imgBytes,
+          finalRotW,
+          finalRotH,
+          bookletRadiusPx
+        )
+      : evaluateQuestionAnswer(
+          bookletPositions.map((bp: any) => ({ option: bp.booklet || bp.option, x: bp.x, y: bp.y })),
+          H,
+          imgBytes,
+          finalRotW,
+          finalRotH,
+          bookletRadiusPx
+        );
     if (bkEval.answer) {
       mebiCodedBk = bkEval.answer;
     }
@@ -1329,14 +1367,30 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           y: bc.y
         }));
 
-        const evalRes = evaluateQuestionAnswer(
-          bubbles,
-          H,
-          imgBytes,
-          finalRotW,
-          finalRotH,
-          bubbleRadiusPx
-        );
+        let rowOffset = 0;
+        if (isInternal && bubbles.length > 0) {
+          const rowAlign = calculateTrueRowY(bubbles[0].y, H, imgBytes, finalRotW, finalRotH, 5.5);
+          rowOffset = rowAlign.offset;
+        }
+
+        const evalRes = isInternal
+          ? evaluateQuestionAnswerOptikAI(
+              bubbles,
+              H,
+              imgBytes,
+              finalRotW,
+              finalRotH,
+              bubbleRadiusPx,
+              rowOffset
+            )
+          : evaluateQuestionAnswer(
+              bubbles,
+              H,
+              imgBytes,
+              finalRotW,
+              finalRotH,
+              bubbleRadiusPx
+            );
 
         if (evalRes.answer) {
           readAns[item.qIdx] = evalRes.answer;
@@ -1383,7 +1437,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
     // QR okunamadıysa veya öğrenci bulunamadıysa kodlanmış baloncukları tara
     if (!matchedStudent || !finalNo) {
-      const bubbled = scanInfoFields(finalCtx, H, omrToUse, isPreprinted);
+      const bubbled = scanInfoFields(finalCtx, H, omrToUse, isPreprinted, isInternal);
       if (!isPreprinted) {
         if (bubbled.bubbledNo && !finalNo) {
           finalNo = bubbled.bubbledNo;
@@ -2192,6 +2246,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           return dSum / (dCnt || 1);
         };
 
+        const isInternal = isInternalExam(targetExam);
         const scalePxPerMm = cvs.width / (targetOmrToUse.paperW || 210);
         const bubbleRadiusPx = (targetOmrToUse.questions?.bubbleRadius || 1.6) * scalePxPerMm;
         const bookletRadiusPx = 2.4 * scalePxPerMm;
@@ -2199,14 +2254,23 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         // 2. Kitapçık Türü Tespiti (A - B - C - D)
         let mebiCodedBk: string | null = null;
         const bookletPositions = targetExam?.omrMap?.bookletPositions || getBookletBubblePositions(targetOmrToUse);
-        const bkEval = evaluateQuestionAnswer(
-          bookletPositions.map((bp: any) => ({ option: bp.booklet || bp.option, x: bp.x, y: bp.y })),
-          currentH,
-          imgBytes,
-          cvs.width,
-          cvs.height,
-          bookletRadiusPx
-        );
+        const bkEval = isInternal
+          ? evaluateQuestionAnswerOptikAI(
+              bookletPositions.map((bp: any) => ({ option: bp.booklet || bp.option, x: bp.x, y: bp.y })),
+              currentH,
+              imgBytes,
+              cvs.width,
+              cvs.height,
+              bookletRadiusPx
+            )
+          : evaluateQuestionAnswer(
+              bookletPositions.map((bp: any) => ({ option: bp.booklet || bp.option, x: bp.x, y: bp.y })),
+              currentH,
+              imgBytes,
+              cvs.width,
+              cvs.height,
+              bookletRadiusPx
+            );
         if (bkEval.answer) {
           mebiCodedBk = bkEval.answer;
           if (bkEval.markedPoint) {
@@ -2227,14 +2291,30 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
               y: bc.y
             }));
 
-            const evalRes = evaluateQuestionAnswer(
-              bubbles,
-              currentH,
-              imgBytes,
-              cvs.width,
-              cvs.height,
-              bubbleRadiusPx
-            );
+            let rowOffset = 0;
+            if (isInternal && bubbles.length > 0) {
+              const rowAlign = calculateTrueRowY(bubbles[0].y, currentH, imgBytes, cvs.width, cvs.height, 5.5);
+              rowOffset = rowAlign.offset;
+            }
+
+            const evalRes = isInternal
+              ? evaluateQuestionAnswerOptikAI(
+                  bubbles,
+                  currentH,
+                  imgBytes,
+                  cvs.width,
+                  cvs.height,
+                  bubbleRadiusPx,
+                  rowOffset
+                )
+              : evaluateQuestionAnswer(
+                  bubbles,
+                  currentH,
+                  imgBytes,
+                  cvs.width,
+                  cvs.height,
+                  bubbleRadiusPx
+                );
 
             if (evalRes.answer) {
               readAns[item.qIdx] = evalRes.answer;
@@ -2287,7 +2367,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
         // QR kod yoksa veya eşleşmediyse form üzerindeki kodlanmış baloncukları oku
         if (!matchedStudent || !finalNo) {
-          const bubbled = scanInfoFields(ctx, currentH, targetOmrToUse, isPreprinted);
+          const bubbled = scanInfoFields(ctx, currentH, targetOmrToUse, isPreprinted, isInternal);
           if (!isPreprinted) {
             if (bubbled.bubbledNo && !finalNo) {
               finalNo = bubbled.bubbledNo;
@@ -2583,6 +2663,11 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
               {!lockToSelectedExam && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 rounded font-semibold">
                   <Sparkles className="w-2.5 h-2.5" /> Dinamik QR Tespiti
+                </span>
+              )}
+              {isInternalExam(exam) && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] bg-indigo-950/80 text-indigo-300 border border-indigo-500/40 rounded font-semibold" title="OptikAI Kurum İçi OMR Motoru (maxD >= 40, diff >= 15, Satır Kilitleme)">
+                  <Zap className="w-2.5 h-2.5 text-indigo-400" /> OptikAI Motoru
                 </span>
               )}
             </p>
