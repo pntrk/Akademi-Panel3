@@ -1368,9 +1368,10 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         }));
 
         let rowOffset = 0;
+        const isFirstQ = item.localIdx === 0 || item.qIdx === 0;
         if (isInternal && bubbles.length > 0) {
           const refX = Math.max(2.0, bubbles[0].x - 3.0);
-          const rowAlign = calculateTrueRowY(bubbles[0].y, H, imgBytes, finalRotW, finalRotH, refX);
+          const rowAlign = calculateTrueRowY(bubbles[0].y, H, imgBytes, finalRotW, finalRotH, refX, 12, isFirstQ);
           rowOffset = rowAlign.offset;
         }
 
@@ -1382,7 +1383,8 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
               finalRotW,
               finalRotH,
               bubbleRadiusPx,
-              rowOffset
+              rowOffset,
+              isFirstQ
             )
           : evaluateQuestionAnswer(
               bubbles,
@@ -2293,9 +2295,10 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             }));
 
             let rowOffset = 0;
+            const isFirstQ = item.localIdx === 0 || item.qIdx === 0;
             if (isInternal && bubbles.length > 0) {
               const refX = Math.max(2.0, bubbles[0].x - 3.0);
-              const rowAlign = calculateTrueRowY(bubbles[0].y, currentH, imgBytes, cvs.width, cvs.height, refX);
+              const rowAlign = calculateTrueRowY(bubbles[0].y, currentH, imgBytes, cvs.width, cvs.height, refX, 12, isFirstQ);
               rowOffset = rowAlign.offset;
             }
 
@@ -2307,7 +2310,8 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                   cvs.width,
                   cvs.height,
                   bubbleRadiusPx,
-                  rowOffset
+                  rowOffset,
+                  isFirstQ
                 )
               : evaluateQuestionAnswer(
                   bubbles,

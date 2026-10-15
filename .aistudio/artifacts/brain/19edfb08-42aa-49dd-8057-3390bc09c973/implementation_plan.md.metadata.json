@@ -1,6 +1,6 @@
 {
-  "summary": "OptikAI OMR tarama motorundaki katı eşik sınırından kaynaklanan boş soru algılama hatalarını düzeltmek için dinamik bağıl kontrast, esnek taban eşiği (26.0) ve genişletilmiş mikro arama kapsayan detaylı uygulama planı.",
-  "updatedAt": "2026-10-14T12:13:31.860026359Z",
+  "summary": "Implementation plan for fixing false-positive D options in black-and-white optical scans by enforcing core bubble fill ratio, center darkness checks, and dynamic line/glyph filtering.",
+  "updatedAt": "2026-10-14T13:29:49.936212161Z",
   "requestFeedback": true,
   "userFacing": true
 }

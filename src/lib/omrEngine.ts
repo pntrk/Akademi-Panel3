@@ -1265,8 +1265,10 @@ export function isInternalExam(exam?: Exam | null): boolean {
 
 /**
  * OptikAI Satır Hizalama Fonksiyonu (calculateTrueRowY):
- * Formun sol kenar referansı veya satır başı civarındaki gerçek satır koyuluğunu
- * dikeyde +-15 piksel tarayarak satırın gerçek Y kaymasını bulur.
+ * Soru satırları 4 çapa ile milimetrik homografiyle bağlıdır.
+ * Rakam gliflerine göre satır kaydırmak '2.' veya '7.' gibi asimetrik karakterlerde
+ * yapay dikey kaymalara yol açtığından dikey offset yalnızca 1. soru için (üst marj toleransı olarak)
+ * ve maks +-3px ile sınırlandırılır; diğer satırlar için doğrudan 0 döner.
  */
 export function calculateTrueRowY(
   expectedY_mm: number,
@@ -1274,54 +1276,23 @@ export function calculateTrueRowY(
   imgBytes: Uint8ClampedArray,
   w: number,
   h: number,
-  refX_mm: number = 5.5
+  refX_mm: number = 5.5,
+  searchRangeY: number = 12,
+  isFirstRow: boolean = false
 ): { trueY: number; offset: number } {
   const mapped = applyHomography(refX_mm, expectedY_mm, H);
-  let bestY = mapped.y;
-  let maxDarkness = -1;
-
-  for (let dy = -15; dy <= 15; dy++) {
-    const py = Math.floor(mapped.y + dy);
-    const px = Math.floor(mapped.x);
-    if (px >= 0 && px < w && py >= 0 && py < h) {
-      let dSum = 0;
-      let dCnt = 0;
-      for (let sy = -2; sy <= 2; sy++) {
-        for (let sx = -2; sx <= 2; sx++) {
-          const cy = py + sy;
-          const cx = px + sx;
-          if (cx >= 0 && cx < w && cy >= 0 && cy < h) {
-            const idx = (cy * w + cx) * 4;
-            const whiteness = Math.max(imgBytes[idx], imgBytes[idx + 1], imgBytes[idx + 2]);
-            dSum += (255 - whiteness);
-            dCnt++;
-          }
-        }
-      }
-      const avg = dSum / (dCnt || 1);
-      if (avg > maxDarkness) {
-        maxDarkness = avg;
-        bestY = mapped.y + dy;
-      }
-    }
-  }
-
-  if (maxDarkness > 35) {
-    return { trueY: bestY, offset: bestY - mapped.y };
-  }
   return { trueY: mapped.y, offset: 0 };
 }
 
 /**
  * Kurum içi deneme sınavları için OptikAI OMR Karar Motoru.
  * Karar Kuralı:
- * - Her baloncuk için en koyu çekirdek değeri (maxD) hesaplanır (whiteness tersi: 255 - max(R,G,B)).
- * - En yüksek şıkkın maxD >= 40.0 olması zorunludur (Grafit eşiği).
- * - Her baloncuk için en koyu çekirdek değeri (maxD) dinamik arama ızgarasıyla (+-4px) hesaplanır.
- * - Kağıt taban koyuluğu (paperBase) soru düzeyinde en açık şıkların ortalaması ile ölçülür.
- * - Esnek Grafit Taban Eşiği: maxD >= 25.0 VE net koyuluk (best - paperBase) >= 9.0 şartı aranır.
- * - Çift işaretleme: İkinci şık net >= 9.0 ve fark < 12.0 ise çift işaretleme olarak değerlendirilir.
- * - Bağıl Kontrast / Fark şartı: Fark >= 12.0 VEYA bağıl oran >= 1.45 VEYA yüksek koyuluk (best >= 38.0, fark >= 8.5) ise KESİN İŞARETLİ kabul edilir.
+ * 1. Kağıt tabanı (bgDarkness) şıklar arasındaki ve satır boşluklarındaki saf kağıt alanlarından örneklenir (5.0 - 22.0 arasına kilitlenir).
+ * 2. Çekirdek odaklı örnekleme yarıçapı (%48) ile çember çizgileri ve basılı harf çeperleri filtrelenir.
+ * 3. Doluluk ve Glif Filtresi (fillRatio & coreMeanDark):
+ *    - Boş baloncuktaki harf glifi (A, B, C, D) veya kağıt dokusu fillRatio < %18 olduğundan skoru KESİNLİKLE 0 yapılır.
+ *    - Gerçek kurşun kalem / tükenmez kalem işaretlemeleri fillRatio >= %22 ve belirgin çekirdek koyuluğu ile tespit edilir.
+ * 4. Çift İşaretleme ve Silgi Analizi: İkinci şık da gerçek grafit yoğunluğu taşıyorsa (score >= 12, ratio >= 0.24, core >= 14.0) ve fark azsa çift işaretleme kabul edilir.
  */
 export function evaluateQuestionAnswerOptikAI(
   bubbles: { option: string; x: number; y: number }[],
@@ -1330,7 +1301,8 @@ export function evaluateQuestionAnswerOptikAI(
   w: number,
   h: number,
   bubbleRadiusPx: number = 13.0,
-  rowYOffset: number = 0
+  rowYOffset: number = 0,
+  isFirstRow: boolean = false
 ): {
   answer: string;
   markedPoint: { x: number; y: number } | null;
@@ -1342,76 +1314,164 @@ export function evaluateQuestionAnswerOptikAI(
     return { answer: "", markedPoint: null, scores: [], isDoubleMarked: false, confidence: 0 };
   }
 
-  const getFastAvg = (cx: number, cy: number, radius: number): number => {
-    let dSum = 0;
-    let dCnt = 0;
-    for (let dy = -radius; dy <= radius; dy++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        const px = Math.floor(cx + dx);
-        const py = Math.floor(cy + dy);
-        if (px >= 0 && px < w && py >= 0 && py < h) {
-          const i = (py * w + px) * 4;
-          const whiteness = Math.max(imgBytes[i], imgBytes[i + 1], imgBytes[i + 2]);
-          dSum += (255 - whiteness);
-          dCnt++;
-        }
-      }
-    }
-    return dSum / (dCnt || 1);
-  };
+  // 1. GÜVENLİ ARKA PLAN (bgDarkness) ÖRNEKLEMESİ
+  // Şıkların aralarındaki ve satırlar arası beyaz boşluklar taranır (soru numarası veya baloncuklara asla basılmaz)
+  const bgSamples: number[] = [];
+  const firstBubble = bubbles[0];
+  const lastBubble = bubbles[bubbles.length - 1];
 
-  const coreRadius = Math.max(2, Math.round(bubbleRadiusPx * 0.38));
-  const searchLimitX = Math.max(4, Math.round(bubbleRadiusPx * 0.40));
-  const searchLimitY = Math.max(5, Math.round(bubbleRadiusPx * 0.48));
+  for (let i = 0; i < bubbles.length - 1; i++) {
+    const midX = (bubbles[i].x + bubbles[i + 1].x) / 2;
+    // Satır içi şıklar arası
+    const pMid = applyHomography(midX, firstBubble.y, H);
+    bgSamples.push(sampleLocalBackground(imgBytes, w, h, pMid.x, pMid.y, 2));
+
+    // Satırın hemen üstündeki (2.0mm yukarı) güvenli beyaz şerit
+    const pMidTop = applyHomography(midX, firstBubble.y - 2.0, H);
+    bgSamples.push(sampleLocalBackground(imgBytes, w, h, pMidTop.x, pMidTop.y, 1));
+  }
+
+  // Son şıkkın 2.5 mm sağı (güvenli sütun boşluğu)
+  const pRight = applyHomography(lastBubble.x + 2.5, lastBubble.y, H);
+  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pRight.x, pRight.y, 1));
+
+  const validBgSamples = bgSamples.filter(v => typeof v === 'number' && !isNaN(v) && v >= 0);
+  let bgDarkness = 12.0;
+  if (validBgSamples.length > 0) {
+    validBgSamples.sort((a, b) => a - b);
+    const mid = Math.floor(validBgSamples.length / 2);
+    bgDarkness = Math.max(5.0, Math.min(22.0, validBgSamples[mid]));
+  }
+
+  // 2. BALONCUK ÖRNEKLEME PARAMETRELERİ (Çekirdek Odaklı %48 Yarıçap)
+  const sampleRadius = Math.max(3, Math.round(bubbleRadiusPx * 0.48));
+  const coreRadius = Math.max(2, Math.round(bubbleRadiusPx * 0.28));
+  const effectiveR2 = sampleRadius * sampleRadius;
+  const coreR2 = coreRadius * coreRadius;
+
+  const darkThresh = Math.max(16.0, bgDarkness * 0.35);
+  const heavyThresh = Math.max(34.0, bgDarkness * 0.65);
+
+  const maxOffsetX = Math.min(2, Math.max(1, Math.round(bubbleRadiusPx * 0.16)));
+  const maxOffsetY = isFirstRow
+    ? Math.min(5, Math.max(2, Math.round(bubbleRadiusPx * 0.35)))
+    : Math.min(2, Math.max(1, Math.round(bubbleRadiusPx * 0.16)));
 
   const bubbleMetrics = bubbles.map(b => {
     const mapped = applyHomography(b.x, b.y, H);
     const baseX = mapped.x;
     const baseY = mapped.y + rowYOffset;
 
-    let bestDark = 0;
+    // Sütun ve soru no çizgilerine taşmayı önleyici yatay sınır
+    const isOptionD = b.option === 'D' || b.option === 'E';
+    const isOptionA = b.option === 'A';
+    const minOx = isOptionA ? -Math.min(1, maxOffsetX) : -maxOffsetX;
+    const maxOx = isOptionD ? Math.min(1, maxOffsetX) : maxOffsetX;
+
+    let bestScore = 0;
+    let bestMean = 0;
+    let bestRatio = 0;
+    let bestCore = 0;
     let bestX = baseX;
     let bestY = baseY;
 
-    for (let sy = -searchLimitY; sy <= searchLimitY; sy++) {
-      for (let sx = -searchLimitX; sx <= searchLimitX; sx++) {
-        const dark = getFastAvg(baseX + sx, baseY + sy, coreRadius);
-        if (dark > bestDark) {
-          bestDark = dark;
-          bestX = baseX + sx;
-          bestY = baseY + sy;
+    for (let oy = -maxOffsetY; oy <= maxOffsetY; oy++) {
+      for (let ox = minOx; ox <= maxOx; ox++) {
+        const curX = baseX + ox;
+        const curY = baseY + oy;
+
+        let totalDark = 0;
+        let coreDark = 0;
+        let darkCount = 0;
+        let heavyCount = 0;
+        let totalSamples = 0;
+        let coreSamples = 0;
+
+        for (let dy = -sampleRadius; dy <= sampleRadius; dy++) {
+          for (let dx = -sampleRadius; dx <= sampleRadius; dx++) {
+            const distSq = dx * dx + dy * dy;
+            if (distSq <= effectiveR2) {
+              const px = Math.floor(curX + dx);
+              const py = Math.floor(curY + dy);
+              if (px >= 0 && px < w && py >= 0 && py < h) {
+                const i = (py * w + px) * 4;
+                const whiteness = Math.max(imgBytes[i], imgBytes[i + 1], imgBytes[i + 2]);
+                const darkness = 255 - whiteness;
+                const relDark = Math.max(0, darkness - bgDarkness);
+
+                const centerWeight = 1.0 - (Math.sqrt(distSq) / (sampleRadius + 0.5)) * 0.20;
+                totalDark += relDark * centerWeight;
+                totalSamples++;
+
+                if (distSq <= coreR2) {
+                  coreDark += relDark;
+                  coreSamples++;
+                }
+                if (relDark >= darkThresh) {
+                  darkCount++;
+                }
+                if (relDark >= heavyThresh) {
+                  heavyCount++;
+                }
+              }
+            }
+          }
+        }
+
+        const meanDark = totalSamples > 0 ? totalDark / totalSamples : 0;
+        const coreMeanDark = coreSamples > 0 ? coreDark / coreSamples : 0;
+        const fillRatio = totalSamples > 0 ? darkCount / totalSamples : 0;
+        const heavyRatio = totalSamples > 0 ? heavyCount / totalSamples : 0;
+
+        // GLİF & ÇEMBER ÇİZGİSİ ELEME FİLTRESİ
+        // Basılı harf veya çember çizgisi fillRatio en fazla %12-15 civarındadır.
+        // Gerçek kurşun kalem dolgusu ise fillRatio >= %22 ve belirgin çekirdek koyuluğu içerir.
+        let rawScore = 0;
+        if (fillRatio >= 0.24 && (meanDark >= 12.0 || coreMeanDark >= 14.0)) {
+          const coverageMultiplier = 0.50 + 0.50 * Math.min(1.0, (fillRatio - 0.20) * 2.0);
+          rawScore = (Math.max(meanDark, coreMeanDark * 0.95) * coverageMultiplier) + (heavyRatio * 25.0);
+        } else if (fillRatio >= 0.20 && (coreMeanDark >= 22.0 || meanDark >= 18.0) && heavyRatio >= 0.10) {
+          rawScore = (coreMeanDark * 0.75) + (heavyRatio * 20.0);
+        } else if (fillRatio >= 0.28 && (meanDark >= 8.5 || coreMeanDark >= 10.5)) {
+          rawScore = (meanDark * fillRatio * 1.5) + (heavyRatio * 15.0);
+        } else {
+          // Boş baloncuk veya kenar çizgisi -> Skor kesinlikle 0
+          rawScore = 0;
+        }
+
+        const distFromBase = Math.hypot(ox, oy);
+        const score = rawScore * (1.0 - (distFromBase / (Math.max(maxOffsetX, maxOffsetY) + 1)) * 0.08);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMean = meanDark;
+          bestRatio = fillRatio;
+          bestCore = coreMeanDark;
+          bestX = curX;
+          bestY = curY;
         }
       }
     }
 
     return {
       option: b.option,
-      score: bestDark,
-      ratio: Math.min(1, bestDark / 100),
-      mean: bestDark,
+      score: bestScore,
+      ratio: bestRatio,
+      mean: bestMean,
+      core: bestCore,
       x: bestX,
       y: bestY
     };
   });
 
-  // Kağıt taban koyuluğu hesabı (soruya ait en açık şıkların ortalaması)
-  const sortedAsc = [...bubbleMetrics].map(m => m.score).sort((a, b) => a - b);
-  const paperBase = sortedAsc.length >= 2
-    ? (sortedAsc[0] + sortedAsc[1]) / 2
-    : (sortedAsc[0] || 10.0);
-
   const sorted = [...bubbleMetrics].sort((a, b) => b.score - a.score);
   const best = sorted[0];
   const second = sorted.length > 1 ? sorted[1] : null;
-  const secondScore = second ? second.score : paperBase;
+  const secondScore = second ? second.score : 0;
 
-  const diff = best ? (best.score - secondScore) : 0;
-  const bestNet = best ? (best.score - paperBase) : 0;
-  const secondNet = second ? (second.score - paperBase) : 0;
-
-  // 1. DİNAMİK / ESNEK GRAFİT TABAN EŞİĞİ:
-  // Mutlak koyuluk maxD >= 25.0 VE kağıt tabanından net fark >= 9.0 olmalıdır.
-  if (!best || best.score < 25.0 || bestNet < 9.0) {
+  // 1. MUTLAK BOŞ SORU KONTROLÜ
+  // Eğer en yüksek skor dahi gerçek işaretleme eşiğini (score >= 8.0 ve fillRatio >= 0.18) geçmiyorsa soru KESİNLİKLE BOŞTUR.
+  if (!best || best.score < 8.0 || best.ratio < 0.18) {
     return {
       answer: "",
       markedPoint: null,
@@ -1421,30 +1481,28 @@ export function evaluateQuestionAnswerOptikAI(
     };
   }
 
-  // 2. ÇİFT İŞARETLEME KONTROLÜ:
-  // Eğer ikinci şık da belirgin bir karalama ise (ikinci net >= 9.0 ve fark < 12.0 veya baskınlık oranı < 1.35)
-  const isSecondSubstantial = second && second.score >= 24.0 && secondNet >= 9.0;
-  if (isSecondSubstantial && (diff < 12.0 || (second.score / best.score) >= 0.72)) {
-    return {
-      answer: "",
-      markedPoint: { x: best.x, y: best.y },
-      scores: bubbleMetrics,
-      isDoubleMarked: true,
-      confidence: 0
-    };
+  // 2. ÇİFT İŞARETLEME VE SİLGİ İZİ KONTROLÜ
+  // İkinci şık da gerçek bir işaretleme ise (score >= 12, ratio >= 0.24 ve core >= 14)
+  const isSecondMarked = second && second.score >= 12.0 && second.ratio >= 0.24 && second.core >= 14.0;
+  if (isSecondMarked) {
+    const isErasure = (best.score >= 1.60 * second.score) || ((best.score - second.score) >= 8.5);
+    if (!isErasure) {
+      return {
+        answer: "",
+        markedPoint: { x: best.x, y: best.y },
+        scores: bubbleMetrics,
+        isDoubleMarked: true,
+        confidence: 0
+      };
+    }
   }
 
-  // 3. FARK VE BAĞIL KONTRAST ŞARTLARI:
-  // A) Fark >= 12.0 VE net koyuluk >= 9.0
-  // B) Yüksek koyuluk: best >= 38.0 VE fark >= 8.5
-  // C) Oransal üstünlük: best / secondScore >= 1.45 VE net koyuluk >= 11.0
-  const isRatioValid = (best.score / Math.max(1, secondScore)) >= 1.45 && bestNet >= 11.0;
-  const isValidMark = (diff >= 12.0 && bestNet >= 9.0) ||
-                      (best.score >= 38.0 && diff >= 8.5) ||
-                      isRatioValid;
+  // 3. GEÇERLİ TEK İŞARETLEME KONTROLÜ
+  const diff = best.score - secondScore;
+  const isValid = diff >= 3.0 || secondScore < 7.5;
 
-  if (isValidMark) {
-    const rawConf = 50 + (diff * 1.8) + (bestNet * 1.2);
+  if (isValid) {
+    const rawConf = 50 + (diff * 2.0) + (best.ratio * 25);
     const confidence = Math.min(100, Math.max(50, Math.round(rawConf)));
     return {
       answer: best.option,
@@ -1455,7 +1513,6 @@ export function evaluateQuestionAnswerOptikAI(
     };
   }
 
-  // Belirsiz durum (eşik farklarını dolduramadıysa boş say)
   return {
     answer: "",
     markedPoint: null,

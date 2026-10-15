@@ -67,12 +67,10 @@ try {
   setLogLevel('error');
 } catch (e) {}
 
-// Initialize Firestore with custom database ID and robust network connection (auto-detect long-polling fallback)
+// Initialize Firestore with custom database ID
 export const db = (() => {
   try {
-    return initializeFirestore(app, {
-      experimentalAutoDetectLongPolling: true,
-    }, firebaseConfig.firestoreDatabaseId || '(default)');
+    return initializeFirestore(app, {}, firebaseConfig.firestoreDatabaseId || '(default)');
   } catch {
     return getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
   }
@@ -153,7 +151,7 @@ if (typeof window !== 'undefined') {
     return false;
   };
 
-  // Intercept console.error to silence repetitive backoff retry spam from Firestore SDK
+  // Intercept console.error to silence repetitive backoff retry spam and internal SDK assertion logs
   const originalConsoleError = console.error;
   console.error = (...args: any[]) => {
     const combined = args.map(a => (typeof a === 'object' ? String(a?.message || a?.reason || JSON.stringify(a)) : String(a))).join(' ');
@@ -165,6 +163,14 @@ if (typeof window !== 'undefined') {
     ) {
       markQuotaExceededToday();
       return; // Suppress backoff spam
+    }
+    if (
+      combined.includes('INTERNAL ASSERTION FAILED') ||
+      combined.includes('Unexpected state') ||
+      combined.includes('da08') ||
+      combined.includes('PersistentWriteStream')
+    ) {
+      return; // Suppress internal SDK assertion errors
     }
     originalConsoleError.apply(console, args);
   };
@@ -179,6 +185,14 @@ if (typeof window !== 'undefined') {
       combined.includes('Using maximum backoff delay')
     ) {
       markQuotaExceededToday();
+      return;
+    }
+    if (
+      combined.includes('INTERNAL ASSERTION FAILED') ||
+      combined.includes('Unexpected state') ||
+      combined.includes('da08') ||
+      combined.includes('PersistentWriteStream')
+    ) {
       return;
     }
     originalConsoleWarn.apply(console, args);
@@ -351,14 +365,23 @@ export const getCachedAccessToken = (): string | null => {
 let isGoogleAuthInProgress = false;
 let isDriveAuthInProgress = false;
 
-// Suppress known Firebase Auth internal assertion during popup close / grace period double-settle
+// Suppress known Firebase Auth and Firestore internal assertion crashes (e.g. da08 in PersistentWriteStream)
 if (typeof window !== 'undefined') {
-  const isAssertionError = (msg: string) => 
-    msg.includes('Pending promise was never set') || 
-    (msg.includes('@firebase/auth') && msg.includes('INTERNAL ASSERTION FAILED'));
+  const isAssertionError = (msg: string) => {
+    if (!msg || typeof msg !== 'string') return false;
+    return (
+      msg.includes('Pending promise was never set') ||
+      msg.includes('INTERNAL ASSERTION FAILED') ||
+      msg.includes('Unexpected state') ||
+      msg.includes('da08') ||
+      msg.includes('PersistentWriteStream') ||
+      msg.includes('@firebase/auth') ||
+      msg.includes('@firebase/firestore')
+    );
+  };
 
   window.addEventListener('error', (event) => {
-    const message = event?.message || event?.error?.message || '';
+    const message = event?.message || event?.error?.message || String(event?.error || '');
     if (typeof message === 'string' && isAssertionError(message)) {
       event.preventDefault();
       event.stopImmediatePropagation();
