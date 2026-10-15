@@ -5,6 +5,9 @@ import { Exam, Anchors, Point, LaserMark, Student, ExamResult, OmrStudent } from
 import { 
   DEFAULT_OMR, 
   OMR_SPECS, 
+  OMR_SPECS_LEGACY,
+  OMR_SPECS_SPACIOUS,
+  detectTemplateDensityFromImage,
   OPTS_4, 
   OPTS_5, 
   getHomography, 
@@ -1142,7 +1145,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
     let bestRot = 0;
     let bestAnchorData: { pts: Anchors; lockFailed: boolean } | null = null;
     let bestQrRes: string | null = null;
-    let bestFineAngle = 0;
+    let bestTCvs: HTMLCanvasElement | null = null;
 
     for (const rot of rotations) {
       const rotW = Math.abs(rot) % 180 !== 0 ? baseH : baseW;
@@ -1171,50 +1174,44 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         bestRot = rot;
         bestAnchorData = aData;
         bestQrRes = qr;
-
-        const dy = aData.pts.tr.y - aData.pts.tl.y;
-        const dx = aData.pts.tr.x - aData.pts.tl.x;
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-        if (Math.abs(angle) > 0.35 && Math.abs(angle) < 15) {
-          bestFineAngle = -angle;
-        }
+        bestTCvs = tCvs;
         break;
       } else if (!bestAnchorData) {
         bestAnchorData = aData;
         bestQrRes = qr;
+        bestTCvs = tCvs;
       }
     }
 
-    if (!bestAnchorData || bestAnchorData.lockFailed) {
+    if (!bestAnchorData || bestAnchorData.lockFailed || !bestTCvs) {
       return { success: false, error: 'Köşe referans kareleri kilitlenemedi (ışık veya açı yetersiz)' };
     }
 
-    const finalRotW = Math.abs(bestRot) % 180 !== 0 ? baseH : baseW;
-    const finalRotH = Math.abs(bestRot) % 180 !== 0 ? baseW : baseH;
-    const finalCvs = document.createElement('canvas');
-    finalCvs.width = finalRotW;
-    finalCvs.height = finalRotH;
+    // Yüksek Çözünürlüklü Standart Düzleştirme (Warp Perspective):
+    // 4 köşe çapa referans alınarak sayfa doğrudan 1680x2376 (standart A4, 8px/mm) dik düzleme gerilir.
+    // Tüm açısal yamukluk, tarayıcı kayması ve perspektif distorsiyonu tek adımda sıfırlanır.
+    const finalRotW = 1680;
+    const finalRotH = 2376;
+    const finalCvs = warpPerspectiveToCanvas(bestTCvs, bestAnchorData.pts, finalRotW, finalRotH, DEFAULT_OMR);
     const finalCtx = finalCvs.getContext('2d', { willReadFrequently: true });
     if (!finalCtx) return { success: false, error: 'Canvas oluşturulamadı' };
 
-    finalCtx.save();
-    finalCtx.translate(finalRotW / 2, finalRotH / 2);
-    finalCtx.rotate((bestRot + bestFineAngle) * Math.PI / 180);
-    if (Math.abs(bestRot) % 180 !== 0) {
-      finalCtx.drawImage(img, -finalRotH / 2, -finalRotW / 2, finalRotH, finalRotW);
-    } else {
-      finalCtx.drawImage(img, -finalRotW / 2, -finalRotH / 2, finalRotW, finalRotH);
-    }
-    finalCtx.restore();
+    const scaleX = finalRotW / (DEFAULT_OMR.paperW || 210);
+    const scaleY = finalRotH / (DEFAULT_OMR.paperH || 297);
+    const m = DEFAULT_OMR.anchorMargin;
 
-    const finalAnchors = findAnchorsCore(finalCtx, finalRotW, finalRotH);
-    const pts = finalAnchors.lockFailed ? bestAnchorData.pts : finalAnchors.pts;
+    const pts = {
+      tl: { x: m * scaleX, y: m * scaleY },
+      tr: { x: ((DEFAULT_OMR.paperW || 210) - m) * scaleX, y: m * scaleY },
+      bl: { x: m * scaleX, y: ((DEFAULT_OMR.paperH || 297) - m) * scaleY },
+      br: { x: ((DEFAULT_OMR.paperW || 210) - m) * scaleX, y: ((DEFAULT_OMR.paperH || 297) - m) * scaleY }
+    };
 
     const srcPts = [
-      { x: DEFAULT_OMR.anchorMargin, y: DEFAULT_OMR.anchorMargin },
-      { x: DEFAULT_OMR.paperW - DEFAULT_OMR.anchorMargin, y: DEFAULT_OMR.anchorMargin },
-      { x: DEFAULT_OMR.anchorMargin, y: DEFAULT_OMR.paperH - DEFAULT_OMR.anchorMargin },
-      { x: DEFAULT_OMR.paperW - DEFAULT_OMR.anchorMargin, y: DEFAULT_OMR.paperH - DEFAULT_OMR.anchorMargin }
+      { x: m, y: m },
+      { x: (DEFAULT_OMR.paperW || 210) - m, y: m },
+      { x: m, y: (DEFAULT_OMR.paperH || 297) - m },
+      { x: (DEFAULT_OMR.paperW || 210) - m, y: (DEFAULT_OMR.paperH || 297) - m }
     ];
     const dstPts = [pts.tl, pts.tr, pts.bl, pts.br];
     const H = getHomography(srcPts, dstPts);
@@ -1323,8 +1320,9 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
       }
     }
 
-    // Milimetrik ve Hafızadaki OMR_MAP kullanımı
-    const omrToUse = (targetExam?.omrMap?.specs) ? { ...OMR_SPECS, ...targetExam.omrMap.specs } : OMR_SPECS;
+    // Dinamik Şablon Tespiti (Ferah vs. Klasik / Geriye Dönük %100 Uyumluluk):
+    const detectedDensity = detectTemplateDensityFromImage(imgBytes, finalRotW, finalRotH, H, qrDataObj, targetExam);
+    const omrToUse = detectedDensity === 'legacy' ? OMR_SPECS_LEGACY : OMR_SPECS_SPACIOUS;
     const isInternal = isInternalExam(targetExam);
     let mebiCodedBk: string | null = null;
     const scalePxPerMm = finalRotW / (omrToUse.paperW || 210);
@@ -1984,25 +1982,6 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             setAnchors(null);
             return;
           }
-
-          if (!anchorData.lockFailed && !autoAlignTriedRef.current) {
-            const dy = pts.tr.y - pts.tl.y;
-            const dx = pts.tr.x - pts.tl.x;
-            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-
-            if (Math.abs(angle) > 0.4) {
-              autoAlignTriedRef.current = true;
-              setFineAngle(prev => {
-                let newAngle = prev - angle;
-                if (newAngle > 45) newAngle = 45;
-                if (newAngle < -45) newAngle = -45;
-                return parseFloat(newAngle.toFixed(2));
-              });
-              setAnchors(null);
-              setStatus("Açı otomatik ince ayarlanıyor...");
-              return;
-            }
-          }
         }
 
         setAnchors(pts);
@@ -2216,8 +2195,9 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           }
         }
 
-        // Hedef sınavın güncel OMR koordinat haritasını (omrMap) baz al
-        const targetOmrToUse = targetExam?.omrMap?.specs ? { ...OMR_SPECS, ...targetExam.omrMap.specs } : (specificOMR || OMR_SPECS);
+        // Dinamik Şablon Tespiti (Ferah vs. Klasik / Geriye Dönük %100 Uyumluluk):
+        const detectedDensity = detectTemplateDensityFromImage(imgBytes, cvs.width, cvs.height, currentH, qrDataObj, targetExam);
+        const targetOmrToUse = specificOMR || (detectedDensity === 'legacy' ? OMR_SPECS_LEGACY : OMR_SPECS_SPACIOUS);
 
         let finalNo = qrStudentNo ? String(qrStudentNo) : "";
 

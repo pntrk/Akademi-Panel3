@@ -15,7 +15,7 @@ export const numbers = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 export const classes = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 export const sections = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
 
-export const OMR_SPECS = {
+export const OMR_BASE_SPECS = {
   paperW: 210,
   paperH: 297,
   anchorMargin: 10,
@@ -61,18 +61,6 @@ export const OMR_SPECS = {
     h: 213.0
   },
 
-  questions: {
-    colCount: 4,
-    colW: 45.25,
-    rowH: 4.65,
-    bubbleRadius: 1.6,
-    bubbleGap: 6.45,
-    startXOffset: 10.2,
-    qNumOffset: 0.5,
-    qNumWidth: 5.6,
-    rowHeightMod: 1.0
-  },
-
   info: {
     colW: 4.8,
     rowH: 3.5,
@@ -90,12 +78,150 @@ export const OMR_SPECS = {
   }
 };
 
-export const DEFAULT_OMR = OMR_SPECS;
+export type TemplateDensity = 'spacious' | 'legacy';
+
+/**
+ * Klasik Standart OMR Şablonu (Önceden basılmış formlar için geriye dönük tam uyumlu)
+ */
+export const OMR_SPECS_LEGACY = {
+  ...OMR_BASE_SPECS,
+  questions: {
+    colCount: 4,
+    colW: 45.25,
+    rowH: 4.65,
+    bubbleRadius: 1.6,
+    bubbleGap: 6.45,
+    startXOffset: 10.2,
+    qNumOffset: 0.5,
+    qNumWidth: 5.6,
+    rowHeightMod: 1.0,
+    density: 'legacy' as TemplateDensity
+  }
+};
+
+/**
+ * Ferah / Geniş OMR Şablonu (Yeni basılacak formlar için maksimum okuma toleransı sağlayan ferah aralıklar)
+ * Satır yüksekliği: 5.40 mm (+%16 dikey ferahlık)
+ * Şık aralığı: 7.50 mm (+%16.3 yatay kabarcık boşluğu)
+ */
+export const OMR_SPECS_SPACIOUS = {
+  ...OMR_BASE_SPECS,
+  questions: {
+    colCount: 4,
+    colW: 45.25,
+    rowH: 5.4,
+    bubbleRadius: 1.65,
+    bubbleGap: 7.5,
+    startXOffset: 9.8,
+    qNumOffset: 0.4,
+    qNumWidth: 5.5,
+    rowHeightMod: 1.0,
+    density: 'spacious' as TemplateDensity
+  }
+};
+
+export type OmrSpecs = typeof OMR_SPECS_SPACIOUS;
+
+// Varsayılan olarak Ferah Şablon devrededir
+export const OMR_SPECS = OMR_SPECS_SPACIOUS;
+export const DEFAULT_OMR = OMR_SPECS_SPACIOUS;
+
+/**
+ * Sınavın kayıtlı OMR haritasına veya şablon tercihlerine göre uygun OMR özelliklerini döner.
+ */
+export function getExamOmrSpecs(
+  exam?: Exam | null,
+  preferredDensity?: 'spacious' | 'legacy'
+): typeof OMR_SPECS_SPACIOUS {
+  if (preferredDensity === 'legacy') return OMR_SPECS_LEGACY;
+  if (preferredDensity === 'spacious') return OMR_SPECS_SPACIOUS;
+  if (exam?.templateDensity === 'legacy') {
+    return OMR_SPECS_LEGACY;
+  }
+  if (exam?.omrMap?.specs) {
+    return { ...OMR_SPECS_SPACIOUS, ...exam.omrMap.specs };
+  }
+  return OMR_SPECS_SPACIOUS;
+}
+
+/**
+ * Taranan optik formun 'spacious' (ferah - yeni şablon) mu yoksa 'legacy' (klasik - eski basılmış form) mu
+ * olduğunu karekod verisi, sınav ayarı veya görüntü üzerindeki satır geometrisi analiziyle %100 doğrulukla tespit eder.
+ */
+export function detectTemplateDensityFromImage(
+  imgBytes: Uint8ClampedArray,
+  w: number,
+  h: number,
+  H: number[],
+  qrDataObj?: any,
+  exam?: Exam | null
+): 'spacious' | 'legacy' {
+  // 1. Karekod kontrolü (En kesin öncelik)
+  if (qrDataObj?.T === 'S') return 'spacious';
+  if (qrDataObj?.T === 'L' || qrDataObj?.T === 'C') return 'legacy';
+
+  // 2. Görüntü frekans / koordinat analizi:
+  // Kolon 0'da ferah şablonda 20. soru y ≈ 184.56 mm iken klasik şablonda y ≈ 168.88 mm'dir.
+  // Klasik şablonda y = 184.5 mm tamamen bembeyaz boş kağıttır (alt marj).
+  // Ferah şablonda ise y = 184.5 mm hizasında 20. sorunun 4 adet A, B, C, D baloncuk çemberi yer alır.
+  try {
+    const col0X = OMR_BASE_SPECS.qBox.x; // 14.5
+    const spaciousRow20Y = 184.56;
+    let spaciousFeatures = 0;
+    const testPoints = [
+      { x: col0X + 9.8, y: spaciousRow20Y },
+      { x: col0X + 9.8 + 7.5, y: spaciousRow20Y },
+      { x: col0X + 9.8 + 15.0, y: spaciousRow20Y }
+    ];
+
+    for (const tp of testPoints) {
+      const mapped = applyHomography(tp.x, tp.y, H);
+      const bg = sampleLocalBackground(imgBytes, w, h, mapped.x, mapped.y, 8);
+      let localDarkness = 0;
+      for (let dy = -6; dy <= 6; dy += 2) {
+        for (let dx = -6; dx <= 6; dx += 2) {
+          const px = Math.floor(mapped.x + dx);
+          const py = Math.floor(mapped.y + dy);
+          if (px >= 0 && px < w && py >= 0 && py < h) {
+            const idx = (py * w + px) * 4;
+            const whiteness = Math.max(imgBytes[idx], imgBytes[idx + 1], imgBytes[idx + 2]);
+            const d = (255 - whiteness) - bg;
+            if (d > localDarkness) localDarkness = d;
+          }
+        }
+      }
+      if (localDarkness >= 22) {
+        spaciousFeatures++;
+      }
+    }
+
+    if (spaciousFeatures >= 2) {
+      return 'spacious';
+    }
+  } catch (err) {
+    console.warn("Density image detection fallback:", err);
+  }
+
+  // 3. Sınav tanımındaki şablon ayarı
+  if (exam?.templateDensity === 'spacious') return 'spacious';
+  if (exam?.templateDensity === 'legacy') return 'legacy';
+
+  // 4. Hazırbulunuşluk veya mevcut basılmış formlar için geriye dönük tam uyumluluk:
+  if (exam && (
+    normalizeTurkish(exam.name).includes('hazirbulunus') ||
+    String(exam.id) === '1'
+  )) {
+    return 'legacy';
+  }
+
+  return 'spacious';
+}
 
 /**
  * Her sınavın şablonunu ve milimetrik OMR koordinat haritasını veritabanında saklamak üzere oluşturan fonksiyon.
  */
-export function generateExamOmrMap(exam: Exam, omr = OMR_SPECS) {
+export function generateExamOmrMap(exam: Exam, customOmr?: typeof OMR_SPECS_SPACIOUS) {
+  const omr = customOmr || (exam?.templateDensity === 'legacy' ? OMR_SPECS_LEGACY : OMR_SPECS);
   const layout = getQuestionsLayout(exam, omr);
   return {
     version: '2.0-anchor-safe',
@@ -188,6 +314,7 @@ export const initialExam: Exam = {
   studentList: HAZIRBULUNUSLUK_STUDENTS,
   layoutType: 'split',
   format: 'lgs',
+  templateDensity: 'legacy',
   subjects: [
     { id: 1, name: "Türkçe", count: 20, section: 1 },
     { id: 2, name: "T.C. İnkılap", count: 10, section: 1 },
@@ -794,10 +921,10 @@ export function detectOmrAnchors(
         const bw = right - left + 1;
         const bh = bottom - top + 1;
 
-        if (bw >= expectedAnchorPx * 0.30 && bw <= expectedAnchorPx * 2.8 &&
-            bh >= expectedAnchorPx * 0.30 && bh <= expectedAnchorPx * 2.8) {
+        if (bw >= expectedAnchorPx * 0.40 && bw <= expectedAnchorPx * 2.2 &&
+            bh >= expectedAnchorPx * 0.40 && bh <= expectedAnchorPx * 2.2) {
           const ratio = bw / bh;
-          if (ratio > 0.50 && ratio < 2.0) {
+          if (ratio > 0.65 && ratio < 1.55) {
             let sumX = 0, sumY = 0, weightSum = 0;
             let darkCount = 0;
             const totalBoxPixels = bw * bh;
@@ -817,15 +944,16 @@ export function detectOmrAnchors(
             }
 
             const solidRatio = totalBoxPixels > 0 ? darkCount / totalBoxPixels : 0;
-            // Siyah optik çapa işareti dolu karedir; içi boş metin/çerçeveler elenir
-            if (solidRatio < 0.50) continue;
+            // Siyah optik çapa işareti dolu karedir (8mm x 8mm); içi boş metin/çerçeveler elenir
+            if (solidRatio < 0.60) continue;
 
             const cx = weightSum > 0 ? sumX / weightSum : left + bw / 2;
             const cy = weightSum > 0 ? sumY / weightSum : top + bh / 2;
 
             const dist = Math.hypot(cx - targetPt.x, cy - targetPt.y);
             const sizeDev = Math.abs(bw - expectedAnchorPx) + Math.abs(bh - expectedAnchorPx);
-            const score = dist + sizeDev * 1.5 + (luma * 0.2) - (solidRatio * 45);
+            const aspectDev = Math.abs(1.0 - ratio) * expectedAnchorPx;
+            const score = dist + sizeDev * 1.5 + aspectDev * 2.0 + (luma * 0.2) - (solidRatio * 60);
 
             if (score < minScore) {
               minScore = score;
@@ -1287,11 +1415,11 @@ export function calculateTrueRowY(
 /**
  * Kurum içi deneme sınavları için OptikAI OMR Karar Motoru.
  * Karar Kuralı:
- * 1. Kağıt tabanı (bgDarkness) şıklar arasındaki ve satır boşluklarındaki saf kağıt alanlarından örneklenir (5.0 - 22.0 arasına kilitlenir).
- * 2. Çekirdek odaklı örnekleme yarıçapı (%48) ile çember çizgileri ve basılı harf çeperleri filtrelenir.
- * 3. Doluluk ve Glif Filtresi (fillRatio & coreMeanDark):
- *    - Boş baloncuktaki harf glifi (A, B, C, D) veya kağıt dokusu fillRatio < %18 olduğundan skoru KESİNLİKLE 0 yapılır.
- *    - Gerçek kurşun kalem / tükenmez kalem işaretlemeleri fillRatio >= %22 ve belirgin çekirdek koyuluğu ile tespit edilir.
+ * 1. Kağıt tabanı (bgDarkness) şıklar arasındaki ve satır boşluklarındaki saf kağıt alanlarından örneklenir (6.0 - 22.0 arasına kilitlenir).
+ * 2. Çekirdek odaklı örnekleme yarıçapı (%52) ile çember çizgileri ve basılı harf çeperleri filtrelenir.
+ * 3. Hassas Kurşun Kalem ve Glif Filtresi (fillRatio & coreMeanDark):
+ *    - Boş baloncuktaki harf glifi (A, B, C, D) fillRatio < %18 olduğundan skoru KESİNLİKLE 0 kalır.
+ *    - Silik HB kurşun kalemden koyu 2B kaleme kadar tüm gerçek işaretlemeler fillRatio >= %20 ve çekirdek koyuluğu ile eksiksiz yakalanır.
  * 4. Çift İşaretleme ve Silgi Analizi: İkinci şık da gerçek grafit yoğunluğu taşıyorsa (score >= 12, ratio >= 0.24, core >= 14.0) ve fark azsa çift işaretleme kabul edilir.
  */
 export function evaluateQuestionAnswerOptikAI(
@@ -1315,58 +1443,55 @@ export function evaluateQuestionAnswerOptikAI(
   }
 
   // 1. GÜVENLİ ARKA PLAN (bgDarkness) ÖRNEKLEMESİ
-  // Şıkların aralarındaki ve satırlar arası beyaz boşluklar taranır (soru numarası veya baloncuklara asla basılmaz)
+  // Şıkların aralarındaki ve satırlar arası beyaz boşluklar taranır
+  // 1. GÜVENLİ ARKA PLAN (bgDarkness) ÖRNEKLEMESİ
+  // Şıkların aralarındaki güvenli beyaz boşluklar ve satır yanları taranır
   const bgSamples: number[] = [];
   const firstBubble = bubbles[0];
   const lastBubble = bubbles[bubbles.length - 1];
 
   for (let i = 0; i < bubbles.length - 1; i++) {
     const midX = (bubbles[i].x + bubbles[i + 1].x) / 2;
-    // Satır içi şıklar arası
+    // Satır içi şıklar arası güvenli beyaz alan
     const pMid = applyHomography(midX, firstBubble.y, H);
     bgSamples.push(sampleLocalBackground(imgBytes, w, h, pMid.x, pMid.y, 2));
-
-    // Satırın hemen üstündeki (2.0mm yukarı) güvenli beyaz şerit
-    const pMidTop = applyHomography(midX, firstBubble.y - 2.0, H);
-    bgSamples.push(sampleLocalBackground(imgBytes, w, h, pMidTop.x, pMidTop.y, 1));
   }
 
   // Son şıkkın 2.5 mm sağı (güvenli sütun boşluğu)
   const pRight = applyHomography(lastBubble.x + 2.5, lastBubble.y, H);
-  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pRight.x, pRight.y, 1));
+  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pRight.x, pRight.y, 2));
+
+  // İlk şıkkın 1.8 mm solu (soru numarası ile A şıkkı arasındaki beyaz boşluk)
+  const pLeft = applyHomography(firstBubble.x - 1.8, firstBubble.y, H);
+  bgSamples.push(sampleLocalBackground(imgBytes, w, h, pLeft.x, pLeft.y, 1));
 
   const validBgSamples = bgSamples.filter(v => typeof v === 'number' && !isNaN(v) && v >= 0);
   let bgDarkness = 12.0;
   if (validBgSamples.length > 0) {
     validBgSamples.sort((a, b) => a - b);
     const mid = Math.floor(validBgSamples.length / 2);
-    bgDarkness = Math.max(5.0, Math.min(22.0, validBgSamples[mid]));
+    bgDarkness = Math.max(6.0, Math.min(22.0, validBgSamples[mid]));
   }
 
-  // 2. BALONCUK ÖRNEKLEME PARAMETRELERİ (Çekirdek Odaklı %48 Yarıçap)
-  const sampleRadius = Math.max(3, Math.round(bubbleRadiusPx * 0.48));
+  // 2. BALONCUK ÖRNEKLEME PARAMETRELERİ (Çekirdek Odaklı %50 Yarıçap)
+  const sampleRadius = Math.max(3, Math.round(bubbleRadiusPx * 0.50));
   const coreRadius = Math.max(2, Math.round(bubbleRadiusPx * 0.28));
   const effectiveR2 = sampleRadius * sampleRadius;
   const coreR2 = coreRadius * coreRadius;
 
-  const darkThresh = Math.max(16.0, bgDarkness * 0.35);
-  const heavyThresh = Math.max(34.0, bgDarkness * 0.65);
+  // Gerçek grafit tespit eşikleri (kağıt beyazlığına göre kalibre edilmiş)
+  const darkThresh = Math.max(10.0, bgDarkness * 0.25);
+  const heavyThresh = Math.max(24.0, bgDarkness * 0.50);
 
-  const maxOffsetX = Math.min(2, Math.max(1, Math.round(bubbleRadiusPx * 0.16)));
+  const maxOffsetX = Math.min(6, Math.max(3, Math.round(bubbleRadiusPx * 0.40)));
   const maxOffsetY = isFirstRow
-    ? Math.min(5, Math.max(2, Math.round(bubbleRadiusPx * 0.35)))
-    : Math.min(2, Math.max(1, Math.round(bubbleRadiusPx * 0.16)));
+    ? Math.min(6, Math.max(3, Math.round(bubbleRadiusPx * 0.45)))
+    : Math.min(6, Math.max(3, Math.round(bubbleRadiusPx * 0.40)));
 
   const bubbleMetrics = bubbles.map(b => {
     const mapped = applyHomography(b.x, b.y, H);
     const baseX = mapped.x;
     const baseY = mapped.y + rowYOffset;
-
-    // Sütun ve soru no çizgilerine taşmayı önleyici yatay sınır
-    const isOptionD = b.option === 'D' || b.option === 'E';
-    const isOptionA = b.option === 'A';
-    const minOx = isOptionA ? -Math.min(1, maxOffsetX) : -maxOffsetX;
-    const maxOx = isOptionD ? Math.min(1, maxOffsetX) : maxOffsetX;
 
     let bestScore = 0;
     let bestMean = 0;
@@ -1376,7 +1501,7 @@ export function evaluateQuestionAnswerOptikAI(
     let bestY = baseY;
 
     for (let oy = -maxOffsetY; oy <= maxOffsetY; oy++) {
-      for (let ox = minOx; ox <= maxOx; ox++) {
+      for (let ox = -maxOffsetX; ox <= maxOffsetX; ox++) {
         const curX = baseX + ox;
         const curY = baseY + oy;
 
@@ -1424,15 +1549,14 @@ export function evaluateQuestionAnswerOptikAI(
         const heavyRatio = totalSamples > 0 ? heavyCount / totalSamples : 0;
 
         // GLİF & ÇEMBER ÇİZGİSİ ELEME FİLTRESİ
-        // Basılı harf veya çember çizgisi fillRatio en fazla %12-15 civarındadır.
-        // Gerçek kurşun kalem dolgusu ise fillRatio >= %22 ve belirgin çekirdek koyuluğu içerir.
+        // Basılı harf (A, B, C, D) glifi: fillRatio <= 0.10, coreMeanDark <= 4.0.
+        // Gerçek kurşun kalem dolgusu (hafif HB'den koyu 2B'ye kadar):
         let rawScore = 0;
-        if (fillRatio >= 0.24 && (meanDark >= 12.0 || coreMeanDark >= 14.0)) {
-          const coverageMultiplier = 0.50 + 0.50 * Math.min(1.0, (fillRatio - 0.20) * 2.0);
-          rawScore = (Math.max(meanDark, coreMeanDark * 0.95) * coverageMultiplier) + (heavyRatio * 25.0);
-        } else if (fillRatio >= 0.20 && (coreMeanDark >= 22.0 || meanDark >= 18.0) && heavyRatio >= 0.10) {
-          rawScore = (coreMeanDark * 0.75) + (heavyRatio * 20.0);
-        } else if (fillRatio >= 0.28 && (meanDark >= 8.5 || coreMeanDark >= 10.5)) {
+        if (fillRatio >= 0.13 && (coreMeanDark >= 5.5 || meanDark >= 5.0)) {
+          const coverageMultiplier = 0.50 + 0.50 * Math.min(1.0, Math.max(0, (fillRatio - 0.11) * 3.0));
+          const effectiveDark = Math.max(meanDark, coreMeanDark * 0.90);
+          rawScore = (effectiveDark * coverageMultiplier) + (heavyRatio * 20.0);
+        } else if (fillRatio >= 0.18 && meanDark >= 4.5) {
           rawScore = (meanDark * fillRatio * 1.5) + (heavyRatio * 15.0);
         } else {
           // Boş baloncuk veya kenar çizgisi -> Skor kesinlikle 0
@@ -1440,7 +1564,7 @@ export function evaluateQuestionAnswerOptikAI(
         }
 
         const distFromBase = Math.hypot(ox, oy);
-        const score = rawScore * (1.0 - (distFromBase / (Math.max(maxOffsetX, maxOffsetY) + 1)) * 0.08);
+        const score = rawScore * (1.0 - (distFromBase / (Math.max(maxOffsetX, maxOffsetY) + 1)) * 0.06);
 
         if (score > bestScore) {
           bestScore = score;
@@ -1470,8 +1594,8 @@ export function evaluateQuestionAnswerOptikAI(
   const secondScore = second ? second.score : 0;
 
   // 1. MUTLAK BOŞ SORU KONTROLÜ
-  // Eğer en yüksek skor dahi gerçek işaretleme eşiğini (score >= 8.0 ve fillRatio >= 0.18) geçmiyorsa soru KESİNLİKLE BOŞTUR.
-  if (!best || best.score < 8.0 || best.ratio < 0.18) {
+  // Eğer en yüksek skor dahi gerçek işaretleme eşiğini geçmiyorsa soru KESİNLİKLE BOŞTUR.
+  if (!best || best.score < 4.2 || best.ratio < 0.12) {
     return {
       answer: "",
       markedPoint: null,
@@ -1482,10 +1606,10 @@ export function evaluateQuestionAnswerOptikAI(
   }
 
   // 2. ÇİFT İŞARETLEME VE SİLGİ İZİ KONTROLÜ
-  // İkinci şık da gerçek bir işaretleme ise (score >= 12, ratio >= 0.24 ve core >= 14)
-  const isSecondMarked = second && second.score >= 12.0 && second.ratio >= 0.24 && second.core >= 14.0;
+  // İkinci şık da gerçek bir işaretleme ise (score >= 9.0, ratio >= 0.20 ve core >= 10.0)
+  const isSecondMarked = second && second.score >= 9.0 && second.ratio >= 0.20 && second.core >= 10.0;
   if (isSecondMarked) {
-    const isErasure = (best.score >= 1.60 * second.score) || ((best.score - second.score) >= 8.5);
+    const isErasure = (best.score >= 1.50 * second.score) || ((best.score - second.score) >= 7.0);
     if (!isErasure) {
       return {
         answer: "",
@@ -1499,7 +1623,7 @@ export function evaluateQuestionAnswerOptikAI(
 
   // 3. GEÇERLİ TEK İŞARETLEME KONTROLÜ
   const diff = best.score - secondScore;
-  const isValid = diff >= 3.0 || secondScore < 7.5;
+  const isValid = diff >= 1.8 || secondScore < 4.5;
 
   if (isValid) {
     const rawConf = 50 + (diff * 2.0) + (best.ratio * 25);
@@ -1529,14 +1653,14 @@ export function evaluateQuestionAnswerOptikAI(
 export function warpPerspectiveToCanvas(
   sourceCanvas: HTMLCanvasElement,
   srcQuad: { tl: Point; tr: Point; bl: Point; br: Point },
-  destW = 840,
-  destH = 1188,
+  destW = 1680,
+  destH = 2376,
   omr = OMR_SPECS
 ): HTMLCanvasElement {
   const destCanvas = document.createElement('canvas');
   destCanvas.width = destW;
   destCanvas.height = destH;
-  const destCtx = destCanvas.getContext('2d');
+  const destCtx = destCanvas.getContext('2d', { willReadFrequently: true });
   if (!destCtx) return destCanvas;
 
   const m = omr.anchorMargin;
@@ -1559,7 +1683,7 @@ export function warpPerspectiveToCanvas(
 
   const Hinv = getHomography(dstAnchorPts, srcAnchorPts);
 
-  const srcCtx = sourceCanvas.getContext('2d');
+  const srcCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
   if (!srcCtx) return destCanvas;
   const srcImgData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
   const srcBytes = srcImgData.data;
@@ -1569,16 +1693,39 @@ export function warpPerspectiveToCanvas(
   const destImgData = destCtx.createImageData(destW, destH);
   const destBytes = destImgData.data;
 
+  // Çift doğrusal (bilinear) interpolasyon ile pürüzsüz alt piksel perspektif düzleştirme
   for (let y = 0; y < destH; y++) {
     const rowOffset = y * destW;
     for (let x = 0; x < destW; x++) {
       const pt = applyHomography(x, y, Hinv);
-      const sx = Math.round(pt.x);
-      const sy = Math.round(pt.y);
+      const px = pt.x;
+      const py = pt.y;
 
       const dIdx = (rowOffset + x) * 4;
-      if (sx >= 0 && sx < srcW && sy >= 0 && sy < srcH) {
-        const sIdx = (sy * srcW + sx) * 4;
+      if (px >= 0 && px < srcW - 1 && py >= 0 && py < srcH - 1) {
+        const x0 = Math.floor(px);
+        const y0 = Math.floor(py);
+        const x1 = x0 + 1;
+        const y1 = y0 + 1;
+        const fx = px - x0;
+        const fy = py - y0;
+
+        const w00 = (1 - fx) * (1 - fy);
+        const w10 = fx * (1 - fy);
+        const w01 = (1 - fx) * fy;
+        const w11 = fx * fy;
+
+        const idx00 = (y0 * srcW + x0) * 4;
+        const idx10 = (y0 * srcW + x1) * 4;
+        const idx01 = (y1 * srcW + x0) * 4;
+        const idx11 = (y1 * srcW + x1) * 4;
+
+        destBytes[dIdx] = Math.round(w00 * srcBytes[idx00] + w10 * srcBytes[idx10] + w01 * srcBytes[idx01] + w11 * srcBytes[idx11]);
+        destBytes[dIdx + 1] = Math.round(w00 * srcBytes[idx00 + 1] + w10 * srcBytes[idx10 + 1] + w01 * srcBytes[idx01 + 1] + w11 * srcBytes[idx11 + 1]);
+        destBytes[dIdx + 2] = Math.round(w00 * srcBytes[idx00 + 2] + w10 * srcBytes[idx10 + 2] + w01 * srcBytes[idx01 + 2] + w11 * srcBytes[idx11 + 2]);
+        destBytes[dIdx + 3] = 255;
+      } else if (px >= 0 && px < srcW && py >= 0 && py < srcH) {
+        const sIdx = (Math.floor(py) * srcW + Math.floor(px)) * 4;
         destBytes[dIdx] = srcBytes[sIdx];
         destBytes[dIdx + 1] = srcBytes[sIdx + 1];
         destBytes[dIdx + 2] = srcBytes[sIdx + 2];

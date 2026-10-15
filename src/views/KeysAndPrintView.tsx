@@ -7,6 +7,9 @@ import { LocalQRCode } from '../components/omr/LocalQRCode';
 import { 
   DEFAULT_OMR, 
   OMR_SPECS,
+  OMR_SPECS_LEGACY,
+  OMR_SPECS_SPACIOUS,
+  getExamOmrSpecs,
   OPTS_4, 
   OPTS_5, 
   getQuestionsLayout, 
@@ -207,15 +210,17 @@ interface LiveOmrSheetProps {
   exam: Exam;
   student: Student | null;
   isColorMode: boolean;
+  templateDensity?: 'spacious' | 'legacy';
 }
 
-export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) {
+export function LiveOmrSheet({ exam, student, isColorMode, templateDensity }: LiveOmrSheetProps) {
   const options = (exam.optionsCount || 4) === 4 ? OPTS_4 : OPTS_5;
   const isTyt = isTytExam(exam);
   const isAyt = isAytExam(exam);
 
-  // Tek Merkezi Koordinat Motoru Standartları
-  const renderOMR = OMR_SPECS;
+  // Şablon ferahlık seçimine göre OMR koordinat motoru
+  const density = templateDensity || exam.templateDensity || 'spacious';
+  const renderOMR = density === 'legacy' ? OMR_SPECS_LEGACY : OMR_SPECS_SPACIOUS;
   const { items: layoutItems, finalQBoxH, isSplit, hasFourSections } = getQuestionsLayout(exam, renderOMR) as any;
 
   const themeColor = isColorMode ? '#dc2626' : '#0f172a';
@@ -227,8 +232,8 @@ export function LiveOmrSheet({ exam, student, isColorMode }: LiveOmrSheetProps) 
     ? (student.className || `${student.classStr || '8'}/${student.sectionStr || 'A'}`) 
     : "8/A";
   const qrData = student
-    ? `E:${exam.id}|N:${student.no}`
-    : `E:${exam.id}|N:1001`;
+    ? `E:${exam.id}|N:${student.no}|T:${density === 'legacy' ? 'L' : 'S'}`
+    : `E:${exam.id}|N:1001|T:${density === 'legacy' ? 'L' : 'S'}`;
 
   const institutionName = exam.institution || "KIRKLARELİ ATATÜRK ORTAOKULU";
   const textFit = getStudentInfoFit(studentName, studentNo, studentClass);
@@ -606,6 +611,7 @@ export function KeysAndPrintView() {
   const [penaltyState, setPenaltyState] = useState<number>(selectedExam?.penalty ?? 3);
   const [layoutTypeState, setLayoutTypeState] = useState<'standard' | 'split'>(selectedExam?.layoutType || 'split');
   const [formatState, setFormatState] = useState<'lgs' | 'mebi' | 'tyt' | 'ayt'>((selectedExam?.format as any) || 'lgs');
+  const [templateDensityState, setTemplateDensityState] = useState<'spacious' | 'legacy'>(selectedExam?.templateDensity || 'spacious');
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
   // Sınav seçimi değiştiğinde lokal state'i güncelle
@@ -620,6 +626,7 @@ export function KeysAndPrintView() {
       setPenaltyState(selectedExam.penalty ?? 3);
       setLayoutTypeState(selectedExam.layoutType || 'split');
       setFormatState((selectedExam.format as any) || 'lgs');
+      setTemplateDensityState(selectedExam.templateDensity || 'spacious');
     }
   }, [selectedExamId, selectedExam]);
 
@@ -691,6 +698,7 @@ export function KeysAndPrintView() {
         newKeys[bk] = arr;
       });
 
+      const omrSpecsToUse = templateDensityState === 'legacy' ? OMR_SPECS_LEGACY : OMR_SPECS_SPACIOUS;
       const updatedExamPayload = {
         ...selectedExam,
         examType: 'internal' as const,
@@ -699,10 +707,11 @@ export function KeysAndPrintView() {
         penalty: penaltyState,
         layoutType: layoutTypeState,
         format: formatState,
+        templateDensity: templateDensityState,
         keys: newKeys
       };
 
-      const omrMap = generateExamOmrMap(updatedExamPayload);
+      const omrMap = generateExamOmrMap(updatedExamPayload, omrSpecsToUse);
 
       await updateExamOmr(String(selectedExam.id), {
         ...updatedExamPayload,
@@ -932,8 +941,9 @@ export function KeysAndPrintView() {
       const isAyt = isAytExam(selectedExam);
       const institutionName = selectedExam.institution || "KIRKLARELİ ATATÜRK ORTAOKULU";
 
-      // Tek Merkezi Koordinat Motoru Standartları
-      const renderOMR = OMR_SPECS;
+      // Şablon ferahlık seçimine göre OMR koordinat motoru
+      const density = templateDensityState || selectedExam.templateDensity || 'spacious';
+      const renderOMR = density === 'legacy' ? OMR_SPECS_LEGACY : OMR_SPECS_SPACIOUS;
 
       const { items: layoutItems, finalQBoxH, isSplit, hasFourSections } = getQuestionsLayout(selectedExam, renderOMR) as any;
       const themeColor = isColorMode ? '#dc2626' : '#0f172a';
@@ -942,7 +952,7 @@ export function KeysAndPrintView() {
       // Pre-generate QR data URLs for target students in parallel
       const qrDataUrls = await Promise.all(
         targetStudents.map(student => {
-          const qrData = `E:${selectedExam.id}|N:${student.no}`;
+          const qrData = `E:${selectedExam.id}|N:${student.no}|T:${density === 'legacy' ? 'L' : 'S'}`;
           return generateQrDataUrl(qrData, 160);
         })
       );
@@ -1685,7 +1695,7 @@ export function KeysAndPrintView() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
               
               {/* 1. Seçenek Sayısı */}
               <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 hover:border-purple-200 flex flex-col justify-between gap-3 shadow-2xs transition-all">
@@ -1771,6 +1781,27 @@ export function KeysAndPrintView() {
                   <option value="mebi">MEBİ / Kazanım Değerlendirme</option>
                   <option value="tyt">TYT (500 Üzerinden)</option>
                   <option value="ayt">AYT (500 Üzerinden)</option>
+                </select>
+              </div>
+
+              {/* 5. Optik Form Şablon Aralığı (Ferahlık & Uyumluluk) */}
+              <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 hover:border-indigo-200 flex flex-col justify-between gap-3 shadow-2xs transition-all">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-black text-slate-900 block">Şablon Aralığı</label>
+                    <p className="text-[10.5px] text-slate-500">Satır & şık ferahlığı</p>
+                  </div>
+                </div>
+                <select
+                  value={templateDensityState}
+                  onChange={(e) => setTemplateDensityState(e.target.value as any)}
+                  className="w-full bg-slate-50/80 hover:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white cursor-pointer shadow-2xs transition-all"
+                >
+                  <option value="spacious">🌟 Ferah / Geniş (5.4mm - Önerilen)</option>
+                  <option value="legacy">📄 Klasik Standart (4.65mm - Eski Baskı)</option>
                 </select>
               </div>
 
@@ -1974,7 +2005,7 @@ export function KeysAndPrintView() {
             </div>
 
             {/* Alt Satır: Filtreler ve Renk Modu */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               
               {/* Sınıf / Şube Filtresi */}
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-center">
@@ -2072,6 +2103,34 @@ export function KeysAndPrintView() {
                     }`}
                   >
                     ⚫ Siyah-Beyaz
+                  </button>
+                </div>
+              </div>
+
+              {/* Şablon Ferahlığı: Ferah vs Klasik */}
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-center">
+                <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1.5 mb-1">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  Şablon Aralığı
+                </label>
+                <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-300">
+                  <button
+                    type="button"
+                    onClick={() => setTemplateDensityState('spacious')}
+                    className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      templateDensityState === 'spacious' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    🌟 Ferah (5.4mm)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplateDensityState('legacy')}
+                    className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      templateDensityState === 'legacy' ? 'bg-slate-800 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    📄 Klasik (4.65mm)
                   </button>
                 </div>
               </div>
@@ -2223,6 +2282,7 @@ export function KeysAndPrintView() {
                 exam={selectedExam}
                 student={currentPreviewStudent}
                 isColorMode={isColorMode}
+                templateDensity={templateDensityState}
               />
             </div>
 

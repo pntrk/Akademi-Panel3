@@ -102,6 +102,7 @@ export interface Exam {
   penalty?: number;                       // 3 yanlış 1 doğru (3) veya 4 (TYT)
   layoutType?: 'standard' | 'split';      // Optik form düzeni
   format?: 'lgs' | 'mebi' | 'tyt' | 'ayt';// Sınav formatı
+  templateDensity?: 'spacious' | 'legacy';// Optik form ferahlık / şablon aralığı (spacious: ferah, legacy: klasik standart)
 
   participatingClasses?: string[]; // e.g. ["8-A", "8-B"]
   assignedHalls?: string[]; // array of ExamHall IDs

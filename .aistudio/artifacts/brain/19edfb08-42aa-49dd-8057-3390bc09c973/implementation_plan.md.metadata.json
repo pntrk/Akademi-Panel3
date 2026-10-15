@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan for fixing false-positive D options in black-and-white optical scans by enforcing core bubble fill ratio, center darkness checks, and dynamic line/glyph filtering.",
-  "updatedAt": "2026-10-14T13:29:49.936212161Z",
+  "summary": "Ferah OMR Şablon Tasarımı ve Geriye Dönük Uyumluluk Mimarisi: Soru satır yüksekliği ve şık aralıklarının maksimum ferahlığa çıkarılması, basılı eski formlar ile yeni ferah formların dinamik OMR haritası ile kusursuz ayrıştırılması ve baskı ekranında şablon seçimi.",
+  "updatedAt": "2026-10-15T18:18:09.863039309Z",
   "requestFeedback": true,
   "userFacing": true
 }
