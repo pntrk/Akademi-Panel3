@@ -62,7 +62,8 @@ import {
   ChevronRight,
   FileCheck,
   Loader2,
-  GraduationCap
+  GraduationCap,
+  KeyRound
 } from 'lucide-react';
 import { AnalysisView } from './AnalysisView';
 import { generateBatchReportCardsPdf, StudentEvaluatedData } from '../lib/pdfReportGenerator';
@@ -1884,6 +1885,40 @@ export function ResultsView() {
   const isLgs = isLgsExam(exam);
   const isTyt = isTytExam(exam);
   const isAyt = isAytExam(exam);
+
+  const hasAnswerKey = useMemo(() => {
+    if (!exam.keys) return false;
+    const aKeys = exam.keys.A;
+    if (Array.isArray(aKeys) && aKeys.some((k: string) => Boolean(k && k.trim()))) return true;
+    const anyKeyList = Object.values(exam.keys).find((v: any) => Array.isArray(v) && v.some((k: string) => Boolean(k && k.trim())));
+    return Boolean(anyKeyList);
+  }, [exam.keys]);
+
+  const navigateToAnswerKeys = () => {
+    if (!exam) return;
+    try {
+      sessionStorage.setItem('akademi_selected_keys_exam_id', String(exam.id));
+      sessionStorage.setItem('akademi_selected_keys_tab', 'keys');
+    } catch (e) {}
+
+    // Sınav türü 'internal' değilse bile kurum içi optik sınav olarak yapılandır
+    if (exam.examType !== 'internal' && updateExamOmr) {
+      updateExamOmr(exam.id, { examType: 'internal' }).catch(() => {});
+    }
+
+    if (typeof window !== 'undefined') {
+      (window as any).__keysPrintSetExamId?.(String(exam.id));
+      (window as any).__keysPrintSetTab?.('keys');
+      window.dispatchEvent(new CustomEvent('akademi_navigate_keys', { 
+        detail: { examId: String(exam.id), tab: 'keys' } 
+      }));
+      if ((window as any).__navigateToTab) {
+        (window as any).__navigateToTab('keys_print');
+      } else if ((window as any).__setActiveTab) {
+        (window as any).__setActiveTab('keys_print');
+      }
+    }
+  };
 
   // Soru & Madde Analizi sekmesi yalnızca Kurum İçi Optik sınavlarda aktiftir.
   // Yayıncı sınavı seçilirse otomatik olarak Sonuçlar / Sıralama sekmesine dönülür.
@@ -4014,7 +4049,7 @@ export function ResultsView() {
                       {exam.name}
                     </h3>
                     <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
-                      {exam.examType === 'internal' ? (
+                      {exam.examType === 'internal' || (exam.publisher && String(exam.publisher).trim().toLowerCase().includes('kurum')) ? (
                         <span className="text-[9px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 flex items-center gap-1 shadow-2xs shrink-0">
                           <Target className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600" /> Kurum İçi Optik
                         </span>
@@ -4023,9 +4058,34 @@ export function ResultsView() {
                           <FileSpreadsheet className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-sky-600" /> Yayıncı Denemesi
                         </span>
                       )}
-                      <span className="text-[9px] sm:text-[11px] font-mono tabular-nums font-bold px-1.5 sm:px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs shrink-0">
-                        {evaluatedResults.length} Öğrenci
-                      </span>
+                      {(exam.examType === 'internal' || (exam.publisher && String(exam.publisher).trim().toLowerCase().includes('kurum')) || (!exam.publisher && exam.examType !== 'publisher')) && !hasAnswerKey ? (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={navigateToAnswerKeys}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigateToAnswerKeys(); }}
+                          className="text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-2xs shrink-0 cursor-pointer transition-all animate-pulse"
+                          title="Cevap anahtarı henüz kaydedilmemiş! Cevap anahtarı sayfasına gitmek için tıklayınız."
+                        >
+                          <KeyRound className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-600" />
+                          <span>Cevap Anahtarı Eksik (Tanımla →)</span>
+                        </span>
+                      ) : (
+                        <span 
+                          role={(exam.examType === 'internal' || (exam.publisher && String(exam.publisher).trim().toLowerCase().includes('kurum'))) ? 'button' : undefined}
+                          tabIndex={(exam.examType === 'internal' || (exam.publisher && String(exam.publisher).trim().toLowerCase().includes('kurum'))) ? 0 : undefined}
+                          onClick={() => { if (exam.examType === 'internal' || (exam.publisher && String(exam.publisher).trim().toLowerCase().includes('kurum'))) navigateToAnswerKeys(); }}
+                          onKeyDown={(e) => { if ((exam.examType === 'internal' || (exam.publisher && String(exam.publisher).trim().toLowerCase().includes('kurum'))) && (e.key === 'Enter' || e.key === ' ')) navigateToAnswerKeys(); }}
+                          className={`text-[9px] sm:text-[11px] font-mono tabular-nums font-bold px-1.5 sm:px-2 py-0.5 rounded-lg border shadow-2xs shrink-0 ${
+                            (exam.examType === 'internal' || (exam.publisher && String(exam.publisher).trim().toLowerCase().includes('kurum')))
+                              ? 'bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-800 border-slate-200/80 hover:border-indigo-300 cursor-pointer transition-colors'
+                              : 'bg-slate-100 text-slate-700 border-slate-200/80'
+                          }`}
+                          title={(exam.examType === 'internal' || (exam.publisher && String(exam.publisher).trim().toLowerCase().includes('kurum'))) ? (hasAnswerKey ? 'Cevap Anahtarı ve Optik Baskı sayfasına git' : 'Cevap Anahtarı sayfasına git') : undefined}
+                        >
+                          {evaluatedResults.length} Öğrenci
+                        </span>
+                      )}
                     </div>
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block">
@@ -4040,21 +4100,48 @@ export function ResultsView() {
               <div className="hidden md:flex items-center gap-2 flex-wrap">
                 {exam.examType === 'internal' && userRole === 'admin' && (
                   <>
+                    {!hasAnswerKey ? (
+                      <button
+                        type="button"
+                        onClick={navigateToAnswerKeys}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-amber-400 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-2xs transition-all cursor-pointer animate-pulse"
+                        title="Bu kurum içi sınav için cevap anahtarı henüz kaydedilmemiş. Tanımlamak için Cevap Anahtarı sayfasına git"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Cevap Anahtarı Tanımla</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => (window as any).__navigateToTab?.('scan')}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>Canlı Optik Tara</span>
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => (window as any).__navigateToTab?.('scan')}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-500 shadow-2xs transition-all cursor-pointer"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      <span>Canlı Optik Tara</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => (window as any).__navigateToTab?.('omr-setup')}
+                      onClick={() => {
+                        sessionStorage.setItem('akademi_selected_keys_exam_id', exam.id);
+                        (window as any).__keysPrintSetExamId?.(exam.id);
+                        (window as any).__keysPrintSetTab?.(hasAnswerKey ? 'print' : 'keys');
+                        (window as any).__navigateToTab?.('keys_print');
+                      }}
                       className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer"
+                      title={!hasAnswerKey ? 'Cevap Anahtarı Sayfasına Git' : 'Optik Form Yazdır'}
                     >
                       <Printer className="w-3.5 h-3.5" />
                       <span>Form Bas (PDF)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={navigateToAnswerKeys}
+                      className="flex items-center gap-1.5 px-2.5 py-2 text-xs font-bold rounded-xl border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-all cursor-pointer"
+                      title="Bu sınavın 4 kitapçık cevap anahtarını görüntüle / düzenle"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Cevap Anahtarı</span>
                     </button>
                   </>
                 )}
@@ -4148,14 +4235,26 @@ export function ResultsView() {
 
                 {userRole === 'admin' && (
                   exam.examType === 'internal' ? (
-                    <button
-                      type="button"
-                      onClick={() => (window as any).__navigateToTab?.('scan')}
-                      className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-emerald-500 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-2xs active:scale-95 transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Camera className="w-3.5 h-3.5 text-white shrink-0" />
-                      <span>Optik Tara</span>
-                    </button>
+                    !hasAnswerKey ? (
+                      <button
+                        type="button"
+                        onClick={navigateToAnswerKeys}
+                        className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-amber-400 bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-2xs active:scale-95 transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer animate-pulse"
+                        title="Cevap anahtarı henüz kaydedilmemiş! Cevap anahtarını girmek için tıklayınız."
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-white shrink-0" />
+                        <span>Cevap Anahtarı</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => (window as any).__navigateToTab?.('scan')}
+                        className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-emerald-500 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-2xs active:scale-95 transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Camera className="w-3.5 h-3.5 text-white shrink-0" />
+                        <span>Optik Tara</span>
+                      </button>
+                    )
                   ) : (
                     <>
                       <button
@@ -4200,14 +4299,25 @@ export function ResultsView() {
                 </button>
 
                 {exam.examType === 'internal' && userRole === 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => (window as any).__navigateToTab?.('omr-setup')}
-                    className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-slate-200/90 bg-slate-50/90 hover:bg-slate-100 text-slate-700 active:scale-95 shadow-2xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Printer className="w-3 h-3 text-indigo-600 shrink-0" />
-                    <span>Form Bas</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => (window as any).__navigateToTab?.('omr-setup')}
+                      className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-slate-200/90 bg-slate-50/90 hover:bg-slate-100 text-slate-700 active:scale-95 shadow-2xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Printer className="w-3 h-3 text-indigo-600 shrink-0" />
+                      <span>Form Bas</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={navigateToAnswerKeys}
+                      className="h-8 px-2.5 text-[11px] font-bold rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 active:scale-95 shadow-2xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
+                      title="Cevap Anahtarı Sayfasına Git"
+                    >
+                      <KeyRound className="w-3 h-3 text-purple-600 shrink-0" />
+                      <span>Cevap Anahtarı</span>
+                    </button>
+                  </>
                 )}
 
                 {exam.examType !== 'internal' && userRole === 'admin' && (

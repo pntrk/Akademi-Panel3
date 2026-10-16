@@ -546,21 +546,71 @@ export function LiveOmrSheet({ exam, student, isColorMode, templateDensity }: Li
    ========================================================================= */
 export function KeysAndPrintView() {
   const { state, updateExamOmr } = useAppContext();
-  const [activeTab, setActiveTab] = useState<'template' | 'keys' | 'print'>('print');
+  const [activeTab, setActiveTab] = useState<'template' | 'keys' | 'print'>(() => {
+    try {
+      const savedTab = typeof window !== 'undefined' ? sessionStorage.getItem('akademi_selected_keys_tab') : null;
+      if (savedTab === 'keys' || savedTab === 'template' || savedTab === 'print') {
+        return savedTab;
+      }
+    } catch (e) {}
+    return 'keys';
+  });
 
-  // Allow external navigation directly into a specific tab (e.g. print)
+  // Allow external navigation directly into a specific tab (e.g. keys or print)
   useEffect(() => {
-    (window as any).__keysPrintSetTab = (tab: 'template' | 'keys' | 'print') => setActiveTab(tab);
+    (window as any).__keysPrintSetTab = (tab: 'template' | 'keys' | 'print') => {
+      setActiveTab(tab);
+      try {
+        sessionStorage.setItem('akademi_selected_keys_tab', tab);
+      } catch (e) {}
+    };
+
+    const handleCustomNav = (e: any) => {
+      if (e.detail?.examId) {
+        setSelectedExamId(String(e.detail.examId));
+        try {
+          sessionStorage.setItem('akademi_selected_keys_exam_id', String(e.detail.examId));
+        } catch (err) {}
+      }
+      if (e.detail?.tab) {
+        setActiveTab(e.detail.tab);
+        try {
+          sessionStorage.setItem('akademi_selected_keys_tab', e.detail.tab);
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('akademi_navigate_keys', handleCustomNav);
+    return () => {
+      window.removeEventListener('akademi_navigate_keys', handleCustomNav);
+    };
   }, []);
 
+  // Save activeTab to sessionStorage
+  useEffect(() => {
+    if (activeTab) {
+      try {
+        sessionStorage.setItem('akademi_selected_keys_tab', activeTab);
+      } catch (e) {}
+    }
+  }, [activeTab]);
+
   // Sadece Kurum İçi Deneme Sınavları (Yayıncı denemelerinde kurum içi optik basılmaz)
+  // Cevap anahtarı henüz girilmemiş kurum içi sınavlar da eksiksiz listelenir
   const internalExams = useMemo(() => {
-    return state.exams.filter(e => e.examType === 'internal' || (!e.examType && !e.publisher && e.keys && Object.keys(e.keys).length > 0));
+    const savedId = typeof window !== 'undefined' ? sessionStorage.getItem('akademi_selected_keys_exam_id') : null;
+    return state.exams.filter(e => {
+      if (savedId && String(e.id) === String(savedId)) return true;
+      if (e.examType === 'internal') return true;
+      if (e.publisher && String(e.publisher).trim().toLowerCase().includes('kurum')) return true;
+      if (!e.publisher && e.examType !== 'publisher') return true;
+      if (e.keys && Object.keys(e.keys).length > 0 && e.examType !== 'publisher') return true;
+      return false;
+    });
   }, [state.exams]);
 
   const [selectedExamId, setSelectedExamId] = useState<string>(() => {
     const saved = typeof window !== 'undefined' ? sessionStorage.getItem('akademi_selected_keys_exam_id') : null;
-    if (saved && internalExams.some(e => String(e.id) === String(saved))) {
+    if (saved && state.exams.some(e => String(e.id) === String(saved))) {
       return saved;
     }
     if (internalExams.length > 0) return String(internalExams[0].id);
@@ -585,19 +635,23 @@ export function KeysAndPrintView() {
   // Keep selectedExamId in sync if exams array changes
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? sessionStorage.getItem('akademi_selected_keys_exam_id') : null;
-    if (saved && internalExams.some(e => String(e.id) === String(saved))) {
+    if (saved && state.exams.some(e => String(e.id) === String(saved))) {
       setSelectedExamId(saved);
       return;
     }
-    if ((!selectedExamId || !internalExams.some(e => String(e.id) === String(selectedExamId))) && internalExams.length > 0) {
+    if ((!selectedExamId || !state.exams.some(e => String(e.id) === String(selectedExamId))) && internalExams.length > 0) {
       setSelectedExamId(String(internalExams[0].id));
     }
-  }, [internalExams, selectedExamId]);
+  }, [internalExams, state.exams, selectedExamId]);
 
   const selectedExam: Exam | null = useMemo(() => {
-    if (internalExams.length === 0) return null;
-    return internalExams.find(e => String(e.id) === String(selectedExamId)) || internalExams[0];
-  }, [internalExams, selectedExamId]);
+    if (selectedExamId) {
+      const found = state.exams.find(e => String(e.id) === String(selectedExamId));
+      if (found) return found;
+    }
+    if (internalExams.length > 0) return internalExams[0];
+    return state.exams[0] || null;
+  }, [state.exams, internalExams, selectedExamId]);
 
   // ==========================================
   // TAB 1: ŞABLON VE DERS YAPILANDIRMASI STATE

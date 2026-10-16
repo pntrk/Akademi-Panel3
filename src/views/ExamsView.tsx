@@ -3131,7 +3131,12 @@ export const ExamsView = () => {
                                 } : e);
                                 setExams(updated);
                                 sessionStorage.setItem('akademi_selected_keys_exam_id', editingExam.id);
+                                sessionStorage.setItem('akademi_selected_keys_tab', 'keys');
                                 (window as any).__keysPrintSetExamId?.(editingExam.id);
+                                (window as any).__keysPrintSetTab?.('keys');
+                                window.dispatchEvent(new CustomEvent('akademi_navigate_keys', {
+                                  detail: { examId: editingExam.id, tab: 'keys' }
+                                }));
                               }
                               setEditingExam(null);
                               if ((window as any).__navigateToTab) {

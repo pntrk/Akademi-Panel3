@@ -60,7 +60,8 @@ import {
   ListOrdered,
   Lock,
   Unlock,
-  BookOpen
+  BookOpen,
+  KeyRound
 } from 'lucide-react';
 
 export interface PageThumbnail {
