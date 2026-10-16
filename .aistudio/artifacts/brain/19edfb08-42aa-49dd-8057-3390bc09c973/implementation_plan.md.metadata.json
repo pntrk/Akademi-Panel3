@@ -1,6 +1,6 @@
 {
-  "summary": "Ferah OMR Şablon Tasarımı ve Geriye Dönük Uyumluluk Mimarisi: Soru satır yüksekliği ve şık aralıklarının maksimum ferahlığa çıkarılması, basılı eski formlar ile yeni ferah formların dinamik OMR haritası ile kusursuz ayrıştırılması ve baskı ekranında şablon seçimi.",
-  "updatedAt": "2026-10-15T18:18:09.863039309Z",
+  "summary": "Sınav optiklerinde işaretlenmeyen veya belirsiz kitapçık türünün varsayılan olarak A kitapçığı kabul edilmesi, baloncuk içi harflerin silik açık gri mürekkeple (%35 ton) ve 6 punto olarak basılması, ve Uras Gürel ile Bertuğ Koldan gibi mevcut hatalı okunan sonuçların A kitapçığıyla otomatik yeniden puanlanması için mimari ve teknik uygulama planı.",
+  "updatedAt": "2026-10-16T11:39:21.307455589Z",
   "requestFeedback": true,
   "userFacing": true
 }

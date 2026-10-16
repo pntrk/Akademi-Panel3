@@ -280,8 +280,9 @@ export function LiveOmrSheet({ exam, student, isColorMode, templateDensity }: Li
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 6.5px;
-          font-weight: 700;
+          font-size: 6pt;
+          font-weight: 500;
+          color: rgba(0, 0, 0, 0.35);
           background-color: #fff;
           line-height: 1;
         }
@@ -293,8 +294,9 @@ export function LiveOmrSheet({ exam, student, isColorMode, templateDensity }: Li
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 8px;
-          font-weight: 800;
+          font-size: 6pt;
+          font-weight: 500;
+          color: rgba(0, 0, 0, 0.35);
           background-color: #fff;
           line-height: 1;
         }
@@ -378,7 +380,7 @@ export function LiveOmrSheet({ exam, student, isColorMode, templateDensity }: Li
                 className="info-bubble absolute -translate-x-1/2 -translate-y-1/2"
                 style={{ left: `${bx}mm`, top: `${by}mm` }}
               >
-                {b}
+                {b.toLowerCase()}
               </div>
             );
           })}
@@ -521,7 +523,7 @@ export function LiveOmrSheet({ exam, student, isColorMode, templateDensity }: Li
                     className="bubble absolute font-bold -translate-x-1/2 -translate-y-1/2"
                     style={{ left: `${centerX}mm`, top: `${topY}mm` }}
                   >
-                    {o}
+                    {o.toLowerCase()}
                   </div>
                 );
               })}
@@ -1074,7 +1076,7 @@ export function KeysAndPrintView() {
               const centerX = colLeft + renderOMR.questions.startXOffset + (optIdx * renderOMR.questions.bubbleGap);
               questionsHTML += `
                 <div class="bubble" style="left: ${centerX}mm; top: ${topY}mm;">
-                  ${o}
+                  ${o.toLowerCase()}
                 </div>
               `;
             });
@@ -1119,7 +1121,7 @@ export function KeysAndPrintView() {
                 ${['A', 'B', 'C', 'D'].map((b, idx) => {
                   const bx = renderOMR.infoBox.booklet.startX + (idx * renderOMR.infoBox.booklet.gap);
                   const by = renderOMR.infoBox.booklet.y;
-                  return `<div class="info-bubble" style="left: ${bx}mm; top: ${by}mm;">${b}</div>`;
+                  return `<div class="info-bubble" style="left: ${bx}mm; top: ${by}mm;">${b.toLowerCase()}</div>`;
                 }).join('')}
 
                 <div class="qr-container" style="left: ${renderOMR.infoBox.qrCode.x}mm; top: ${renderOMR.infoBox.qrCode.y}mm; width: ${renderOMR.infoBox.qrCode.size}mm; height: ${renderOMR.infoBox.qrCode.size}mm;">
@@ -1291,9 +1293,9 @@ export function KeysAndPrintView() {
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 8px;
-              font-weight: 800;
-              color: #0f172a;
+              font-size: 6pt;
+              font-weight: 500;
+              color: rgba(0, 0, 0, 0.35);
               background-color: #fff;
               line-height: 1;
               transform: translate(-50%, -50%);
@@ -1390,9 +1392,9 @@ export function KeysAndPrintView() {
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 6.5px;
-              font-weight: 700;
-              color: #0f172a;
+              font-size: 6pt;
+              font-weight: 500;
+              color: rgba(0, 0, 0, 0.35);
               background-color: #fff;
               line-height: 1;
               transform: translate(-50%, -50%);

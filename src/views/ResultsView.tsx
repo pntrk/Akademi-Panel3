@@ -2081,8 +2081,11 @@ export function ResultsView() {
       const hasKeys = exam.keys && Object.keys(exam.keys).length > 0;
 
       if (hasAnswers && hasKeys) {
-        const bk = res.booklet || 'A';
-        const key = exam.keys?.[bk] || exam.keys?.["A"] || [];
+        const bk = (res.booklet && String(res.booklet).trim()) ? String(res.booklet).trim().toUpperCase() : 'A';
+        let key = exam.keys?.[bk];
+        if (!key || !Array.isArray(key) || !key.some(k => Boolean(k && k.trim()))) {
+          key = exam.keys?.["A"] || (exam.keys ? Object.values(exam.keys).find(v => Array.isArray(v) && v.some(k => Boolean(k && k.trim()))) : []) || [];
+        }
         const score = calculateScore(
           res.answers || [],
           key,
@@ -2094,6 +2097,7 @@ export function ResultsView() {
         );
         return { 
           ...res, 
+          booklet: bk,
           no: effectiveNo,
           studentNo: effectiveNo,
           name: effectiveName,

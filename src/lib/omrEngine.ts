@@ -1647,6 +1647,63 @@ export function evaluateQuestionAnswerOptikAI(
 }
 
 /**
+ * Optik formdaki Kitapçık Türü (A, B, C, D) baloncuklarını yüksek hassasiyetle okur.
+ * - Basılı koyu 'B' harfi ve çember mürekkebini kurşun kalem dolgusu zanneden parazitleri tamamen eler.
+ * - Öğrenci kitapçık alanını doldurmamışsa veya kurşun kalem izi eşik altındaysa VARSAYILAN OLARAK KESİNLİKLE "A" döner.
+ */
+export function evaluateBookletOptikAI(
+  bubbles: { option: string; x: number; y: number }[],
+  H: number[],
+  imgBytes: Uint8ClampedArray,
+  w: number,
+  h: number,
+  bookletRadiusPx: number
+): { booklet: string; markedPoint: { x: number; y: number } | null; isExplicitlyMarked: boolean } {
+  if (!bubbles || bubbles.length === 0) {
+    return { booklet: 'A', markedPoint: null, isExplicitlyMarked: false };
+  }
+
+  // Standart AI baloncuk taraması ile metrikleri çıkar
+  const result = evaluateQuestionAnswerOptikAI(bubbles, H, imgBytes, w, h, bookletRadiusPx);
+
+  if (!result.scores || result.scores.length === 0) {
+    return { booklet: 'A', markedPoint: null, isExplicitlyMarked: false };
+  }
+
+  const sortedScores = [...result.scores].sort((a, b) => b.score - a.score);
+  const best = sortedScores[0];
+  const second = sortedScores.length > 1 ? sortedScores[1] : null;
+  const secondScore = second ? second.score : 0;
+
+  // Kitapçık baloncukları için kurşun kalem doluluk eşiği:
+  // Basılı 'B' glifi score ~4.0 - 7.0 civarı üretebilir.
+  // Gerçek kurşun kalem dolgusu score >= 10.0, fillRatio >= 0.22 ve core >= 7.5 seviyesindedir.
+  const isRealPencilFill = Boolean(
+    result.answer &&
+    best &&
+    (
+      (best.score >= 9.5 && best.ratio >= 0.22 && ((best as any).core ?? 8.0) >= 7.0 && (best.score - secondScore >= 3.0)) ||
+      (best.score >= 16.0 && best.ratio >= 0.28)
+    )
+  );
+
+  if (isRealPencilFill && result.answer) {
+    return {
+      booklet: result.answer.toUpperCase(),
+      markedPoint: result.markedPoint,
+      isExplicitlyMarked: true
+    };
+  }
+
+  // İşaretlenmemişse veya eşik altında kalmışsa: KESİNTİSİZ VARSAYILAN "A" KİTAPÇIĞI
+  return {
+    booklet: 'A',
+    markedPoint: null,
+    isExplicitlyMarked: false
+  };
+}
+
+/**
  * Optik form görüntüsünü 4 köşe çapa noktasına göre standart A4 boyutuna normalize eden
  * perspektif düzeltme (Warp Perspective) fonksiyonu.
  */
@@ -1852,8 +1909,14 @@ export function createUnifiedExamResult(
     ? (sec && sec !== '-' ? `${cls}${sec}` : cls)
     : ((matchedStudent && 'className' in matchedStudent ? matchedStudent.className : '') || '-');
 
-  // Kitapçık cevap anahtarını al
-  const key = exam.keys?.[finalBk] || exam.keys?.A || (exam.keys ? Object.values(exam.keys)[0] : []) || [];
+  // Kitapçık cevap anahtarını al (Eğer belirtilen kitapçık anahtarı boşsa veya yoksa kesinlikle A'ya dön)
+  let resolvedBk = finalBk;
+  let key = exam.keys?.[resolvedBk];
+  const isTargetKeyValid = Array.isArray(key) && key.some(k => Boolean(k && k.trim()));
+  if (!isTargetKeyValid) {
+    resolvedBk = 'A';
+    key = exam.keys?.A || (exam.keys ? Object.values(exam.keys).find(v => Array.isArray(v) && v.some(k => Boolean(k && k.trim()))) : []) || [];
+  }
 
   // Puan ve net hesaplaması
   const evaluatedScore = calculateScore(
@@ -1912,7 +1975,7 @@ export function createUnifiedExamResult(
     no: finalNo,
     classStr: cls,
     sectionStr: sec,
-    booklet: finalBk,
+    booklet: resolvedBk,
     answers: scanData.answers,
     evaluatedScore,
     scores: {

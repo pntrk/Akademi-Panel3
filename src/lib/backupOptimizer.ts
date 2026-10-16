@@ -151,6 +151,7 @@ export function hydrateExamResult(r: any): ExamResult {
     classStr: cleanCls,
     sectionStr: cleanSec,
     studentClass: r.studentClass || (cleanSec ? `${cleanCls}-${cleanSec}` : cleanCls),
+    booklet: (r.booklet && String(r.booklet).trim()) ? String(r.booklet).trim().toUpperCase() : 'A',
     net: totalNet,
     average: totalNet,
     totalCorrect,

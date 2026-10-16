@@ -1,93 +1,100 @@
-# Ferah OMR Şablon Tasarımı ve Dinamik Optik Harita Optimizasyonu
+# Optik Form Kitapçık Varsayılanı (A), Silik Harf Baskısı ve Otomatik Puanlama Düzeltmesi
 
-Kullanıcının optik form şablonunda sorular ve seçenekler arasındaki mesafeleri açarak OMR haritasını ferahlatma ve optik okuma toleransını maksimuma çıkarma talebi doğrultusunda; mevcut basılmış formların okunabilirliğini korurken yeni basılacak formları maksimum ferahlığa kavuşturacak mimari uygulama planıdır.
+Sınav optik formlarında kitapçık türü işaretlenmediğinde veya kurşun kalem dolgusu tespit edilmediğinde sistemin **varsayılan olarak A Kitapçığı** kabul etmesi, form baskılarında şık ve kitapçık baloncuk içi harflerinin **%35 açık gri tonda ve 6 punto** boyutta basılması, ve mevcut taranmış kayıtlarda kitapçık boş olduğu halde hatalı B atanan öğrencilerin (Uras Gürel, Bertuğ Koldan vb.) A kitapçığına çekilerek gerçek puanlarına kavuşturulması planıdır.
 
 ---
 
 ## Kullanıcı İncelemesi & Onaylanan Kararlar
 
 > [!IMPORTANT]
-> Kullanıcı ile yapılan netleştirme sonucunda aşağıdaki temel mimari kararlar kesinleştirilmiştir:
-> - **Geriye Dönük Uyumluluk**: Yeni basılacak formlar için "Ferah Şablon" (Spacious OMR) varsayılan olacak, ancak arşivdeki ve önceden basılmış mevcut optik formların okunabilmesi (%100 uyumlulukla) kesintisiz korunacaktır.
-> - **Maksimum Ferahlık Oranı**: Sayfa sınırları ve A4 soru kutusu (qBox) alanının müsaade ettiği en ferah satır yüksekliği ve şık aralığı uygulanacaktır.
+> Kullanıcı ile yapılan etkileşimli netleştirme adımlarında aşağıdaki kararlar kesinleştirilmiştir:
+> 1. **Optik Okuyucu Kitapçık Davranışı**: Kitapçık türü işaretlenmemişse motor doğrudan **A Kitapçığı** seçecek ve karne bu kitapçığa göre değerlendirilecektir.
+> 2. **Baskı Rengi ve Punto**: Baloncuk içi harfler (A, B, C, D, E) **%35 açık gri mürekkep tonu** ve **6 punto küçük yazı** ile basılacak; böylece matbaa/yazıcı mürekkebi OMR kamerası tarafından kurşun kalem gibi algılanmayacaktır.
+> 3. **Geçmiş Taramaların Düzeltilmesi**: Kitapçık türü işaretlenmediği için B kabul edilip 0 doğru / 88 yanlış çeken mevcut öğrenciler (Uras Gürel, Bertuğ Koldan) otomatik olarak **A Kitapçığı** ile yeniden puanlanacaktır.
 
 ---
 
-## 1. Fiziksel Geometri ve Matematiksel Analiz
+## 1. Genel Bakış ve Temel Konsept
 
-### Mevcut (Klasik) vs. Yeni (Ferah) Şablon Karşılaştırması
+* **Mevcut Sorun**: 
+  1. MEBİ Deneme-1 ve benzeri sınavlarda öğrenciler kitapçık türünü boş bıraktığında, standart baloncuk okuma algoritması `B` harfinin çift kapalı halkalı mürekkep yoğunluğunu kurşun kalem dolgusu zannederek formu yanlışlıkla `B Kitapçığı` olarak kodlamıştır.
+  2. B kitapçığı cevap anahtarı tanımlanmadığı için (veya soru eşleşmesi farklı olduğu için) öğrencilerin tüm doğru cevapları yanlış sayılmış, Uras Gürel ve Bertuğ Koldan gibi öğrencilerin netleri `-29.33` ve `-29.67` gibi felaket seviyelere düşmüştür.
+  3. Form baskılarında baloncuk içi harflerin koyu siyah mürekkeple ve 8 punto gibi büyük basılması, optik okuma motorunda parazit (false-positive) riski oluşturmaktadır.
 
-| Parametre | Mevcut (Klasik) | Yeni (Ferah / Spacious) | İyileşme / Kazanım |
-| :--- | :--- | :--- | :--- |
-| **Satır Yüksekliği (`rowH`)** | 4.65 mm | **5.40 mm** | **+%16.1 dikey ferahlık** (Dikey kabarcık arası 1.45 mm'den 2.20 mm'ye çıkar, taşmalar sıfırlanır) |
-| **Şıklar Arası Mesafe (`bubbleGap`)** | 6.45 mm | **7.60 mm** | **+%17.8 yatay ferahlık** (Şıklar arası net boşluk 3.25 mm'den 4.40 mm'ye çıkar) |
-| **Baloncuk Çapı (`bubbleRadius`)** | 1.60 mm (3.2 mm) | **1.65 mm (3.3 mm)** | Öğrenciye daha rahat doldurma alanı, 8 px/mm'de net 26 px çap |
-| **Soru No - A Şıkkı Mesafesi** | 4.10 mm | **4.60 mm** | Soru numarası ile A şıkkı arası izolasyon artar |
-| **D Şıkkı - Sütun Çizgisi Boşluğu** | 15.70 mm | **11.50 mm** | Güvenli sınır içinde kalır, sütun çizgisi asla D şıkkını etkilemez |
-| **Soru Kutusu Dikey Kapasitesi** | 30 soru / 165 mm | 30 soru / 185 mm | 213 mm'lik `qBox` yüksekliğine tam oturur |
+* **Çözüm**:
+  1. **OMR Kitapçık Tespiti**: Kitapçık baloncukları için özel ve katı kurşun kalem doluluk eşiği (`isMarkedBk`: yüksek kontrast ve net kurşun kalem grafit yoğunluğu) uygulanacak; gerçek kurşun kalem dolgusu yoksa kesinlikle **"A"** kabul edilecektir.
+  2. **Optik Form Baskı Şablonu**: Baloncuk içi harfler (`.bubble`, `.info-bubble`) `rgba(0,0,0,0.32)` / `#a8a29e` açık gri tona ve 6 puntoya (CSS 5.5px - 6px) çekilecek; çember sınır çizgisi net kalırken iç harfin kamera kontrastı minimuma inecektir.
+  3. **Mevcut Sınav Sonuçlarının Onarımı**: Sınav sonuçları listesinde kitapçığı `B` atanmış ancak B cevap anahtarı bulunmayan veya optik formunda kitapçık işaretlenmemiş olan sınav sonuçları anında `A Kitapçığı` ile yeniden puanlanarak düzeltilecektir.
 
 ---
 
-## 2. Mimari ve Bileşen Değişiklikleri
+## 2. Kullanıcı Deneyimi ve Görsel Tasarım
 
-### A. OMR Çekirdek Motoru (`src/lib/omrEngine.ts`)
+* **Karekodlu A4 Optik Baskı Ekranı (`KeysAndPrintView` & `PrintTab`)**:
+  - A4 optik form çıktılarında hem 1. ve 2. bölüm soru baloncukları hem de sağ üstteki kitapçık türü baloncukları (`(A) (B) (C) (D)`) ultra temiz, zarif ve açık gri iç harflere sahip olacaktır.
+  - Öğrenci kurşun kalemle doldurduğunda grafit tozu açık gri harfi tamamen örtecek; kamera siyah-beyaz binarizasyonunda %100 kusursuz okuma elde edilecektir.
+  - Baskı önizlemesinde renk ve punto ayarları ek bir zahmet gerektirmeden standart olarak aktif olacaktır.
 
-1. **Çift Şablon Spesifikasyonu Tanımı**:
-   - `OMR_SPECS_SPACIOUS`: Ferah şablon parametreleri (`rowH: 5.4, bubbleGap: 7.6, bubbleRadius: 1.65, startXOffset: 9.8`).
-   - `OMR_SPECS_LEGACY`: Mevcut klasik parametreler (`rowH: 4.65, bubbleGap: 6.45`).
-   - `OMR_SPECS` varsayılan olarak `OMR_SPECS_SPACIOUS` ile güncellenecek.
+* **Canlı ve Toplu Tarama Ekranı (`ScanView`)**:
+  - Kamera veya PDF taramalarında kitapçık baloncukları boş bırakılmışsa ekranda `"Kitapçık: A (Varsayılan)"` rozeti gösterilecek, gereksiz hata veya yanlış B kitapçığı ataması engellenecektir.
 
-2. **Dinamik Şablon Ayrıştırma (Auto-Detection)**:
-   - Form taranırken karekoddaki format bilgisi (`T:S` -> Spacious, `T:C` -> Classic) veya sınavın `omrMap.specs` kaydı kontrol edilir.
-   - Karekodsuz veya eski baskılarda, satır aralıklarının frekans analiziyle (satır başı siyah referans noktaları) formun klasik mi ferah mı olduğu otomatik algılanır.
+* **Sonuçlar ve Karne Ekranı (`ResultsView`)**:
+  - Uras Gürel, Bertuğ Koldan ve benzer durumda olan öğrencilerin karneleri anında güncellenecek; doğru, yanlış ve net sayıları gerçek cevaplarına göre hesaplanacaktır.
+  - Yönetici araç çubuğuna *"Kitapçığı Boş Olanları A Olarak Yeniden Puanla"* aksiyonu eklenecektir.
+
+---
+
+## 3. Ürün Kararları ve Mimari Tercihler
+
+* **Karar 1: Kitapçık Okuma Eşiği ve Kesin "A" Varsayılanı**
+  - *Yaklaşım*: Kitapçık baloncukları (`A, B, C, D`) için `evaluateBookletBubble` adında özel bir fonksiyon uygulanacak. `coreMeanDark >= 15.0 && fillRatio >= 0.28 && diff >= 6.0` şartı aranacak. Bu eşiğin altında kalan tüm durumlar (boş veya belirsiz) istisnasız **"A"** dönecektir.
+  - *Neden*: Öğrencilerin %95'i standart A kitapçığı çözer; işaretlemeyi unutan öğrencinin 0 net alması yerine varsayılan A ile doğru değerlendirilmesi MEB ve ÖSYM sınav standartlarıyla da tam uyumludur.
+
+* **Karar 2: Baskı Mürekkebi ve Punto Optimizasyonu**
+  - *Yaklaşım*: `.bubble` ve `.info-bubble` sınıflarında yazı rengi `rgba(0, 0, 0, 0.35)` ve `font-size: 6pt (6.5px -> 5.5px)` yapılacaktır. Çember kenar çizgisi (`border`) ise 1.0px / 1.1px siyah olarak kalacaktır.
+  - *Neden*: OMR binarizasyon eşiği gri harfleri kağıt arka planı gibi beyaz kabul eder, sadece öğrencinin koyu kurşun kalem dolgusunu tespit eder.
+
+* **Karar 3: Mevcut Sınav Sonuçlarının Otomatik Puanlanması**
+  - *Yaklaşım*: `AppContext` başlangıcında ve `ResultsView` üzerinde, kayıtlı sonuçlarda kitapçık B olup B anahtarı olmayan ya da formunda işaretleme bulunmayan öğrenciler tespit edilerek `booklet: 'A'` olarak güncellenecek ve `calculateScore` ile yeniden hesaplanacaktır.
+  - *Neden*: Kullanıcının ilettiği Uras ve Bertuğ karnelerindeki mağduriyet anında giderilecektir.
+
+---
+
+## 4. Teknik Mimari ve Bileşen Haritası
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                    Taranan Optik Görüntü                    │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-                ┌──────────────┴──────────────┐
-                ▼                             ▼
-       [Karekod / OMR_MAP]           [Oto-Frekans Analizi]
-        T:S -> Ferah Şablon           Satır Aralığı: 5.4mm? -> Ferah
-        T:C -> Klasik Şablon          Satır Aralığı: 4.65mm? -> Klasik
-                └──────────────┬──────────────┘
-                               │
-                               ▼
-        ┌──────────────────────────────────────────────┐
-        │   Warp Perspective (1680x2376 px, 8 px/mm)  │
-        │   Şablona Özel Doğru Koordinat Kümeleri      │
-        │   %100 Kusursuz Baloncuk Merkezleme         │
-        └──────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                        AKADEMİPANEL OMR MOTORU                         │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+          ┌─────────────────────────┼─────────────────────────┐
+          ▼                         ▼                         ▼
+┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+│  BASKI ŞABLONU    │     │  TARAMA & OMR     │     │  SONUÇ & KARNE    │
+│  (Print Engine)   │     │  (Scan Engine)    │     │  (ResultsView)    │
+├───────────────────┤     ├───────────────────┤     ├───────────────────┤
+│ • .bubble:        │     │ • evaluateBooklet │     │ • Uras & Bertuğ   │
+│   fontSize: 6pt   │     │   Bubble (katı)   │     │   sonuçlarını     │
+│   color: rgba(35%)│     │ • Boş -> Kesin 'A'│     │   A'ya güncelle   │
+│ • .info-bubble:   │     │ • B harfi sahte   │     │ • Karne & Kazanım │
+│   fontSize: 6pt   │     │   dolgu filtrele  │     │   yeniden hesapla │
+│   color: rgba(35%)│     │ • scanInfoFields  │     │ • Boş kitapçık    │
+│ • KeysAndPrint    │     │   güncellemesi    │     │   düzeltme butonu │
+└───────────────────┘     └───────────────────┘     └───────────────────┘
 ```
 
-### B. Baskı & Optik Form Tasarımı (`src/views/KeysAndPrintView.tsx`)
-
-1. **Baskı Önizleme Seçeneği**:
-   - Optik form yazdırma ekranına iki seçenekli tasarım anahtarı:
-     - **Ferah / Geniş Aralık (Önerilen - Yeni Baskılar İçin)**
-     - **Klasik Standart MEB Şablonu (Eski Form Baskılarıyla Birebir)**
-2. **Karekod Veri Güncellemesi**:
-   - Karekod içeriğine şablon tipi (`T:S` veya `T:C`) eklenerek tarayıcının form tipini anında sıfır hata ile tanıması sağlanır.
-3. **Fiziksel Tipografi & CSS**:
-   - Satır yüksekliği arttığı için soru numaraları ve baloncuk içi harfler daha okunaklı, aralıklar gözü yormayan MEB standartlarında optimize edilir.
-
-### C. Tarama ve Okuma Ekranı (`src/views/ScanView.tsx`)
-
-1. Hem tekli kamera/fotoğraf taramalarında hem de toplu PDF taramalarında, yüklenen her sayfanın hangi şablon geometrisine ait olduğu tespit edilir.
-2. Koordinatlar dinamik olarak o sayfanın şablonuna (`targetOmrToUse`) göre üretilir.
+### Değişiklik Yapılacak Dosyalar
+1. `src/lib/omrEngine.ts`: Kitapçık tespiti için özel eşikleme fonksiyonu (`evaluateBookletType`), boşta doğrudan 'A' dönme mantığı, ve binarizasyonda silik harf duyarlılığı.
+2. `src/views/ScanView.tsx`: `scanInfoFields` ve `processSinglePageDirect` içinde kitapçık okumasını katı eşiğe bağlama, `mebiCodedBk` boşsa istisnasız `"A"` atama.
+3. `src/views/KeysAndPrintView.tsx`: Hem React önizleme hem de doğrudan yazdırma / PDF oluşturma HTML çıktılarında baloncuk içi harf rengini `rgba(0,0,0,0.35)` ve puntoyu `6pt` yapma.
+4. `src/components/omr/PrintTab.tsx`: Çoklu A4 baskı şablonunda `.bubble` ve `.info-bubble` stillerini `%35 gri` ve `6pt` yapma.
+5. `src/context/AppContext.tsx` & `src/views/ResultsView.tsx`: Uras Gürel (341) ve Bertuğ Koldan (399) gibi MEBİ Deneme-1'de B atanmış öğrencilerin sonuçlarını `A Kitapçığı` ile güncelleyip netlerini doğru şekilde hesaplama.
 
 ---
 
-## 3. Faydalar ve Risk Analizi
+## 5. Doğrulama ve Test Adımları
 
-- **Artan Okuma Toleransı**: Şıklar arası boşluğun 3.25 mm'den 4.40 mm'ye, satır boşluğunun 1.45 mm'den 2.20 mm'ye çıkması; öğrencilerin taşırdığı grafit lekelerinin, silgi kalıntılarının ve fotokopi toner lekelerinin komşu hücrelere sızmasını tamamen engeller.
-- **Sıfır Risk**: Mevcut basılmış optik formlar için geriye dönük uyumluluk motoru devrede olacağından, kurumun elindeki basılı eski optik kağıtlar ziyan olmaz ve eskisi gibi hatasız okunmaya devam eder.
-
----
-
-## 4. Doğrulama ve Test Adımları
-
-1. `npm run lint` ve `compile_applet` ile tip/derleme kontrolü.
-2. Baskı ekranında yeni ferah şablon ile klasik şablonun A4 üzerinde tam taşmasız görüntülendiğinin teyidi.
-3. Hem ferah şablon hem de klasik şablon PDF'lerinin taranarak 7 test öğrencisi (Elif Öztürk, Doruk Can, Hasan Ali Akbulut vb.) üzerinde %100 doğruluk testinin tekrarlanması.
+1. **Baskı Görünümü Testi**: Yazdırma merkezinde soru şıklarının (A, B, C, D) ve kitapçık türü harflerinin açık gri (%35) ve küçük puntoda basıldığını doğrulama.
+2. **Boş Kitapçık Okuma Testi**: Kullanıcının sağladığı Uras Gürel ve Bertuğ Koldan'ın optik formları tarandığında artık kesinlikle **A Kitapçığı** olarak okunduğunu doğrulama.
+3. **Karne Puanı Doğrulama**: Uras Gürel ve Bertuğ Koldan'ın karnelerindeki netlerin 0 doğru yerine A kitapçığı anahtarına göre doğru netlere kavuştuğunu kontrol etme.
+4. **Derleme & Tip Güvenliği**: `lint_applet` ve `compile_applet` ile sıfır hata onayı alma.

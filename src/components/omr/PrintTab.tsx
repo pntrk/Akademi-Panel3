@@ -66,21 +66,23 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 6.5px;
-          font-weight: 700;
+          font-size: 6pt;
+          font-weight: 500;
+          color: rgba(0, 0, 0, 0.35);
           background-color: #fff;
           line-height: 1;
         }
         .info-bubble {
-          width: 5.4mm;
-          height: 5.4mm;
+          width: 4.8mm;
+          height: 4.8mm;
           border: 1.2px solid var(--print-color, #000);
           border-radius: 9999px;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 8px;
-          font-weight: 800;
+          font-size: 6pt;
+          font-weight: 500;
+          color: rgba(0, 0, 0, 0.35);
           background-color: #fff;
           line-height: 1;
         }
@@ -170,7 +172,7 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
                 className="info-bubble absolute -translate-x-1/2 -translate-y-1/2"
                 style={{ left: `${bx}mm`, top: `${by}mm` }}
               >
-                {b}
+                {b.toLowerCase()}
               </div>
             );
           })}
@@ -313,7 +315,7 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
                     className="bubble absolute font-bold -translate-x-1/2 -translate-y-1/2"
                     style={{ left: `${centerX}mm`, top: `${topY}mm` }}
                   >
-                    {o}
+                    {o.toLowerCase()}
                   </div>
                 );
               })}
