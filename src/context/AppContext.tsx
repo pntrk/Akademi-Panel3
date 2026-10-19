@@ -39,7 +39,8 @@ import {
   fetchSingleExamResultPartition,
   fetchAllExamResultsPartitions,
   fetchSingleArenaMonthlyPartition,
-  fetchAllArenaMonthlyPartitions
+  fetchAllArenaMonthlyPartitions,
+  isDrivePreApproved
 } from '../lib/firebase';
 import { 
   subscribeToNotifications, 
@@ -931,19 +932,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     }
   };
 
-  const downloadLatestFromDrive = async (): Promise<{ success: boolean; studentCount?: number; examCount?: number; fileName?: string; error?: string }> => {
+  const downloadLatestFromDrive = async (silentOnly = false): Promise<{ success: boolean; studentCount?: number; examCount?: number; fileName?: string; error?: string }> => {
     try {
       let token = getCachedAccessToken();
       if (!token) {
-        token = await connectGoogleDrive(false, true);
-      }
-      if (!token) {
-        return { success: false, error: 'Google Drive oturumu açılamadı. Lütfen giriş yapın.' };
+        token = await connectGoogleDrive(silentOnly || userRole === 'teacher', false);
       }
 
       // 1. ABSOLUTE TOP PRIORITY: If fixed / locked canonical Drive file exists, load directly from this fixed file!
       const lockedId = getLiveMasterFileId() || stateRef.current.canonicalDriveFileId || DEFAULT_CANONICAL_DRIVE_FILE_ID;
-      if (lockedId) {
+      if (token && lockedId) {
         try {
           const rawData = await downloadBackupFromGoogleDrive(lockedId);
           if (rawData) {
@@ -985,84 +983,133 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             }
           }
         } catch (directErr) {
-          console.warn('Sabit kilitli Drive dosyası indirilemedi, yedekler aranıyor:', directErr);
+          console.warn('Sabit kilitli Drive dosyası token ile indirilemedi, genel yayın ve önbellek deneniyor:', directErr);
         }
       }
 
-      // 2. Secondary: Download latest dated backup
-      const latestRes = await fetchLatestDriveBackup(token);
-      if (latestRes.success && latestRes.data) {
-        const safeData = sanitizeSchoolState(latestRes.data);
-        const studentCount = safeData.students?.length || 0;
-        const examCount = safeData.exams?.length || 0;
-        const fileName = latestRes.fileName || LIVE_MASTER_FILE_NAME;
-
-        setState(safeData);
-        stateRef.current = safeData;
-        setLastDataSource('drive');
-        setActiveMasterFileName(fileName);
-
+      // 2. Secondary: If token available, try latest dated backup
+      if (token) {
         try {
-          localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
-          lastSavedPayloadRef.current = JSON.stringify(safeData);
+          const latestRes = await fetchLatestDriveBackup(token);
+          if (latestRes.success && latestRes.data) {
+            const safeData = sanitizeSchoolState(latestRes.data);
+            const studentCount = safeData.students?.length || 0;
+            const examCount = safeData.exams?.length || 0;
+            const fileName = latestRes.fileName || LIVE_MASTER_FILE_NAME;
+
+            setState(safeData);
+            stateRef.current = safeData;
+            setLastDataSource('drive');
+            setActiveMasterFileName(fileName);
+
+            try {
+              localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+              lastSavedPayloadRef.current = JSON.stringify(safeData);
+            } catch (e) {}
+
+            recordDriveSyncTimestamps(latestRes.modifiedTime || new Date().toISOString());
+
+            hasUnsavedLocalEditsRef.current = false;
+            setHasPendingChanges(false);
+            setPendingSyncCount(0);
+
+            return {
+              success: true,
+              studentCount,
+              examCount,
+              fileName
+            };
+          }
+        } catch (backupErr) {
+          console.warn('Yedek listesi tarama hatası:', backupErr);
+        }
+      }
+
+      // 3. Fallback: Broadcast / Public Proxy Fetcher (Requires NO token, seamless for teachers)
+      if (lockedId) {
+        try {
+          const broadcastRes = await fetchTeacherBroadcastData(lockedId);
+          if (broadcastRes.success && broadcastRes.data) {
+            const safeData = sanitizeSchoolState(broadcastRes.data);
+            const studentCount = safeData.students?.length || 0;
+            const examCount = safeData.exams?.length || 0;
+            const fileName = LIVE_MASTER_FILE_NAME;
+
+            setState(safeData);
+            stateRef.current = safeData;
+            setLastDataSource('drive');
+            setActiveMasterFileName(fileName);
+
+            try {
+              localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+              lastSavedPayloadRef.current = JSON.stringify(safeData);
+            } catch (e) {}
+
+            recordDriveSyncTimestamps(broadcastRes.publishedDate || new Date().toISOString());
+
+            hasUnsavedLocalEditsRef.current = false;
+            setHasPendingChanges(false);
+            setPendingSyncCount(0);
+
+            const cleanEmail = (user?.email || '').trim().toLowerCase();
+            const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+            setUserRole(newRole);
+            setCachedAuthorizedRole(cleanEmail, newRole);
+
+            return {
+              success: true,
+              studentCount,
+              examCount,
+              fileName
+            };
+          }
+        } catch (bcErr) {
+          console.warn('Teacher broadcast fetch fallback notice:', bcErr);
+        }
+      }
+
+      // 4. Offline Fallback: Serve directly from local cached state
+      const savedLocal = localStorage.getItem('okulYonetimState');
+      if (savedLocal) {
+        try {
+          const parsed = JSON.parse(savedLocal);
+          if (parsed && (parsed.students || parsed.exams)) {
+            const safeData = sanitizeSchoolState(parsed);
+            setState(safeData);
+            stateRef.current = safeData;
+            setLastDataSource('local');
+            return {
+              success: true,
+              studentCount: safeData.students?.length || 0,
+              examCount: safeData.exams?.length || 0,
+              fileName: 'Yerel Kütük Önbelleği (Çevrimdışı)'
+            };
+          }
         } catch (e) {}
-
-        recordDriveSyncTimestamps(latestRes.modifiedTime || new Date().toISOString());
-
-        hasUnsavedLocalEditsRef.current = false;
-        setHasPendingChanges(false);
-        setPendingSyncCount(0);
-
-        return {
-          success: true,
-          studentCount,
-          examCount,
-          fileName
-        };
       }
 
-      // 2. Fallback: Find canonical file
-      const file = await findLiveMasterDriveFile(token);
-      if (!file?.id) {
-        return { success: false, error: latestRes.error || 'Google Drive üzerinde geçerli bir kütük dosyası bulunamadı.' };
+      return { success: false, error: 'Google Drive kütüğü indirilemedi ve yerel önbellek bulunamadı.' };
+    } catch (e: any) {
+      // Emergency offline fallback
+      const savedLocal = localStorage.getItem('okulYonetimState');
+      if (savedLocal) {
+        try {
+          const parsed = JSON.parse(savedLocal);
+          if (parsed && (parsed.students || parsed.exams)) {
+            const safeData = sanitizeSchoolState(parsed);
+            setState(safeData);
+            stateRef.current = safeData;
+            setLastDataSource('local');
+            return {
+              success: true,
+              studentCount: safeData.students?.length || 0,
+              examCount: safeData.exams?.length || 0,
+              fileName: 'Yerel Kütük Önbelleği (Çevrimdışı)'
+            };
+          }
+        } catch (err) {}
       }
-
-      const rawData = await downloadBackupFromGoogleDrive(file.id);
-      const targetData = rawData.data || rawData;
-      if (!targetData || (!Array.isArray(targetData.students) && !Array.isArray(targetData.exams))) {
-        return { success: false, error: 'İndirilen dosya geçerli okul verisi içermiyor.' };
-      }
-
-      const safeData = sanitizeSchoolState(targetData);
-      const studentCount = safeData.students?.length || 0;
-      const examCount = safeData.exams?.length || 0;
-      const fileName = file.name || LIVE_MASTER_FILE_NAME;
-
-      setState(safeData);
-      stateRef.current = safeData;
-      setLastDataSource('drive');
-      setActiveMasterFileName(fileName);
-
-      try {
-        localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
-        lastSavedPayloadRef.current = JSON.stringify(safeData);
-      } catch (e) {}
-
-      recordDriveSyncTimestamps(file.modifiedTime || new Date().toISOString());
-
-      hasUnsavedLocalEditsRef.current = false;
-      setHasPendingChanges(false);
-      setPendingSyncCount(0);
-
-      return {
-        success: true,
-        studentCount,
-        examCount,
-        fileName
-      };
-    } catch (err: any) {
-      console.warn('Manual download from drive error:', err);
-      return { success: false, error: err?.message || 'Google Drive indirme işlemi başarısız oldu.' };
+      return { success: false, error: e?.message || 'Google Drive indirme hatası' };
     }
   };
 
@@ -1298,7 +1345,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           setSyncErrorMessage(null);
         });
     } else {
-      setDriveStartupStatusText('Google Drive üzerindeki canlı kütük taranıyor...');
+      setDriveStartupStatusText('Canlı kütük verileri arka planda taranıyor...');
       fetchTeacherDataNow()
         .then((res) => {
           if (res && res.success) {
@@ -1311,10 +1358,29 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             setSyncStatus('synced');
             setSyncErrorMessage(null);
           } else {
+            // Load local cache immediately so teachers are never blocked
+            const savedLocal = localStorage.getItem('okulYonetimState');
+            if (savedLocal) {
+              try {
+                const parsed = JSON.parse(savedLocal);
+                if (parsed && (parsed.students || parsed.exams)) {
+                  const safeData = sanitizeSchoolState(parsed);
+                  stateRef.current = safeData;
+                  setState(safeData);
+                  setLastDataSource('local');
+                }
+              } catch (e) {}
+            }
+
             isInitialCloudHydrationDoneRef.current = true;
             setIsInitialHydrating(false);
             setLoading(false);
-            if (initialComputedRole === 'admin') {
+            const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+            setUserRole(resolvedRole);
+            setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
+
+            // Never block teachers with drive auth dialog
+            if (initialComputedRole === 'admin' && !isDrivePreApproved(cleanUserEmail)) {
               setIsWaitingForDriveAuth(true);
               setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü indirmek için yetkilendirme bekleniyor.');
             } else {
@@ -1323,10 +1389,27 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           }
         })
         .catch(() => {
+          const savedLocal = localStorage.getItem('okulYonetimState');
+          if (savedLocal) {
+            try {
+              const parsed = JSON.parse(savedLocal);
+              if (parsed && (parsed.students || parsed.exams)) {
+                const safeData = sanitizeSchoolState(parsed);
+                stateRef.current = safeData;
+                setState(safeData);
+                setLastDataSource('local');
+              }
+            } catch (e) {}
+          }
+
           isInitialCloudHydrationDoneRef.current = true;
           setIsInitialHydrating(false);
           setLoading(false);
-          if (initialComputedRole === 'admin') {
+          const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+          setUserRole(resolvedRole);
+          setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
+
+          if (initialComputedRole === 'admin' && !isDrivePreApproved(cleanUserEmail)) {
             setIsWaitingForDriveAuth(true);
             setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü indirmek için yetkilendirme bekleniyor.');
           } else {
@@ -1747,7 +1830,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
   const fetchTeacherDataNow = async (): Promise<{ success: boolean; data?: any; error?: string }> => {
     try {
       // 1. Direct Drive Download with active token (same as admin)
-      const driveRes = await downloadLatestFromDrive();
+      const driveRes = await downloadLatestFromDrive(true);
       if (driveRes.success) {
         return { success: true, data: stateRef.current };
       }
@@ -1774,13 +1857,43 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
 
         return { success: true, data: safeData };
       }
+
+      // 3. Resilient Offline Fallback (Local cache)
+      const savedLocal = localStorage.getItem('okulYonetimState');
+      if (savedLocal) {
+        try {
+          const parsed = JSON.parse(savedLocal);
+          if (parsed && (parsed.students || parsed.exams)) {
+            const safeData = sanitizeSchoolState(parsed);
+            setState(safeData);
+            stateRef.current = safeData;
+            setLastDataSource('local');
+            return { success: true, data: safeData };
+          }
+        } catch (err) {}
+      }
+
       return { success: false, error: driveRes.error || res.error || 'Yayınlanan veri bulunamadı' };
     } catch (e: any) {
+      // Emergency Offline Fallback
+      const savedLocal = localStorage.getItem('okulYonetimState');
+      if (savedLocal) {
+        try {
+          const parsed = JSON.parse(savedLocal);
+          if (parsed && (parsed.students || parsed.exams)) {
+            const safeData = sanitizeSchoolState(parsed);
+            setState(safeData);
+            stateRef.current = safeData;
+            setLastDataSource('local');
+            return { success: true, data: safeData };
+          }
+        } catch (err) {}
+      }
       return { success: false, error: e?.message || 'Veri çekilemedi' };
     }
   };
 
-  // Google Drive Live Auto-Sync for Both Admin and Teachers: Polls remote master file every 30s & on window focus
+  // Google Drive Live Auto-Sync for Both Admin and Teachers: Polls remote master file every 5 minutes & on window focus
   useEffect(() => {
     if (userRole !== 'admin' && userRole !== 'teacher') return;
 
@@ -1788,27 +1901,56 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       // Don't overwrite if not hydrated yet or if admin has local unsaved edits
       if (!isInitialCloudHydrationDoneRef.current) return;
       if (userRole === 'admin' && hasUnsavedLocalEditsRef.current) return;
-      if (!getCachedAccessToken()) return;
+
+      const token = getCachedAccessToken();
 
       try {
-        const updateCheck = await fetchLiveMasterFromGoogleDriveIfNewer(lastKnownDriveModifiedTimeRef.current);
-        if (updateCheck.hasUpdate && updateCheck.data) {
-          lastKnownDriveModifiedTimeRef.current = updateCheck.modifiedTime || null;
-          const safeData = sanitizeSchoolState(updateCheck.data);
-          stateRef.current = safeData;
-          setState(safeData);
-          setLastDataSource('drive');
-          try {
-            localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
-          } catch {}
-          recordDriveSyncTimestamps(updateCheck.modifiedTime || new Date().toISOString());
+        if (token) {
+          const updateCheck = await fetchLiveMasterFromGoogleDriveIfNewer(lastKnownDriveModifiedTimeRef.current);
+          if (updateCheck.hasUpdate && updateCheck.data) {
+            lastKnownDriveModifiedTimeRef.current = updateCheck.modifiedTime || null;
+            const safeData = sanitizeSchoolState(updateCheck.data);
+            stateRef.current = safeData;
+            setState(safeData);
+            setLastDataSource('drive');
+            try {
+              localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+            } catch {}
+            recordDriveSyncTimestamps(updateCheck.modifiedTime || new Date().toISOString());
 
-          const cleanEmail = (user?.email || '').trim().toLowerCase();
-          const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
-          setUserRole(newRole);
-          setCachedAuthorizedRole(cleanEmail, newRole);
+            const cleanEmail = (user?.email || '').trim().toLowerCase();
+            const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+            setUserRole(newRole);
+            setCachedAuthorizedRole(cleanEmail, newRole);
+          }
+        } else {
+          // Silent background sync for teachers without direct Drive token
+          const targetId = stateRef.current.canonicalDriveFileId || getLiveMasterFileId() || DEFAULT_CANONICAL_DRIVE_FILE_ID;
+          const broadcastRes = await fetchTeacherBroadcastData(targetId);
+          if (broadcastRes.success && broadcastRes.data) {
+            const pubDate = broadcastRes.publishedDate || broadcastRes.data.lastPublishedAt;
+            const isNewer = !lastKnownDriveModifiedTimeRef.current || (pubDate && new Date(pubDate).getTime() > new Date(lastKnownDriveModifiedTimeRef.current).getTime());
+            if (isNewer) {
+              lastKnownDriveModifiedTimeRef.current = pubDate || new Date().toISOString();
+              const safeData = sanitizeSchoolState(broadcastRes.data);
+              stateRef.current = safeData;
+              setState(safeData);
+              setLastDataSource('drive');
+              try {
+                localStorage.setItem('okulYonetimState', JSON.stringify(safeData));
+              } catch {}
+              recordDriveSyncTimestamps(pubDate || new Date().toISOString());
+
+              const cleanEmail = (user?.email || '').trim().toLowerCase();
+              const newRole = evaluateUserRole(cleanEmail, safeData.admins, safeData.teachers);
+              setUserRole(newRole);
+              setCachedAuthorizedRole(cleanEmail, newRole);
+            }
+          }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Background 5-min drive sync notice:', e);
+      }
     };
 
     // Emergency auto-sync to Google Drive when tab loses focus, minimizes, or user leaves page (ADMIN ONLY)
@@ -1826,7 +1968,8 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
       }
     };
 
-    const driveInterval = setInterval(checkDriveRemoteUpdate, 30000);
+    // 5-minute background auto-sync cycle (300,000 ms)
+    const driveInterval = setInterval(checkDriveRemoteUpdate, 300000);
     window.addEventListener('focus', checkDriveRemoteUpdate);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleEmergencyDriveFlush);

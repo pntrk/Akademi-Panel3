@@ -1,6 +1,6 @@
 {
-  "summary": "Sınav optiklerinde işaretlenmeyen veya belirsiz kitapçık türünün varsayılan olarak A kitapçığı kabul edilmesi, baloncuk içi harflerin silik açık gri mürekkeple (%35 ton) ve 6 punto olarak basılması, ve Uras Gürel ile Bertuğ Koldan gibi mevcut hatalı okunan sonuçların A kitapçığıyla otomatik yeniden puanlanması için mimari ve teknik uygulama planı.",
-  "updatedAt": "2026-10-16T11:39:21.307455589Z",
+  "summary": "Implementation plan for persistent background authentication and 5-minute silent Google Drive master roster sync for teacher mobile devices.",
+  "updatedAt": "2026-10-19T11:07:41.180550953Z",
   "requestFeedback": true,
   "userFacing": true
 }

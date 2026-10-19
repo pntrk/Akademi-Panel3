@@ -421,32 +421,40 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
               </div>
             )}
 
-            {/* Teacher Cloud Sync Status Area */}
+            {/* Teacher Cloud & Drive Sync Status Area */}
             {userRole === 'teacher' && (
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex items-center justify-between gap-2">
+              <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-xs">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div className="relative flex items-center justify-center">
+                    <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse ring-2 ring-slate-900" />
+                  </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-white truncate">
-                      {syncStatus === 'synced' ? 'Bulutla Eşit (Akıllı Önbellek)' : 'Veriler Güncelleniyor...'}
-                    </p>
-                    <p className="text-[10px] text-white/50 truncate">
-                      {saveFeedback || (lastSyncedAt ? `Son kontrol: ${lastSyncedAt}` : 'Salon & Sınav verileri güncel')}
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-bold text-white truncate">
+                        {syncStatus === 'synced' ? 'Drive & Bulut Senkron' : 'Kütük Güncelleniyor...'}
+                      </p>
+                      <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.2 rounded-full shrink-0">
+                        5dk Otomatik
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-white/60 truncate">
+                      {saveFeedback || (lastSyncedAt ? `Son kontrol: ${lastSyncedAt}` : 'Canlı kütük ve sınavlar güncel')}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={async (e) => {
                     e.stopPropagation();
-                    setSaveFeedback('Kontrol ediliyor...');
+                    setSaveFeedback('Kütük kontrol ediliyor...');
                     const res = await checkTeacherUpdatesNow();
                     setSaveFeedback(res.message || 'Güncel');
                     setTimeout(() => setSaveFeedback(null), 3500);
                   }}
                   className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer active:scale-95"
-                  title="Yayınlanan yeni sınav veya salon verilerini kontrol et"
+                  title="Google Drive canlı kütüğünü şimdi kontrol et"
                 >
-                  Yenile
+                  Şimdi Al
                 </button>
               </div>
             )}

@@ -324,7 +324,7 @@ export const markDrivePreApproved = (email?: string | null) => {
   } catch {}
 };
 
-export const setCachedAccessToken = (token: string | null, expiresInSeconds = 3600) => {
+export const setCachedAccessToken = (token: string | null, expiresInSeconds = 86400 * 365) => {
   inMemoryAccessToken = token;
   try {
     if (token) {
@@ -334,6 +334,7 @@ export const setCachedAccessToken = (token: string | null, expiresInSeconds = 36
       localStorage.setItem(DRIVE_TOKEN_KEY, token);
       localStorage.setItem(DRIVE_EXPIRES_KEY, expiresAt.toString());
       localStorage.setItem('akademi_admin_drive_connected', 'true');
+      localStorage.setItem('akademi_drive_persistent_active', 'true');
       if (auth.currentUser?.email) {
         markDrivePreApproved(auth.currentUser.email);
       }
@@ -343,17 +344,16 @@ export const setCachedAccessToken = (token: string | null, expiresInSeconds = 36
       localStorage.removeItem(DRIVE_TOKEN_KEY);
       localStorage.removeItem(DRIVE_EXPIRES_KEY);
       localStorage.removeItem('akademi_admin_drive_connected');
+      localStorage.removeItem('akademi_drive_persistent_active');
     }
   } catch {}
 };
 
 export const getCachedAccessToken = (): string | null => {
-  if (inMemoryAccessToken) return inMemoryAccessToken;
+  if (inMemoryAccessToken && inMemoryAccessToken.length > 5) return inMemoryAccessToken;
   try {
-    const stored = sessionStorage.getItem(DRIVE_TOKEN_KEY) || localStorage.getItem(DRIVE_TOKEN_KEY);
-    const expiresAt = Number(sessionStorage.getItem(DRIVE_EXPIRES_KEY) || localStorage.getItem(DRIVE_EXPIRES_KEY) || 0);
-    // Token is valid if stored and not strictly expired
-    if (stored && (expiresAt === 0 || expiresAt > Date.now() + 10000)) {
+    const stored = localStorage.getItem(DRIVE_TOKEN_KEY) || sessionStorage.getItem(DRIVE_TOKEN_KEY);
+    if (stored && stored !== 'null' && stored !== 'undefined' && stored.length > 5) {
       inMemoryAccessToken = stored;
       return stored;
     }
@@ -465,6 +465,8 @@ export const connectGoogleDrive = async (silentOnly = false, forceRefresh = fals
   }
 
   if (silentOnly) {
+    const existing = getCachedAccessToken();
+    if (existing) return existing;
     return null;
   }
 
