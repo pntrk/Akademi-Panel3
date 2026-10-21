@@ -2092,24 +2092,24 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
     if (!ctx) return;
     ctx.clearRect(0, 0, overCvs.width, overCvs.height);
 
-    // 1. Dört köşe kırmızı kalibrasyon halkaları ve nişangah
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 2;
+    // 1. Dört köşe yüksek belirginlikli yeşil kalibrasyon halkaları ve nişangah
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 3;
     Object.values(pts).forEach(p => {
-      ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, 2 * Math.PI); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(p.x - 35, p.y); ctx.lineTo(p.x + 35, p.y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(p.x, p.y - 35); ctx.lineTo(p.x, p.y + 35); ctx.stroke();
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.25)';
-      ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, 2 * Math.PI); ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 28, 0, 2 * Math.PI); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p.x - 38, p.y); ctx.lineTo(p.x + 38, p.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p.x, p.y - 38); ctx.lineTo(p.x, p.y + 38); ctx.stroke();
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 28, 0, 2 * Math.PI); ctx.fill();
     });
 
     // 2. Kitapçık Türü Baloncukları (A, B, C, D)
-    ctx.strokeStyle = 'rgba(14, 165, 233, 0.85)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(14, 165, 233, 0.95)';
+    ctx.lineWidth = 2;
     const bookletPositions = getBookletBubblePositions(omrToUse);
     bookletPositions.forEach(bp => {
       const mapped = applyHomography(bp.x, bp.y, H);
-      ctx.strokeRect(mapped.x - 6, mapped.y - 6, 13, 13);
+      ctx.strokeRect(mapped.x - 7, mapped.y - 7, 15, 15);
     });
 
     // 3. QR Kod Konum Çerçevesi
@@ -2118,37 +2118,48 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
     const qtr = applyHomography(qrBox.x + qrBox.w, qrBox.y, H);
     const qbr = applyHomography(qrBox.x + qrBox.w, qrBox.y + qrBox.h, H);
     const qbl = applyHomography(qrBox.x, qrBox.y + qrBox.h, H);
-    ctx.strokeStyle = scannedQrRef.current ? 'rgba(16, 185, 129, 0.95)' : 'rgba(245, 158, 11, 0.7)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = scannedQrRef.current ? '#10b981' : 'rgba(245, 158, 11, 0.9)';
+    ctx.lineWidth = 3.5;
+    ctx.fillStyle = scannedQrRef.current ? 'rgba(16, 185, 129, 0.18)' : 'rgba(245, 158, 11, 0.1)';
     ctx.beginPath();
     ctx.moveTo(qtl.x, qtl.y);
     ctx.lineTo(qtr.x, qtr.y);
     ctx.lineTo(qbr.x, qbr.y);
     ctx.lineTo(qbl.x, qbl.y);
     ctx.closePath();
+    ctx.fill();
     ctx.stroke();
 
-    // 4. İlgili Sınavın Soru ve Şık Baloncukları (layoutItems)
+    // 4. İlgili Sınavın Soru ve Şık Baloncuk Ağları (layoutItems)
     const { items: layoutItems } = getQuestionsLayout(examToUse, omrToUse);
-    ctx.strokeStyle = 'rgba(0, 150, 255, 0.7)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.75)';
+    ctx.lineWidth = 1.2;
     layoutItems.forEach((item) => {
       if (item.type === 'question') {
         const bubbles = item.bubbleCenters || [];
         bubbles.forEach((bc) => {
           const mapped = applyHomography(bc.x, bc.y, H);
-          ctx.strokeRect(mapped.x - 5, mapped.y - 5, 11, 11);
+          ctx.strokeRect(mapped.x - 5.5, mapped.y - 5.5, 12, 12);
         });
       }
     });
 
-    // 5. İşaretlenen Lazer Noktaları
+    // 5. Belirgin Şekilde İşaretlenen Öğrenci Şık Noktaları (Görsel Süreç Takibi)
     if (marks && marks.length > 0) {
       marks.forEach(m => {
+        // Dış yeşil ışıma halkası
         ctx.beginPath();
-        ctx.arc(m.x, m.y, m.type === 'info' ? 3.5 : 4.5, 0, 2 * Math.PI);
-        ctx.strokeStyle = m.type === 'info' ? 'cyan' : 'magenta';
-        ctx.lineWidth = 3;
+        ctx.arc(m.x, m.y, 8, 0, 2 * Math.PI);
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.35)';
+        ctx.fill();
+
+        // İç dolu belirgin yeşil daire
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = m.type === 'info' ? '#06b6d4' : '#10b981';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
         ctx.stroke();
       });
     }
@@ -2540,7 +2551,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
   ];
 
   return (
-    <div className="bg-slate-900 rounded-none md:rounded-2xl shadow-xl border-0 md:border border-slate-800 overflow-hidden h-full flex flex-col text-white relative">
+    <div className="bg-slate-950 md:bg-slate-900 rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-800/80 overflow-hidden h-full flex flex-col text-white relative">
       {/* Yeşil Başarı Kartı (Öğrenci Adı, No, Kitapçık ve Net) */}
       {scanSuccessCard && (
         <div
@@ -2606,19 +2617,19 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
       )}
 
       {/* Top Header Bar */}
-      <div className="bg-slate-900/90 backdrop-blur-md px-2.5 py-2 sm:px-4 sm:py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 border-b border-slate-800 shrink-0">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-900/30 shrink-0">
+      <div className="bg-slate-900/95 backdrop-blur-md px-3 py-2 sm:px-4 sm:py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 border-b border-slate-800/80 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1 sm:flex-initial">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-400/30 shrink-0">
             <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              <h3 className="text-xs sm:text-base font-bold tracking-tight text-white truncate">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-xs sm:text-sm md:text-base font-black tracking-tight text-white truncate">
                 Akıllı Optik Tarayıcı & OMR
               </h3>
-              <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-800/90 border border-emerald-500/40 rounded-lg px-1.5 sm:px-2 py-0.5 max-w-[170px] xs:max-w-[220px] sm:max-w-none">
+              <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-950/80 border border-emerald-500/30 rounded-lg px-2 py-0.5 max-w-[190px] xs:max-w-[240px] sm:max-w-none shadow-xs">
                 <span className="text-[10px] sm:text-[11px] font-bold text-slate-300 shrink-0 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-emerald-400" />
+                  <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
                   <span className="hidden xs:inline">Şablon:</span>
                 </span>
                 <select
@@ -2633,7 +2644,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                       handleExamChange(val);
                     }
                   }}
-                  className="bg-slate-900 text-emerald-400 font-bold text-[11px] sm:text-xs rounded border border-slate-700 px-1 sm:px-2 py-0.5 outline-none cursor-pointer max-w-[95px] xs:max-w-[130px] sm:max-w-xs truncate"
+                  className="bg-transparent text-emerald-400 font-bold text-[11px] sm:text-xs rounded outline-none cursor-pointer max-w-[105px] xs:max-w-[140px] sm:max-w-xs truncate"
                   title="Okutulacak Kurum İçi Sınav Şablonu"
                 >
                   <option value="auto">⚡ Otomatik (QR)</option>
@@ -2654,7 +2665,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                   <button
                     type="button"
                     onClick={() => setLockToSelectedExam(prev => !prev)}
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer shrink-0 ${
+                    className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-all cursor-pointer shrink-0 ${
                       lockToSelectedExam 
                         ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
                         : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
@@ -2676,7 +2687,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             <button
               type="button"
               onClick={() => saveNow().catch(() => {})}
-              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-[11px] sm:text-xs font-bold transition-all border border-amber-500/40 cursor-pointer shadow-xs animate-pulse whitespace-nowrap"
+              className="flex items-center gap-1 px-2.5 py-1 sm:py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-[11px] sm:text-xs font-bold transition-all border border-amber-500/40 cursor-pointer shadow-xs animate-pulse whitespace-nowrap"
               title="Tampondaki formları hemen buluta aktarmak için tıklayın"
             >
               <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
@@ -2708,10 +2719,10 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                   (window as any).__keysPrintSetTab('print');
                 }
               }}
-              className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white rounded-xl text-[11px] sm:text-xs font-bold transition-all border border-purple-600/50 cursor-pointer shadow-xs whitespace-nowrap active:scale-95"
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white rounded-xl text-[11px] sm:text-xs font-bold transition-all border border-purple-500/40 cursor-pointer shadow-sm whitespace-nowrap active:scale-95"
               title="Karekodlu Optik Form Baskı ve Canlı Önizleme Merkezine Git"
             >
-              <Printer className="w-3.5 h-3.5 shrink-0" />
+              <Printer className="w-3.5 h-3.5 shrink-0 text-purple-300" />
               <span className="hidden xs:inline">Form Yazdır</span>
               <span className="xs:hidden">Yazdır</span>
             </button>
@@ -2729,7 +2740,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 (window as any).__navigateToTab('results');
               }
             }}
-            className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-emerald-950/80 border border-slate-700/80 hover:border-emerald-500/50 rounded-xl text-[11px] sm:text-xs font-semibold text-slate-300 hover:text-emerald-300 transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+            className="flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-emerald-950/80 border border-slate-700/80 hover:border-emerald-500/50 rounded-xl text-[11px] sm:text-xs font-semibold text-slate-300 hover:text-emerald-300 transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
             title="Okunan Deneme Sınavının Sonuç ve Analiz Ekranına Git"
           >
             <FileCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -2745,7 +2756,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 setBatchFiles([]);
                 setStatus("");
               }}
-              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-[11px] sm:text-xs transition-colors border border-slate-700 cursor-pointer font-medium whitespace-nowrap"
+              className="px-2.5 py-1 sm:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-[11px] sm:text-xs transition-colors border border-slate-700 cursor-pointer font-medium whitespace-nowrap active:scale-95"
               title="Formu Temizle"
             >
               Temizle
@@ -2775,21 +2786,21 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
       {/* Kurum İçi Sınavlar İçin Sekme Seçici (Canlı Kamera vs Sekonic SR-55D TXT) */}
       {isInternalExam(exam) && (
-        <div className="bg-slate-900 border-b border-slate-800 px-2.5 sm:px-3.5 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
-          <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+        <div className="bg-slate-900/90 border-b border-slate-800/80 px-2.5 sm:px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 backdrop-blur-xs">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto p-1 bg-slate-950/90 rounded-2xl border border-slate-800/90 shadow-inner">
             <button
               type="button"
               onClick={() => setScanViewMode('scanner')}
-              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
+              className={`flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
                 scanViewMode === 'scanner'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/40 ring-1 ring-emerald-400/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
               }`}
             >
               <Camera className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">
-                <span className="sm:hidden">Kamera & PDF</span>
-                <span className="hidden sm:inline">📷 Canlı Kamera & Çoklu PDF</span>
+                <span className="sm:hidden">Akıllı Karekod</span>
+                <span className="hidden sm:inline">📷 Akıllı Karekod</span>
               </span>
             </button>
 
@@ -2799,33 +2810,19 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 if (isCameraActive) stopCamera();
                 setScanViewMode('sekonic');
               }}
-              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
+              className={`flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
                 scanViewMode === 'sekonic'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-950/40 ring-1 ring-indigo-400/50'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
               }`}
             >
               <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span className="truncate">
-                <span className="sm:hidden">TXT Yükleme</span>
-                <span className="hidden sm:inline">⚡ TXT Veri Yükleme</span>
+                <span className="sm:hidden">Optik Okuyucu Verisi</span>
+                <span className="hidden sm:inline">⚡ Optik Okuyucu Verisi</span>
               </span>
             </button>
           </div>
-
-          {scanViewMode === 'scanner' && (
-            <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto bg-slate-950/50 sm:bg-transparent px-2.5 py-1 sm:p-0 rounded-lg border sm:border-0 border-slate-800/80">
-              <span className="text-[11px] text-slate-400 font-medium shrink-0">Optik Form:</span>
-              <select
-                value={selectedTemplate}
-                onChange={(e) => setSelectedTemplate(e.target.value as OpticalTemplateType)}
-                className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold outline-none cursor-pointer focus:border-emerald-500 w-full sm:w-auto truncate"
-              >
-                <option value="standard_qr">Akıllı Karekodlu Form (Varsayılan)</option>
-                <option value="ertem_840">Ertem Optik-840 (Zamanlama Çubuklu)</option>
-              </select>
-            </div>
-          )}
         </div>
       )}
 
@@ -2880,156 +2877,58 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           {/* Main Layout Area */}
           <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden relative bg-slate-950">
         {/* Left Control Panel */}
-        <div className="w-full lg:w-96 flex flex-col gap-3 p-3 sm:p-4 lg:border-r border-slate-800 shrink-0 overflow-y-auto custom-scrollbar pb-24 lg:pb-4">
-          {/* Sınav ve OMR Şablonu Kontrol Kartı */}
-          <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-700/80 space-y-2.5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-slate-200 flex items-center gap-1.5">
-                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Hedef Sınav OMR Şablonu:</span>
-              </label>
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setLockToSelectedExam(prev => !prev)}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer ${
-                    lockToSelectedExam 
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
-                      : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
-                  }`}
-                  title={lockToSelectedExam ? "Şablon kilitli. Yalnızca bu sınavın OMR haritası ve cevap anahtarı kullanılır." : "QR kodundaki sınav bilgisine göre otomatik geçilir."}
-                >
-                  {lockToSelectedExam ? <Lock className="w-3 h-3 text-amber-400" /> : <Unlock className="w-3 h-3 text-slate-400" />}
-                  <span>{lockToSelectedExam ? 'Şablon Kilitli' : 'Otomatik QR'}</span>
-                </button>
-              )}
-            </div>
+        <div className="w-full lg:w-[250px] flex flex-col gap-2.5 p-2.5 sm:p-3 lg:border-r border-slate-800 shrink-0 overflow-y-auto custom-scrollbar pb-24 lg:pb-4">
 
-            <select
-              value={selectedExamId}
-              onChange={(e) => handleExamChange(e.target.value)}
-              disabled={internalExams.length === 0}
-              className="w-full bg-slate-800 text-white font-bold text-xs rounded-lg border border-slate-600 px-2.5 py-2 outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-50"
-            >
-              {internalExams.length === 0 ? (
-                <option value="" disabled>-- Kayıtlı Kurum İçi Sınav Yok --</option>
-              ) : (
-                internalExams.map(e => {
-                  const qCount = e.subjects?.reduce((sum, s) => sum + s.count, 0) || (e.omrMap?.totalQuestions) || (e.keys?.A?.length) || 0;
-                  return (
-                    <option key={e.id} value={e.id}>
-                      {e.name} {qCount > 0 ? `(${qCount} Soru)` : ''}
-                    </option>
-                  );
-                })
-              )}
-            </select>
-
-            <div className="flex items-center justify-between text-[10px] text-slate-300 pt-1.5 border-t border-slate-800/80">
-              <span className="font-medium">
-                {exam.subjects && exam.subjects.length > 0
-                  ? `${exam.subjects.length} Ders • ${totalQ} Soru (${exam.optionsCount || 4} Şık)`
-                  : `${totalQ} Soru`}
-              </span>
-              <span className={exam.keys?.A && exam.keys.A.length > 0 ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
-                {exam.keys?.A && exam.keys.A.length > 0 ? "✅ Anahtar Hazır" : "⚠️ Anahtar Eksik"}
-              </span>
-            </div>
-          </div>
 
           {/* Primary Action Buttons */}
           <div className="space-y-2">
-            {/* Live Camera Button */}
-            <button
-              type="button"
-              onClick={() => startCamera('environment')}
-              disabled={isProcessing}
-              className={`w-full group px-4 py-3.5 sm:py-4 rounded-xl font-bold transition-all text-left flex items-center justify-between shadow-lg cursor-pointer ${
+
+
+            {/* Küçük, Pratik ve İlgi Çekici Dosya Yükleme Butonu */}
+            <label
+              className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer relative overflow-hidden group shadow-lg ${
                 isProcessing
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/40 active:scale-[0.99] border border-emerald-400/30'
+                  ? 'bg-slate-800/80 text-slate-500 border-slate-700 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 text-white border-blue-400/40 hover:border-blue-300 shadow-blue-500/20 active:scale-[0.98] hover:scale-[1.01]'
               }`}
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform">
-                  <Video className="w-5 h-5" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-inner ring-1 ring-white/30">
+                  <Upload className="w-4 h-4 text-white" />
                 </div>
-                <div className="min-w-0">
-                  <div className="text-sm sm:text-base font-bold leading-tight">Canlı Kamerayı Aç</div>
-                  <div className="text-[11px] sm:text-xs text-emerald-100/80 font-normal mt-0.5 truncate">
-                    Otomatik odaklama & anında tarama
+                <div className="text-left min-w-0">
+                  <div className="text-xs font-black text-white flex items-center gap-1.5 truncate">
+                    <span>Dosya Yükle</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-white/20 text-blue-100 font-mono">
+                      PDF/Foto
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-blue-100/90 font-medium truncate">
+                    Görsel, PDF veya Kamera
                   </div>
                 </div>
               </div>
-              <span className="px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-bold text-white shrink-0 transition-colors">
-                Başlat
-              </span>
-            </button>
-
-            {/* File or PDF Upload & Native System Camera */}
-            <div className="grid grid-cols-2 gap-2">
-              <label
-                className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer relative overflow-hidden group shadow-sm ${
-                  isProcessing
-                    ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
-                    : 'bg-gradient-to-b from-blue-900/40 to-slate-900/90 hover:from-blue-900/70 hover:to-slate-800 text-slate-200 border-blue-500/40 hover:border-blue-400 active:scale-[0.98]'
-                }`}
-              >
-                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                  <Upload className="w-4 h-4" />
-                </div>
-                <span className="text-[11px] sm:text-xs font-bold text-white flex items-center gap-1">
-                  Dosya / Çoklu PDF
-                </span>
-                <span className="text-[9px] sm:text-[10px] text-blue-300/80 font-normal">
-                  Görsel veya Çok Sayfalı PDF
-                </span>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/jpeg, image/png, image/jpg, application/pdf"
-                  onChange={handleImageUpload}
-                  disabled={isProcessing}
-                  className="hidden"
-                />
-              </label>
-
-              <label
-                htmlFor="nativeCameraInput"
-                className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
-                  isProcessing
-                    ? 'bg-slate-800 text-slate-500 border-slate-700 pointer-events-none opacity-50'
-                    : 'bg-slate-900/80 hover:bg-slate-800 text-slate-200 border-slate-700/80 hover:border-slate-600 active:scale-[0.98]'
-                }`}
-              >
-                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-1">
-                  <Smartphone className="w-4 h-4" />
-                </div>
-                <span className="text-[11px] sm:text-xs">Cihaz Kamerası</span>
-                <span className="text-[9px] sm:text-[10px] text-slate-400 font-normal">Tek Çekim</span>
-                <input
-                  id="nativeCameraInput"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handleImageUpload}
-                  disabled={isProcessing}
-                  className="hidden"
-                />
-              </label>
-            </div>
+              <input
+                type="file"
+                multiple
+                accept="image/*, application/pdf, .pdf, .jpeg, .jpg, .png, .webp"
+                onChange={handleImageUpload}
+                disabled={isProcessing}
+                className="hidden"
+              />
+            </label>
 
             {/* Auto-save toggle */}
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-900/60 rounded-xl border border-slate-800/80">
-              <label htmlFor="autoSaveToggle" className="text-xs text-slate-300 font-medium cursor-pointer select-none">
-                Tekli fotoğrafları otomatik kaydet
+            <div className="flex items-center justify-between px-2.5 py-1.5 bg-slate-900/60 rounded-lg border border-slate-800/80">
+              <label htmlFor="autoSaveToggle" className="text-[11px] text-slate-300 font-medium cursor-pointer select-none truncate">
+                Fotoğrafları otomatik kaydet
               </label>
               <input
                 type="checkbox"
                 id="autoSaveToggle"
                 checked={autoSaveSingle}
                 onChange={e => setAutoSaveSingle(e.target.checked)}
-                className="w-4 h-4 text-emerald-600 bg-slate-800 border-slate-600 rounded cursor-pointer accent-emerald-500"
+                className="w-3.5 h-3.5 text-emerald-600 bg-slate-800 border-slate-600 rounded cursor-pointer accent-emerald-500 shrink-0 ml-1"
               />
             </div>
           </div>
@@ -3138,15 +3037,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             </div>
           )}
 
-          {/* Quick Guidance Info */}
-          <div className="mt-auto pt-2 border-t border-slate-800/60 text-[11px] text-slate-400 space-y-1">
-            <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> İpuçları
-            </div>
-            <p className="leading-relaxed text-[10px] sm:text-[11px]">
-              Optik formu düz bir zemine koyun ve 4 siyah köşe karesinin vizörde net görünmesini sağlayın. Okunan sonuçlar doğrudan Firestore veritabanına işlenir.
-            </p>
-          </div>
+
         </div>
 
         {/* Right Preview Viewport Area */}
@@ -3154,12 +3045,12 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           {imageLoaded && !isCameraActive ? (
             <div className="relative flex-1 w-full flex flex-col justify-center items-center p-2 sm:p-4 overflow-hidden">
               <div
-                className="relative rounded-lg overflow-hidden border border-slate-700 shadow-2xl bg-white"
+                className="relative rounded-xl overflow-hidden border-2 border-slate-700/80 shadow-2xl bg-white transition-all duration-300"
                 style={{
                   height: '100%',
                   aspectRatio: '210 / 297',
-                  maxHeight: pageThumbnails.length > 0 ? '56vh' : '82vh',
-                  maxWidth: '94vw'
+                  maxHeight: pageThumbnails.length > 0 ? '78vh' : '92vh',
+                  maxWidth: '98vw'
                 }}
               >
                 <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full object-contain bg-white" />
@@ -3178,30 +3069,56 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                   onTouchMove={handlePtrMove}
                   onTouchEnd={handlePtrUp}
                 />
+
+                {/* Live Floating Scan Badge Overlay */}
+                {scanSuccessCard && (
+                  <div className="absolute top-3 right-3 z-20 bg-slate-900/90 backdrop-blur-md border border-emerald-500/50 shadow-2xl rounded-xl p-2.5 max-w-xs text-white animate-in fade-in zoom-in-95 duration-200">
+                    <div className="flex items-center gap-2 mb-1 border-b border-slate-800 pb-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                      <span className="text-xs font-black text-emerald-400 truncate">
+                        {scanSuccessCard.examName || 'Optik Form Okundu'}
+                      </span>
+                    </div>
+                    <div className="space-y-0.5 text-[11px]">
+                      {scanSuccessCard.studentName && (
+                        <div className="font-bold text-slate-100 truncate">
+                          👤 {scanSuccessCard.studentName}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-3 text-slate-300 font-mono">
+                        {scanSuccessCard.studentNo && <span>No: <strong>{scanSuccessCard.studentNo}</strong></span>}
+                        {scanSuccessCard.booklet && <span>Kitapçık: <strong className="text-emerald-300">{scanSuccessCard.booklet}</strong></span>}
+                        {typeof scanSuccessCard.net === 'number' && <span className="text-emerald-400 font-black">Net: {scanSuccessCard.net}</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="mt-1.5 text-center text-[11px] text-slate-400 select-none">
-                Gerekirse kırmızı noktaları parmağınızla siyah köşe karelerine sürükleyebilirsiniz
+              <div className="mt-1.5 text-center text-[11px] text-slate-400 select-none flex items-center justify-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                <span>Optik alanlar önizlemede otomatik olarak hizalanır. Gerekirse köşe noktalarını elle ayarlayabilirsiniz.</span>
               </div>
             </div>
           ) : (
             !isCameraActive && (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-sm">
-                <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-3 shadow-inner">
-                  <Camera className="w-8 h-8 text-slate-600" />
+              <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 text-center max-w-md my-auto animate-in fade-in duration-300">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-900 border border-slate-700/80 flex items-center justify-center text-emerald-400 mb-4 shadow-xl shadow-slate-950/60 ring-1 ring-emerald-500/20 group">
+                  <Camera className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-400 group-hover:scale-110 transition-transform" />
                 </div>
-                <h4 className="text-base font-bold text-slate-200 mb-1">
-                  Taramaya Hazır
+                <h4 className="text-base sm:text-lg font-black text-white mb-1.5 tracking-tight">
+                  Optik Taramaya Hazır
                 </h4>
-                <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  Optik formları okumak için <strong>Canlı Kamerayı Aç</strong> veya optik form görselini/PDF dosyasını yükleyin.
+                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-5 max-w-xs">
+                  Optik formları okutmak için <strong>Canlı Kamerayı Açın</strong> ya da sol panelden görsel/PDF dosyası yükleyin.
                 </p>
                 <button
                   type="button"
                   onClick={() => startCamera('environment')}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition-all cursor-pointer"
+                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center gap-2.5 shadow-xl shadow-emerald-950/60 transition-all cursor-pointer ring-1 ring-emerald-400/40"
                 >
-                  <Video className="w-4 h-4" /> Canlı Kamerayı Başlat
+                  <Video className="w-4 h-4 text-emerald-100" />
+                  <span>Canlı Kamerayı Başlat</span>
                 </button>
               </div>
             )
