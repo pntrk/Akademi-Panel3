@@ -2667,23 +2667,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 )}
               </div>
             </div>
-            <p className="text-slate-400 text-[11px] sm:text-xs hidden sm:flex items-center gap-2 truncate mt-0.5">
-              <span className="text-slate-200 font-bold">{exam.name}</span>
-              <span>•</span>
-              <span>{totalQ} Soru</span>
-              <span>•</span>
-              <span>{state.students.length} Kayıtlı Öğrenci</span>
-              {!lockToSelectedExam && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 rounded font-semibold">
-                  <Sparkles className="w-2.5 h-2.5" /> Dinamik QR Tespiti
-                </span>
-              )}
-              {isInternalExam(exam) && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] bg-indigo-950/80 text-indigo-300 border border-indigo-500/40 rounded font-semibold" title="OptikAI Kurum İçi OMR Motoru">
-                  <Zap className="w-2.5 h-2.5 text-indigo-400" /> OptikAI Motoru
-                </span>
-              )}
-            </p>
+
           </div>
         </div>
 
@@ -2823,8 +2807,8 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             >
               <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span className="truncate">
-                <span className="sm:hidden">Sekonic TXT</span>
-                <span className="hidden sm:inline">⚡ Sekonic TXT Yükle</span>
+                <span className="sm:hidden">TXT Yükleme</span>
+                <span className="hidden sm:inline">⚡ TXT Veri Yükleme</span>
               </span>
             </button>
           </div>
