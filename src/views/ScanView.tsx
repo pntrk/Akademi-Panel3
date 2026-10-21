@@ -2551,7 +2551,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
   ];
 
   return (
-    <div className="bg-slate-950 md:bg-slate-900 rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-800/80 overflow-hidden h-full flex flex-col text-white relative">
+    <div className="bg-slate-950 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-slate-800/90 overflow-hidden h-full flex flex-col text-white relative sm:ring-1 sm:ring-white/5">
       {/* Yeşil Başarı Kartı (Öğrenci Adı, No, Kitapçık ve Net) */}
       {scanSuccessCard && (
         <div
@@ -2719,10 +2719,10 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                   (window as any).__keysPrintSetTab('print');
                 }
               }}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white rounded-xl text-[11px] sm:text-xs font-bold transition-all border border-purple-500/40 cursor-pointer shadow-sm whitespace-nowrap active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-800/80 via-purple-700/80 to-indigo-800/80 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all border border-purple-400/40 shadow-sm active:scale-95 whitespace-nowrap ring-1 ring-purple-400/20 cursor-pointer"
               title="Karekodlu Optik Form Baskı ve Canlı Önizleme Merkezine Git"
             >
-              <Printer className="w-3.5 h-3.5 shrink-0 text-purple-300" />
+              <Printer className="w-3.5 h-3.5 shrink-0 text-purple-200" />
               <span className="hidden xs:inline">Form Yazdır</span>
               <span className="xs:hidden">Yazdır</span>
             </button>
@@ -2740,7 +2740,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 (window as any).__navigateToTab('results');
               }
             }}
-            className="flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-emerald-950/80 border border-slate-700/80 hover:border-emerald-500/50 rounded-xl text-[11px] sm:text-xs font-semibold text-slate-300 hover:text-emerald-300 transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/90 hover:bg-emerald-950/70 border border-slate-700 hover:border-emerald-500/50 rounded-xl text-xs font-bold text-slate-200 hover:text-emerald-300 transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
             title="Okunan Deneme Sınavının Sonuç ve Analiz Ekranına Git"
           >
             <FileCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -2756,7 +2756,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 setBatchFiles([]);
                 setStatus("");
               }}
-              className="px-2.5 py-1 sm:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-[11px] sm:text-xs transition-colors border border-slate-700 cursor-pointer font-medium whitespace-nowrap active:scale-95"
+              className="px-2.5 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-rose-100 rounded-xl text-xs font-bold transition-all border border-rose-500/40 cursor-pointer whitespace-nowrap active:scale-95 shadow-xs"
               title="Formu Temizle"
             >
               Temizle
@@ -2877,7 +2877,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           {/* Main Layout Area */}
           <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden relative bg-slate-950">
         {/* Left Control Panel */}
-        <div className="w-full lg:w-[250px] flex flex-col gap-2.5 p-2.5 sm:p-3 lg:border-r border-slate-800 shrink-0 overflow-y-auto custom-scrollbar pb-24 lg:pb-4">
+        <div className={`w-full lg:w-[270px] flex flex-col gap-3 p-3 lg:border-r border-slate-800/80 shrink-0 overflow-y-auto custom-scrollbar pb-24 lg:pb-4 bg-slate-950/80 backdrop-blur-md ${imageLoaded && !isCameraActive ? 'order-2 lg:order-1' : 'order-1 lg:order-1'}`}>
 
 
           {/* Primary Action Buttons */}
@@ -2886,14 +2886,14 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
             {/* Küçük, Pratik ve İlgi Çekici Dosya Yükleme Butonu */}
             <label
-              className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer relative overflow-hidden group shadow-lg ${
+              className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-lg ${
                 isProcessing
                   ? 'bg-slate-800/80 text-slate-500 border-slate-700 cursor-not-allowed'
                   : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 text-white border-blue-400/40 hover:border-blue-300 shadow-blue-500/20 active:scale-[0.98] hover:scale-[1.01]'
               }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-inner ring-1 ring-white/30">
+                <div className="w-9 h-9 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-inner ring-1 ring-white/30">
                   <Upload className="w-4 h-4 text-white" />
                 </div>
                 <div className="text-left min-w-0">
@@ -2903,7 +2903,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                       PDF/Foto
                     </span>
                   </div>
-                  <div className="text-[10px] text-blue-100/90 font-medium truncate">
+                  <div className="text-[10.5px] text-blue-100/90 font-medium truncate">
                     Görsel, PDF veya Kamera
                   </div>
                 </div>
@@ -2919,8 +2919,8 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
             </label>
 
             {/* Auto-save toggle */}
-            <div className="flex items-center justify-between px-2.5 py-1.5 bg-slate-900/60 rounded-lg border border-slate-800/80">
-              <label htmlFor="autoSaveToggle" className="text-[11px] text-slate-300 font-medium cursor-pointer select-none truncate">
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-900/80 rounded-xl border border-slate-800/90 shadow-xs">
+              <label htmlFor="autoSaveToggle" className="text-xs text-slate-300 font-semibold cursor-pointer select-none truncate">
                 Fotoğrafları otomatik kaydet
               </label>
               <input
@@ -2928,7 +2928,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 id="autoSaveToggle"
                 checked={autoSaveSingle}
                 onChange={e => setAutoSaveSingle(e.target.checked)}
-                className="w-3.5 h-3.5 text-emerald-600 bg-slate-800 border-slate-600 rounded cursor-pointer accent-emerald-500 shrink-0 ml-1"
+                className="w-4 h-4 text-emerald-600 bg-slate-800 border-slate-600 rounded cursor-pointer accent-emerald-500 shrink-0 ml-1.5"
               />
             </div>
           </div>
@@ -2962,16 +2962,16 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
 
           {/* Image Alignment & Rotation Controls (When an image is loaded) */}
           {imageLoaded && !isCameraActive && (
-            <div className="bg-slate-900/90 p-3 sm:p-3.5 rounded-xl border border-slate-800 space-y-2.5 shadow-md">
+            <div className="bg-slate-900/95 p-3.5 rounded-2xl border border-slate-800/90 space-y-3 shadow-xl backdrop-blur-md ring-1 ring-white/5">
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-white text-xs flex items-center gap-1.5">
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-blue-400" />
                   Hizalama & Açı
                 </h4>
                 <button
                   type="button"
                   onClick={handleAutoAlign}
-                  className="text-[11px] font-bold text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900/60 px-2 py-0.5 rounded-lg border border-indigo-700/40 transition-colors flex items-center gap-1 cursor-pointer"
+                  className="text-xs font-bold text-indigo-300 hover:text-white bg-indigo-950/80 hover:bg-indigo-900/80 px-2.5 py-1 rounded-xl border border-indigo-700/50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                 >
                   <Sparkles className="w-3.5 h-3.5" /> Otomatik Düzelt
                 </button>
@@ -2982,32 +2982,34 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 <button
                   type="button"
                   onClick={() => { setRotation90(prev => prev - 90); setAnchors(null); setIsProcessing(true); }}
-                  className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-1.5 rounded-lg transition-colors text-xs border border-slate-700 active:scale-95 cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 bg-slate-800/90 hover:bg-slate-700/90 hover:text-white text-slate-200 font-bold py-2 rounded-xl transition-all text-xs border border-slate-700/80 hover:border-slate-600 shadow-xs active:scale-95 cursor-pointer"
+                  title="Görseli Sola 90 Derece Döndür"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
+                  <RotateCcw className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                   <span>Sola 90°</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => { setRotation90(prev => prev + 90); setAnchors(null); setIsProcessing(true); }}
-                  className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-1.5 rounded-lg transition-colors text-xs border border-slate-700 active:scale-95 cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 bg-slate-800/90 hover:bg-slate-700/90 hover:text-white text-slate-200 font-bold py-2 rounded-xl transition-all text-xs border border-slate-700/80 hover:border-slate-600 shadow-xs active:scale-95 cursor-pointer"
+                  title="Görseli Sağa 90 Derece Döndür"
                 >
-                  <RotateCw className="w-3.5 h-3.5" />
+                  <RotateCw className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                   <span>Sağa 90°</span>
                 </button>
               </div>
 
               {/* Fine Angle Slider */}
-              <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                <div className="flex justify-between items-center text-[10px] text-slate-400 mb-1 font-bold">
+              <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/90 shadow-inner space-y-1.5">
+                <div className="flex justify-between items-center text-[10.5px] text-slate-400 font-bold">
                   <span>İnce Açı</span>
-                  <span className="text-blue-400 font-mono text-xs px-1.5 py-0.2 bg-blue-950/60 rounded border border-blue-800/40">
+                  <span className="text-blue-400 font-mono text-xs px-2 py-0.5 bg-blue-950/80 rounded-lg border border-blue-800/50 font-bold">
                     {fineAngle > 0 ? `+${fineAngle}` : fineAngle}°
                   </span>
                   <button
                     type="button"
                     onClick={() => { setFineAngle(0); setAnchors(null); setIsProcessing(true); }}
-                    className="text-slate-400 hover:text-white text-[10px] cursor-pointer"
+                    className="text-slate-400 hover:text-white text-[10.5px] cursor-pointer"
                   >
                     Sıfırla
                   </button>
@@ -3019,7 +3021,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                   step="0.5"
                   value={fineAngle}
                   onChange={(e) => { setFineAngle(parseFloat(e.target.value)); setAnchors(null); setIsProcessing(true); }}
-                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                 />
               </div>
 
@@ -3028,9 +3030,9 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 <button
                   type="button"
                   onClick={() => readForm(anchors)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-bold py-2.5 rounded-xl shadow-lg shadow-emerald-950/40 transition-all text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer border border-emerald-400/30"
+                  className="w-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] text-white font-black py-2.5 rounded-xl shadow-lg shadow-emerald-950/50 transition-all text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer border border-emerald-400/40 ring-1 ring-emerald-400/20"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
+                  <CheckCircle2 className="w-4 h-4 text-emerald-100" />
                   <span>ONAYLA VE FORMU OKU</span>
                 </button>
               )}
@@ -3041,7 +3043,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         </div>
 
         {/* Right Preview Viewport Area */}
-        <div className="flex-1 bg-slate-950 flex flex-col justify-between items-center relative min-h-[50vh] lg:min-h-0 overflow-hidden">
+        <div className={`flex-1 bg-slate-950 flex flex-col justify-between items-center relative min-h-[50vh] lg:min-h-0 overflow-hidden ${imageLoaded && !isCameraActive ? 'order-1 lg:order-2' : 'order-2 lg:order-2'}`}>
           {imageLoaded && !isCameraActive ? (
             <div className="relative flex-1 w-full flex flex-col justify-center items-center p-2 sm:p-4 overflow-hidden">
               <div

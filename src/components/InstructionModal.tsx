@@ -28,11 +28,13 @@ import {
   Share2,
   ListOrdered
 } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
 
 interface InstructionModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialStep?: number;
+  userRole?: 'admin' | 'teacher';
 }
 
 interface StepItem {
@@ -293,7 +295,126 @@ const ALL_STEPS: StepItem[] = [
   }
 ];
 
-export function InstructionModal({ isOpen, onClose, initialStep = 1 }: InstructionModalProps) {
+const TEACHER_STEPS: StepItem[] = [
+  {
+    id: 1,
+    category: 'exam',
+    categoryLabel: 'Salon & Gözetmenlik',
+    targetTab: 'halls',
+    badge: '1. Adım',
+    stageName: 'Salon & Yoklama',
+    title: 'Kelebek Salon Yerleşimi & Sınav Yoklaması',
+    icon: LayoutTemplate,
+    gradient: 'from-sky-500 via-cyan-600 to-sky-700',
+    tagColor: 'bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800',
+    summary: 'Gözetmen olduğunuz salonun oturma krokisini, kapı giriş listelerini ve yoklama tutanaklarını anında inceleyin.',
+    keyPoints: [
+      'Gözetmenlik yapacağınız salonun sıra düzenini ve hangi öğrencinin hangi sırada oturacağını krokiden takip edin.',
+      'Kelebek sistemiyle çapraz oturan öğrencilerin listesini kapı giriş çizelgesinden kontrol edin.',
+      'Sınava katılmayan öğrencileri yoklama listesine işaretleyerek sınav tutanağını kolayca takip edin.'
+    ],
+    proTip: 'Sıra numaraları ve öğrenci fotoğraflı krokiler sınav günü yoklama almayı ve gözetmenlik kontrolünü son derece hızlandırır.',
+    tags: ['Kelebek Salon Krokisi', 'Kapı Giriş Listesi', 'Sınav Yoklama Takibi'],
+    mockData: {
+      stat1: { label: 'Kopya Engelleme', value: 'Çapraz Kelebek' },
+      stat2: { label: 'Çıktılar', value: 'Kapı Listesi & Tutanak' },
+      tipHighlight: 'Salon oturma planını gözetmen ekranından kolayca inceleyebilirsiniz.'
+    }
+  },
+  {
+    id: 2,
+    category: 'analysis',
+    categoryLabel: 'Sonuçlar & Sıralama',
+    targetTab: 'results',
+    badge: '2. Adım',
+    stageName: 'Sonuçlar & Karneler',
+    title: 'Sınav Sonuçları, Şube Sıralamaları & Karneler',
+    icon: TrendingUp,
+    gradient: 'from-emerald-500 via-teal-700 to-cyan-800',
+    tagColor: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
+    summary: 'İdare tarafından okunan deneme sınavı sonuçlarına, şube net ortalamalarına ve renkli öğrenci karnelerine anında erişin.',
+    keyPoints: [
+      'Girdiğiniz sınıfların ders net ortalamalarını, doğru/yanlış/boş sayılarını ve başarı sıralamalarını görüntüleyin.',
+      'Öğrencilerinizin renkli bireysel karne çıktılarını tek tıkla alın veya velilerle paylaşmak üzere PDF olarak inceleyin.',
+      'Sınıfınızın genel başarı grafiğini önceki denemelerle kıyaslayarak net artışını anlık değerlendirin.'
+    ],
+    proTip: 'İdare optik formları okuduğunda öğretmen hesabınızda anında güncellenir; sınıfınızın karnelerini basabilirsiniz.',
+    tags: ['Şube Sıralamaları', 'Bireysel Öğrenci Karneleri', 'Ders & Net Ortalamaları'],
+    mockData: {
+      stat1: { label: 'Sonuç Erişimi', value: 'Anlık Canlı Senkron' },
+      stat2: { label: 'Karne İndirme', value: 'Renkli Grafikli A4' },
+      tipHighlight: 'Kendi sınıf ve şubelerinizin sonuçlarına anında erişebilirsiniz.'
+    }
+  },
+  {
+    id: 3,
+    category: 'analysis',
+    categoryLabel: 'Kazanım Analizi',
+    targetTab: 'results',
+    badge: '3. Adım',
+    stageName: 'Kazanım Analizi',
+    title: 'Detaylı Konu, Kazanım ve Çeldirici Analizi',
+    icon: Sparkles,
+    gradient: 'from-purple-500 via-indigo-600 to-purple-800',
+    tagColor: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800',
+    summary: 'Hangi kazanımlarda eksik var, öğrenciler hangi çeldirici şıklarda yanılmış; ders bazlı derinlemesine analiz yapın.',
+    keyPoints: [
+      'Branşınıza ait her bir sorunun kazanım bazlı doğru yanıtlanma oranını ve sınıf başarısını görün.',
+      'Sınıfın en çok zorlandığı soruları ve en güçlü çeldiricileri tespit ederek derslerinizde telafi konularını belirleyin.',
+      'Madde analizi tablosuyla öğrencilerin A-B-C-D seçeneklerindeki çeldirici yığılmalarını inceleyin.'
+    ],
+    proTip: 'Kazanım analiz raporu sayesinde veli görüşmelerinde ve zümre toplantılarında somut verilerle konuşabilirsiniz.',
+    tags: ['Kazanım Bazlı Başarı', 'Çeldirici Dağılımı', 'Telafi & Zümre Analizi'],
+    mockData: {
+      stat1: { label: 'Analiz Düzeyi', value: 'Soru & Kazanım Bazlı' },
+      stat2: { label: 'Geri Bildirim', value: 'Zümre & Telafi Odaklı' },
+      tipHighlight: 'Hangi konunun yeniden pekiştirilmesi gerektiği otomatik tespit edilir.'
+    }
+  },
+  {
+    id: 4,
+    category: 'analysis',
+    categoryLabel: 'Oyunlaştırma & Lig',
+    targetTab: 'league',
+    badge: '4. Adım',
+    stageName: 'Akademi Arena Ligi',
+    title: 'Akademi Arena Öğrenci Ligleri ve Başarı Rozetleri',
+    icon: Trophy,
+    gradient: 'from-amber-400 via-yellow-500 to-orange-500',
+    tagColor: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
+    summary: 'Öğrencilerinizin deneme başarılarını puanlara ve takım rekabetine dönüştürerek ders içi motivasyonu artırın.',
+    keyPoints: [
+      'Öğrencilerinizin Lig Puanı (LP) sıralamasını, lig yükselmelerini ve takım puanlarını görüntüleyin.',
+      'En çok net artıran sıçrama şampiyonlarını ve podyum derecelerini sınıfta duyurarak tebrik edin.',
+      'Kazanılan rozetleri (Zirve, İvme, Kalkan) sınıf panolarında sergileyerek pozitif rekabet ortamı oluşturun.'
+    ],
+    proTip: 'Düşük netli öğrencilerin de yüksek sıçrama bonusu alabildiğini hatırlatarak tüm sınıfı ligde tutun.',
+    tags: ['Öğrenci Lig Puanları', 'Sıçrama Şampiyonları', 'Sınıf İçi Motivasyon'],
+    mockData: {
+      stat1: { label: 'Motivasyon', value: '3 Takım & Lig Rozetleri' },
+      stat2: { label: 'Ödüllendirme', value: 'Haftalık Sıçrama Bonusu' },
+      tipHighlight: 'Öğrencilerin sınav kaygısını oyunlaştırılmış lig heyecanına dönüştürür.'
+    }
+  }
+];
+
+export function InstructionModal({ isOpen, onClose, initialStep = 1, userRole: propUserRole }: InstructionModalProps) {
+  let contextUserRole: 'admin' | 'teacher' | undefined;
+  try {
+    const ctx = useAppContext();
+    contextUserRole = ctx?.userRole;
+  } catch (e) {}
+
+  const currentRole = propUserRole || contextUserRole || 'admin';
+  const [roleView, setRoleView] = useState<'admin' | 'teacher'>(currentRole === 'teacher' ? 'teacher' : 'admin');
+
+  useEffect(() => {
+    if (currentRole === 'teacher') {
+      setRoleView('teacher');
+    }
+  }, [currentRole]);
+
+  const activeStepsList = roleView === 'teacher' ? TEACHER_STEPS : ALL_STEPS;
   const [activeStep, setActiveStep] = useState<number>(initialStep);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'exam' | 'analysis' | 'admin'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -305,6 +426,12 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
     }
   }, [isOpen, initialStep]);
 
+  useEffect(() => {
+    if (activeStep > activeStepsList.length) {
+      setActiveStep(1);
+    }
+  }, [activeStepsList.length, activeStep]);
+
   // Keyboard navigation (ESC, Left/Right arrows)
   useEffect(() => {
     if (!isOpen) return;
@@ -313,7 +440,7 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
       if (e.key === 'Escape') {
         onClose();
       } else if (e.key === 'ArrowRight' && viewMode === 'stepByStep') {
-        setActiveStep(prev => Math.min(ALL_STEPS.length, prev + 1));
+        setActiveStep(prev => Math.min(activeStepsList.length, prev + 1));
       } else if (e.key === 'ArrowLeft' && viewMode === 'stepByStep') {
         setActiveStep(prev => Math.max(1, prev - 1));
       }
@@ -321,11 +448,11 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, viewMode]);
+  }, [isOpen, onClose, viewMode, activeStepsList.length]);
 
   // Filtered steps based on category & search
   const filteredSteps = useMemo(() => {
-    return ALL_STEPS.filter(s => {
+    return activeStepsList.filter(s => {
       const matchCategory = selectedCategory === 'all' || s.category === selectedCategory;
       const q = searchQuery.trim().toLowerCase();
       const matchSearch = !q || 
@@ -336,11 +463,11 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
         s.keyPoints.some(kp => kp.toLowerCase().includes(q));
       return matchCategory && matchSearch;
     });
-  }, [selectedCategory, searchQuery]);
+  }, [activeStepsList, selectedCategory, searchQuery]);
 
   if (!isOpen) return null;
 
-  const currentStep = ALL_STEPS.find(s => s.id === activeStep) || ALL_STEPS[0];
+  const currentStep = activeStepsList.find(s => s.id === activeStep) || activeStepsList[0];
   const StepIcon = currentStep.icon;
 
   const handleNavigateToModule = (tabId?: string) => {
@@ -351,7 +478,7 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
     onClose();
   };
 
-  const progressPercent = Math.round((activeStep / ALL_STEPS.length) * 100);
+  const progressPercent = Math.round((activeStep / activeStepsList.length) * 100);
 
   return (
     <div 
@@ -374,19 +501,53 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm sm:text-lg font-black tracking-tight text-white flex items-center gap-1.5">
-                  Nasıl Çalışır? • AkademiPanel Rehberi
+                  Nasıl Çalışır? • {roleView === 'teacher' ? 'Öğretmen Rehberi' : 'Yönetici Rehberi'}
                 </h3>
-                <span className="hidden sm:inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 uppercase tracking-wider">
-                  9 Adım İş Akışı
+                <span className={`hidden sm:inline-block text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                  roleView === 'teacher' ? 'bg-emerald-400 text-slate-950' : 'bg-amber-400 text-slate-950'
+                }`}>
+                  {roleView === 'teacher' ? '4 Adım Öğretmen Akışı' : '9 Adım Tam İş Akışı'}
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-white/60 font-medium line-clamp-1">
-                Sınav planlamasından optik okumaya, kelebek salondan Akademi Arena ligine eksiksiz rehber.
+                {roleView === 'teacher' 
+                  ? 'Kelebek salondan şube karnelerine, soru analizinden lig motivasyonuna öğretmen akışı.' 
+                  : 'Sınav planlamasından optik okumaya, kelebek salondan Akademi Arena ligine eksiksiz yönetici rehberi.'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Role Switcher: Öğretmen / Yönetici */}
+            <div className="flex bg-white/10 p-0.5 rounded-xl border border-white/10 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => {
+                  setRoleView('teacher');
+                  setActiveStep(1);
+                }}
+                className={`px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                  roleView === 'teacher' ? 'bg-emerald-400 text-slate-950 shadow-xs' : 'text-white/70 hover:text-white'
+                }`}
+                title="Öğretmenler için 4 adımlı pratik rehber"
+              >
+                <span>👨‍🏫 Öğretmen</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRoleView('admin');
+                  setActiveStep(1);
+                }}
+                className={`px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                  roleView === 'admin' ? 'bg-amber-400 text-slate-950 shadow-xs' : 'text-white/70 hover:text-white'
+                }`}
+                title="Kurum yöneticileri için 9 adımlı tam süreç rehberi"
+              >
+                <span>👑 Yönetici</span>
+              </button>
+            </div>
+
             {/* View Mode Switcher */}
             <div className="hidden sm:flex bg-white/10 p-0.5 rounded-xl border border-white/10 text-xs font-bold">
               <button
@@ -434,7 +595,7 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
         <div className="bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-3.5 py-2 sm:px-6 flex items-center justify-between gap-2.5 shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-black text-slate-700 dark:text-slate-200">
-              📌 9 Adımda Eksiksiz Kurum İçi Sınav Akışı
+              📌 {roleView === 'teacher' ? '4 Adımda Öğretmen Sınav Takibi & Analiz Akışı' : '9 Adımda Eksiksiz Kurum İçi Sınav Akışı'}
             </span>
           </div>
 
@@ -462,15 +623,17 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
         {/* 3. View Modes */}
         {viewMode === 'roadmap' ? (
           /* ========================================================
-             ROADMAP / TIMELINE VIEW (All 9 Steps at a Glance)
+             ROADMAP / TIMELINE VIEW
              ======================================================== */
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/50 dark:bg-slate-900/50">
             <div className="text-center max-w-xl mx-auto mb-4">
               <h4 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                Kurum İçi Sınav & Değerlendirme Yol Haritası
+                Kurum İçi Sınav & Değerlendirme Yol Haritası ({roleView === 'teacher' ? 'Öğretmen Görünümü' : 'Yönetici Görünümü'})
               </h4>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Aşağıdaki 9 adımı takip ederek sınavlarınızı kusursuz şekilde yönetebilirsiniz.
+                {roleView === 'teacher' 
+                  ? 'Aşağıdaki 4 adımı takip ederek sınavlarınızı, salon yoklamalarınızı ve şube analizlerinizi kolayca takip edebilirsiniz.'
+                  : 'Aşağıdaki 9 adımı takip ederek sınavlarınızı, optik okumayı ve bütçe süreçlerinizi kusursuz şekilde yönetebilirsiniz.'}
               </p>
             </div>
 
@@ -689,14 +852,14 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
 
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-slate-400 dark:text-slate-500 font-mono">
-                  Adım <strong className="text-slate-800 dark:text-white">{activeStep}</strong> / {ALL_STEPS.length}
+                  Adım <strong className="text-slate-800 dark:text-white">{activeStep}</strong> / {activeStepsList.length}
                 </span>
               </div>
 
-              {activeStep < ALL_STEPS.length ? (
+              {activeStep < activeStepsList.length ? (
                 <button
                   type="button"
-                  onClick={() => setActiveStep(prev => Math.min(ALL_STEPS.length, prev + 1))}
+                  onClick={() => setActiveStep(prev => Math.min(activeStepsList.length, prev + 1))}
                   className="flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all cursor-pointer active:scale-95"
                 >
                   <span>Sonraki Adım</span>
@@ -715,7 +878,9 @@ export function InstructionModal({ isOpen, onClose, initialStep = 1 }: Instructi
             </>
           ) : (
             <div className="w-full flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500">9 Adımlı Kurum İçi Optik Deneme Süreci</span>
+              <span className="text-xs font-bold text-slate-500">
+                {roleView === 'teacher' ? '4 Adımlı Öğretmen Sınav & Analiz Süreci' : '9 Adımlı Kurum İçi Optik Deneme Süreci'}
+              </span>
               <button
                 type="button"
                 onClick={() => setViewMode('stepByStep')}

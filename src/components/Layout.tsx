@@ -767,10 +767,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       <InstructionModal
         isOpen={isGuideOpen}
         onClose={() => setIsGuideOpen(false)}
+        userRole={userRole}
       />
       
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-auto bg-brand-bg text-brand-ink transition-colors duration-200 w-full pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-0">
+      <main className={cn(
+        "flex-1 flex flex-col min-h-0 bg-brand-bg text-brand-ink transition-colors duration-200 w-full pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-0",
+        activeTab === 'scan' ? "overflow-hidden" : "overflow-auto"
+      )}>
         
         {/* 📱 Mobile Header - Clean Elevated Warm Glassmorphism */}
         <header className="md:hidden flex items-center justify-between px-3.5 py-2.5 bg-[#FAF9F5]/95 dark:bg-[#0B0F19]/95 backdrop-blur-xl text-[#2d2c25] dark:text-slate-100 border-b border-[#e6e2d3] dark:border-slate-800/80 shrink-0 sticky top-0 z-30 shadow-2xs">
@@ -871,60 +875,65 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
 
         {/* Quota Exceeded Notification Banner & Main Content Area */}
         <div 
-          className="flex-1 flex flex-col p-2 sm:p-4 md:p-6 lg:p-8 w-full max-w-7xl mx-auto h-full font-sans antialiased overflow-x-hidden"
+          className={cn(
+            "flex-1 flex flex-col min-h-0 w-full mx-auto h-full font-sans antialiased transition-all",
+            activeTab === 'scan' 
+              ? "p-0 sm:p-2 md:p-3 max-w-[1920px] overflow-hidden" 
+              : "p-2 sm:p-4 md:p-6 lg:p-8 max-w-7xl overflow-x-hidden"
+          )}
           style={{ fontFamily: 'Inter, sans-serif' }}
         >
           {/* Quota Exceeded Notification Banner */}
           {syncStatus === 'quota_exceeded' && !isQuotaBannerDismissed && (
-            <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-2">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+            <div className="mb-3 p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/30 backdrop-blur-md text-amber-900 dark:text-amber-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-lg shadow-amber-950/10 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 ring-1 ring-amber-500/30">
                   <AlertTriangle className="w-4 h-4" />
                 </div>
-                <div className="text-xs space-y-0.5 min-w-0">
-                  <p className="font-bold flex items-center gap-1.5 flex-wrap">
-                    <span>Firestore Günlük Yazma Kotası Doldu (Spark Plan)</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300">
-                      Yerel Koruma %100 Aktif
+                <div className="text-xs min-w-0 flex-1">
+                  <div className="font-black flex items-center gap-2 flex-wrap text-amber-950 dark:text-amber-100">
+                    <span>Firestore Günlük Kotası (Spark Plan)</span>
+                    <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/40 font-mono">
+                      ⚡ Yerel Koruma %100 Aktif
                     </span>
-                  </p>
-                  <p className="text-amber-800/90 dark:text-amber-300/80 leading-relaxed text-[11px]">
-                    Tüm sınav okumalarınız, öğrenci ve kütük verileriniz bu cihazda kesintisiz olarak saklanmaktadır; optik tarama ve diğer tüm özellikleri güvenle kullanmaya devam edebilirsiniz.
+                  </div>
+                  <p className="text-amber-800/90 dark:text-amber-300/80 text-[11px] mt-0.5 leading-snug line-clamp-1 sm:line-clamp-none">
+                    Tüm sınav okumalarınız ve kütük verileriniz bu cihazda güvenle saklanmaktadır; optik taramayı kesintisiz kullanabilirsiniz.
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+              <div className="flex items-center gap-1.5 sm:gap-2 self-stretch sm:self-auto justify-end shrink-0 flex-wrap">
                 <button
                   onClick={handleBackup}
-                  className="px-2.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-amber-900 dark:text-amber-100 font-bold text-xs flex items-center gap-1.5 transition-colors border border-amber-500/30 cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-amber-900 dark:text-amber-100 font-bold text-xs flex items-center gap-1.5 transition-all border border-amber-500/30 cursor-pointer active:scale-95 shadow-xs"
                   title="Tüm kütüğü ve sınavları JSON olarak hemen indir"
                 >
                   <Download className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Yedek İndir (JSON)</span>
+                  <span>Yedek İndir</span>
                 </button>
                 <button
                   onClick={async () => {
                     await retrySync();
                   }}
-                  className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-100 font-bold text-xs flex items-center gap-1.5 transition-colors border border-amber-500/40 cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-100 font-bold text-xs flex items-center gap-1.5 transition-all border border-amber-500/40 cursor-pointer active:scale-95"
                   title="Firebase kotasının sıfırlanıp sıfırlanmadığını kontrol et"
                 >
                   <RefreshCw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                  <span>Yeniden Sına</span>
+                  <span>Sına</span>
                 </button>
                 <a
                   href={FIRESTORE_UPGRADE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                  className="px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
                 >
-                  <span>Kotayı İncele</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Kota</span>
+                  <ExternalLink className="w-3 h-3" />
                 </a>
                 <button
                   onClick={() => setIsQuotaBannerDismissed(true)}
-                  className="p-1.5 text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200 rounded-lg hover:bg-amber-500/10 cursor-pointer transition-colors"
-                  title="Kapat"
+                  className="p-1.5 text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200 rounded-xl hover:bg-amber-500/20 cursor-pointer transition-colors shrink-0"
+                  title="Bildirimi Kapat"
                 >
                   <X className="w-4 h-4" />
                 </button>
