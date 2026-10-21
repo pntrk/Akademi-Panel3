@@ -61,8 +61,25 @@ import {
   Lock,
   Unlock,
   BookOpen,
-  KeyRound
+  KeyRound,
+  FileText,
+  Check,
+  UserPlus,
+  Link2,
+  Search
 } from 'lucide-react';
+import { 
+  parseSekonicErtem840, 
+  convertSekonicStudentToExamResult, 
+  ParsedSekonicStudent, 
+  SekonicParseResult 
+} from '../lib/sekonicParser';
+import { 
+  OPTICAL_TEMPLATES, 
+  OpticalTemplateType, 
+  ERTEM_840_SPECS 
+} from '../lib/omrTemplates';
+import { SekonicUploadTab } from '../components/SekonicUploadTab';
 
 export interface PageThumbnail {
   id: string;
@@ -232,6 +249,14 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
   const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
   const [detectedQrCode, setDetectedQrCode] = useState<string | null>(null);
   const [toastAlert, setToastAlert] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
+  const [scanViewMode, setScanViewMode] = useState<'scanner' | 'sekonic'>('scanner');
+  const [selectedTemplate, setSelectedTemplate] = useState<OpticalTemplateType>('standard_qr');
+
+  useEffect(() => {
+    if (!isInternalExam(exam) && scanViewMode === 'sekonic') {
+      setScanViewMode('scanner');
+    }
+  }, [exam, scanViewMode]);
 
   const scannedFormatRef = useRef('standard');
   const scannedQrRef = useRef<string | null>(null);
@@ -2760,46 +2785,106 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
         </div>
       )}
 
-      {/* Üst Kayan Toplu Tarama & Progress Bar Bildirimi */}
-      {isBatchRunning && (
-        <div className="bg-gradient-to-r from-blue-950/95 via-slate-900/95 to-indigo-950/95 border-b border-blue-500/40 px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-white shadow-lg shrink-0 backdrop-blur-md">
-          <div className="flex items-center gap-2.5 w-full sm:w-auto">
-            <RefreshCw className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-bold text-white flex items-center gap-2">
-                <span>Toplu PDF Tarama Sürüyor</span>
-                <span className="px-2 py-0.2 rounded-full text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono">
-                  {batchProgress.stage === 'extracting' ? '1. Aşama: PDF Ayrıştırma' : '2. Aşama: QR & Optik Okuma'}
-                </span>
-              </div>
-              <div className="text-[11px] text-slate-300 truncate">
-                {batchProgress.statusText || `Sayfa ${batchProgress.current} / ${batchProgress.total}`}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 w-full sm:w-72">
-            <div className="flex-1 bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700/80">
-              <div
-                className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400 transition-all duration-300 rounded-full"
-                style={{ width: `${Math.round((batchProgress.current / Math.max(1, batchProgress.total)) * 100)}%` }}
-              />
-            </div>
-            <span className="text-xs font-bold text-blue-400 font-mono shrink-0">
-              %{Math.round((batchProgress.current / Math.max(1, batchProgress.total)) * 100)}
-            </span>
+      {/* Kurum İçi Sınavlar İçin Sekme Seçici (Canlı Kamera vs Sekonic SR-55D TXT) */}
+      {isInternalExam(exam) && (
+        <div className="bg-slate-900 border-b border-slate-800 px-3.5 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
-              onClick={() => setBatchModalOpen(true)}
-              className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-[11px] font-bold text-white shrink-0 cursor-pointer shadow transition-colors"
+              type="button"
+              onClick={() => setScanViewMode('scanner')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                scanViewMode === 'scanner'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
             >
-              Detayları Göster
+              <Camera className="w-3.5 h-3.5" />
+              <span>📷 Canlı Kamera & Çoklu PDF</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (isCameraActive) stopCamera();
+                setScanViewMode('sekonic');
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                scanViewMode === 'sekonic'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-950/40 ring-1 ring-indigo-400/50'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>⚡ Sekonic TXT Yükle (Ertem-840)</span>
             </button>
           </div>
+
+          {scanViewMode === 'scanner' && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-400 hidden md:inline font-medium">Optik Form Şablonu:</span>
+              <select
+                value={selectedTemplate}
+                onChange={(e) => setSelectedTemplate(e.target.value as OpticalTemplateType)}
+                className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold outline-none cursor-pointer focus:border-emerald-500"
+              >
+                <option value="standard_qr">Akıllı Karekodlu Form (Varsayılan)</option>
+                <option value="ertem_840">Ertem Optik-840 (Zamanlama Çubuklu)</option>
+              </select>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Main Layout Area */}
-      <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden relative bg-slate-950">
+      {scanViewMode === 'sekonic' && isInternalExam(exam) ? (
+        <SekonicUploadTab
+          exam={exam}
+          onNavigate={onNavigate}
+          onSuccess={(savedCount) => {
+            showAlert(`✅ ${savedCount} öğrencinin Sekonic Ertem-840 sonucu başarıyla işlendi ve kaydedildi!`, 'success');
+          }}
+        />
+      ) : (
+        <>
+          {/* Üst Kayan Toplu Tarama & Progress Bar Bildirimi */}
+          {isBatchRunning && (
+            <div className="bg-gradient-to-r from-blue-950/95 via-slate-900/95 to-indigo-950/95 border-b border-blue-500/40 px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-white shadow-lg shrink-0 backdrop-blur-md">
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                <RefreshCw className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <span>Toplu PDF Tarama Sürüyor</span>
+                    <span className="px-2 py-0.2 rounded-full text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono">
+                      {batchProgress.stage === 'extracting' ? '1. Aşama: PDF Ayrıştırma' : '2. Aşama: QR & Optik Okuma'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-300 truncate">
+                    {batchProgress.statusText || `Sayfa ${batchProgress.current} / ${batchProgress.total}`}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-72">
+                <div className="flex-1 bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700/80">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400 transition-all duration-300 rounded-full"
+                    style={{ width: `${Math.round((batchProgress.current / Math.max(1, batchProgress.total)) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-blue-400 font-mono shrink-0">
+                  %{Math.round((batchProgress.current / Math.max(1, batchProgress.total)) * 100)}
+                </span>
+                <button
+                  onClick={() => setBatchModalOpen(true)}
+                  className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-[11px] font-bold text-white shrink-0 cursor-pointer shadow transition-colors"
+                >
+                  Detayları Göster
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Main Layout Area */}
+          <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden relative bg-slate-950">
         {/* Left Control Panel */}
         <div className="w-full lg:w-96 flex flex-col gap-3 p-3 sm:p-4 lg:border-r border-slate-800 shrink-0 overflow-y-auto custom-scrollbar">
           {/* Sınav ve OMR Şablonu Kontrol Kartı */}
@@ -3355,6 +3440,8 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* FULLSCREEN CAMERA OVERLAY */}
       {isCameraActive && (
@@ -3387,8 +3474,20 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
               )}
             </div>
 
-            <div className="hidden md:flex items-center bg-slate-950/80 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-full text-xs text-slate-200 font-medium shadow-lg pointer-events-auto">
-              Siyah 4 köşe karesini vizörün köşelerine oturtun
+            <div className="hidden md:flex items-center gap-2 bg-slate-950/80 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-full text-xs text-slate-200 font-medium shadow-lg pointer-events-auto">
+              <span>{selectedTemplate === 'ertem_840' ? 'Ertem-840: Sol zamanlama çubuğunu ve formu vizöre oturtun' : 'Siyah 4 köşe karesini vizörün köşelerine oturtun'}</span>
+              {isInternalExam(exam) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedTemplate(prev => prev === 'ertem_840' ? 'standard_qr' : 'ertem_840');
+                  }}
+                  className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600/70 hover:bg-indigo-500 text-white cursor-pointer ml-1"
+                >
+                  {selectedTemplate === 'ertem_840' ? 'Karekodlu Şablona Geç' : 'Ertem-840 Şablonuna Geç'}
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2 pointer-events-auto">
@@ -3453,29 +3552,82 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
               >
                 <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_10px_#34d399] animate-scanlaser pointer-events-none" />
 
-                {/* QR Kod Hedef Bölgesi (Formun Sağ Üstündeki Karekod Alanı) */}
-                <div
-                  className={`absolute border-2 border-dashed rounded-lg flex items-center justify-center transition-all ${
-                    scannedQrRef.current
-                      ? 'border-cyan-400 bg-cyan-400/25 shadow-[0_0_15px_rgba(34,211,238,0.6)]'
-                      : lockLevel >= 3
-                      ? 'border-amber-400/80 bg-amber-400/10'
-                      : 'border-cyan-500/60 bg-cyan-500/10'
-                  }`}
-                  style={{
-                    left: '85.8%',
-                    top: '15.2%',
-                    width: '18%',
-                    height: '11.5%',
-                    transform: 'translate(-50%, -50%)'
-                  }}
-                >
-                  <span className={`text-[8.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded ${
-                    scannedQrRef.current ? 'bg-cyan-400 text-slate-950 font-bold' : 'text-cyan-300 bg-slate-950/80'
-                  }`}>
-                    {scannedQrRef.current ? 'KAREKOD ✅' : 'KAREKOD'}
-                  </span>
-                </div>
+                {/* Form Şablonuna Göre Kılavuz Alanları */}
+                {selectedTemplate !== 'ertem_840' ? (
+                  /* QR Kod Hedef Bölgesi (Formun Sağ Üstündeki Karekod Alanı) */
+                  <div
+                    className={`absolute border-2 border-dashed rounded-lg flex items-center justify-center transition-all ${
+                      scannedQrRef.current
+                        ? 'border-cyan-400 bg-cyan-400/25 shadow-[0_0_15px_rgba(34,211,238,0.6)]'
+                        : lockLevel >= 3
+                        ? 'border-amber-400/80 bg-amber-400/10'
+                        : 'border-cyan-500/60 bg-cyan-500/10'
+                    }`}
+                    style={{
+                      left: '85.8%',
+                      top: '15.2%',
+                      width: '18%',
+                      height: '11.5%',
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  >
+                    <span className={`text-[8.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded ${
+                      scannedQrRef.current ? 'bg-cyan-400 text-slate-950 font-bold' : 'text-cyan-300 bg-slate-950/80'
+                    }`}>
+                      {scannedQrRef.current ? 'KAREKOD ✅' : 'KAREKOD'}
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Ertem-840 Sol Zamanlama Çubuğu Kılavuzu */}
+                    <div
+                      className="absolute border-2 border-dashed border-amber-400/80 bg-amber-400/15 rounded flex items-center justify-center pointer-events-none"
+                      style={{
+                        left: '4%',
+                        top: '52%',
+                        width: '4.5%',
+                        height: '84%',
+                        transform: 'translate(-50%, -50%)'
+                      }}
+                    >
+                      <span className="text-[7px] font-bold text-amber-300 transform -rotate-90 whitespace-nowrap tracking-wider">
+                        ZAMANLAMA ÇUBUĞU
+                      </span>
+                    </div>
+
+                    {/* Ertem-840 Öğrenci No & İsim Alanı */}
+                    <div
+                      className="absolute border border-dashed border-indigo-400/60 bg-indigo-500/10 rounded flex items-center justify-center pointer-events-none"
+                      style={{
+                        left: '42%',
+                        top: '25%',
+                        width: '64%',
+                        height: '24%',
+                        transform: 'translate(-50%, -50%)'
+                      }}
+                    >
+                      <span className="text-[8px] font-bold text-indigo-300 tracking-wide">
+                        ÖĞRENCİ NO (6 HANE) & AD SOYAD ALANI
+                      </span>
+                    </div>
+
+                    {/* Ertem-840 4-8. Sınıflar LGS 6 Ders Cevap Alanı */}
+                    <div
+                      className="absolute border border-dashed border-emerald-400/60 bg-emerald-500/10 rounded flex items-center justify-center pointer-events-none"
+                      style={{
+                        left: '52%',
+                        top: '73%',
+                        width: '84%',
+                        height: '42%',
+                        transform: 'translate(-50%, -50%)'
+                      }}
+                    >
+                      <span className="text-[8.5px] font-bold text-emerald-300 tracking-wide">
+                        4-8. SINIFLAR LGS CEVAP ALANI (6 DERS x 20 SORU)
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 {anchorTargets.map((pos, i) => (
                   <div

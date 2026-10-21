@@ -1,78 +1,132 @@
-# Otomatik Arka Plan Oturum Kalıcılığı ve Google Drive Kütük Senkronizasyonu Planı
+# Kurum İçi Sınavlar İçin Sekonic SR-55D (Ertem-840) TXT & Optik Form Entegrasyonu
 
-Öğretmenlerin mobil cihazlarında her oturum açışta tekrar onay verme yükünü ortadan kaldırmak için, bir kez verilen Google ve Firebase yetkilerini süresiz yerel oturum kalıcılığı ile saklayan, arka planda her 5 dakikada bir ve sayfa odağında sessizce en güncel "Akademi Panel Drive Kütüğü"nü indiren ve ağ kesintilerinde yerel önbellekten kesintisiz çalışan otomatik sistem mimarisi.
+Fiziksel **Sekonic SR-55D** optik okuyucu makineden alınan **Ertem 840** TXT çıktılarının ve Ertem-840 optik şablonunun **yalnızca Kurum İçi Deneme Sınavlarında** (`examType === 'internal'`) geçerli olacak şekilde sisteme entegre edilmesi.
 
-## User Review & Critical Decisions
+---
+
+### User Review & Critical Decisions
 
 > [!IMPORTANT]
-> Aşağıdaki tüm ürün ve mimari kararlar, yapılan netleştirme soruları doğrultusunda onaylanmıştır.
-
-- **Onaylanan Karar 1 (Oturum Kalıcılığı & İzin Yenileme):** Google Drive erişim simgesi ve kullanıcı oturum bilgileri `browserLocalPersistence` ve `localStorage` üzerinde süresiz saklanacak; yetki süresi bittiğinde arka planda sessizce yenilenecektir.
-- **Onaylanan Karar 2 (Arka Plan Senkronizasyon Sıklığı):** En güncel canlı kütük dosyası her 5 dakikada bir ve sayfa odağı değiştikçe (`window.onfocus`) arka planda kontrol edilip otomatik indirilecektir.
-- **Onaylanan Karar 3 (Çevrimdışı/Ağ Kesintisi Mimarisi):** Ağ kesintisi durumunda en son indirilen kütük verisi yerel önbellekten (`localStorage` / `IndexedDB`) yüklenip kullanıcıya kesintisiz sunulacaktır.
-
----
-
-## 1. Overview & Core Concept
-
-- **Ne Yapıyor**: Öğretmen kullanıcıların mobil veya masaüstü cihazlarında tekrar tekrar "Drive Bağlan / İzin Ver" butonuna basma zorunluluğunu kaldırır. İlk onay verildikten sonra oturumu cihaz hafızasında güvenli bir şekilde muhafaza eder ve her 5 dakikada bir arka planda Google Drive üzerindeki en güncel okul canlı kütüğünü sessizce indirir.
-- **Hedef Kitle**: Mobil cihaz kullanan öğretmenler, okul yöneticileri ve sınav değerlendirme görevlileri.
-- **Sağlanan Temel Değer**: Sıfır manuel tıklama gereksinimi, kesintisiz çevrimdışı çalışma kabiliyeti ve en güncel öğrenci/sınav verilerine arka planda anında erişim.
+> Kullanıcı ile teyit edilen kesin tercihler ve kapsam sınırları:
+> - **Sadece Kurum İçi Sınav Kısıtlaması**: Bu özellik (hem canlı kamera Ertem-840 şablonu hem de Sekonic SR-55D TXT yükleme seçeneği) **yalnızca Kurum İçi Deneme Sınavlarında** (`examType === 'internal'`) aktif olacak; harici yayınevi sınavlarında görünmeyecek ve karışıklık yaratmayacaktır.
+> - **Arayüz Konumu**: Tarama ekranında (ScanView) kurum içi bir sınav seçildiğinde ayrı ve belirgin bir **"⚡ Sekonic TXT Yükle"** sekmesi açılacak.
+> - **Eşleşmeyen Öğrenci Yönetimi**: TXT dosyasında numarası veya adı kütükte bulunamayan öğrenciler için öğretmen onayına sunulan ayrı bir **"Eşleşmeyen Öğrenciler"** paneli sunulacak (Tek tıkla kütüğe ekleme, listeden seçme veya atlama).
+> - **Mevcut Sonuçların Güncellenmesi**: Aynı öğrencinin ilgili kurum içi sınavda önceden bir sonucu varsa, yeni yüklenen TXT verisiyle eski sonuç güncellenecek.
+> - **Karakter Kodlaması**: Sekonic makinelerinin standart Windows-1254 (Türkçe CP1254/ISO-8859-9) karakter yapısı otomatik çözülerek Türkçe karakterler eksiksiz korunacak.
 
 ---
 
-## 2. User Experience & Visual Design
+### 1. Overview & Core Concept
 
-- **Kullanıcı Akışı**:
-  1. Öğretmen ilk kez giriş yaptığında Google/Firebase yetkisini verir.
-  2. Sistem token ve oturum anahtarını yerel güvenli depolamaya kaydeder.
-  3. Uygulama açılışında arka planda indirme durumu küçük, göz yormayan yeşil bir canlılık rozetiyle (`Drive Senkronize`) gösterilir.
-  4. 5 dakikalık periyotlarla veya sekmeye her dönüldüğünde en güncel kütük versiyonu kontrol edilir; yeni veri varsa ekran duraklamadan arka planda güncellenir.
-  5. İnternet koptuğunda kullanıcı uyarılardan rahatsız edilmez, en son indirilen canlı kütük ile çevrimdışı çalışmaya devam edilir.
-
-- **Görsel Tematik & Rozet Tasarımı**:
-  - *Sessiz Arka Plan Rozeti*: Sağ üst köşede veya alt bilgi çubuğunda "Drive Güncel • 5d Otomatik" rozeti.
-  - *Yenileme İndikatörü*: Sadece güncelleme sırasında dönen küçük bir yeşil senkronizasyon halkası.
-  - *Çevrimdışı Postür*: İnternet gittiğinde turuncu "Çevrimdışı Mod (Son Kütük Aktif)" bilgisi.
+- **Ne Yapıyor?**: Kurum içi deneme sınavlarında iki yeni seçenek sunar:
+  1. Sekonic SR-55D optik okuyucu makinesinden çıkan 280 karakterlik Ertem-840 `.TXT` / `.DAT` dosyasını tek tıkla yükleyip tüm okulun sonuçlarını saniyeler içinde hesaplama.
+  2. Canlı kamera veya PDF taramasında Ertem-840 şablonunu seçebilme.
+- **Kapsam**: Yalnızca kurumun kendi bastığı veya optik makinede okuttuğu kurum içi sınavlar. Harici yayınevi sınavları bu kuralın dışındadır.
+- **Sağlanan Değer**: Okul elindeki Sekonic makinesini doğrudan Akademi Panel ekosistemine bağlar; kurum içi sınavlar için harici karne yazılımlarına veya lisanslara ihtiyaç bırakmaz.
 
 ---
 
-## 3. Key Product Decisions & Trade-Offs
+### 2. User Experience & Visual Design
 
-- **Süresiz Oturum Kalıcılığı (Browser Local Persistence + Persistent Token Refresher)**:
-  - *Seçilen Yaklaşım*: `setPersistence(auth, browserLocalPersistence)` ve `localStorage` üzerinde süre sınırsız erişim simgesi önbelleklemesi.
-  - *Neden*: Öğretmenlerin mobil tarayıcıda sürekli popup onay ekranıyla karşılaşmasını %100 engeller.
-- **5 Dakikalık Arka Plan Kontrolü (Interval + Focus Triggers)**:
-  - *Seçilen Yaklaşım*: `setInterval(5 * 60 * 1000)` ve `window.addEventListener('focus')`.
-  - *Neden*: Aşırı ağ trafiği yaratmadan en güncel kütük versiyonunu yakalar.
-- **Yerel Önbellek Öncelikli (Cache-First Offline Fallback)**:
-  - *Seçilen Yaklaşım*: Her başarılı indirmede `akademi_data_snapshot_cache` güncellenir.
-  - *Neden*: Okul bodrum katlarında veya zayıf mobil çekim alanlarında öğretmenlerin sınav okuma ve sonuç görmesini kesintisiz kılar.
+#### A. Kurum İçi Sınav Koşullu Sekme Yapısı
+`ScanView` ekranında sadece kurum içi bir sınav seçildiğinde 3. sekme görünür:
+1. `📷 Canlı Kamera Taraması` (Karekodlu & Ertem-840 şablonları)
+2. `📄 PDF / Görsel Toplu Tarama`
+3. `⚡ Sekonic TXT Yükle (Kurum İçi Optik Makine)`
+
+*(Harici yayınevi sınavı seçildiğinde yalnızca standart kamera/dosya taraması gösterilir, Sekonic sekmesi gizlenir).*
+
+#### B. Sekonic TXT Yükleme Arayüzü
+- Seçili kurum içi sınavın adını, kitapçık anahtarlarını ve sınıf seviyesini gösteren bilgilendirme başlığı.
+- Sürükle-bırak destekli dosya yükleme alanı (`.txt`, `.dat`).
+- Yükleme sonrası:
+  - Toplam okunan öğrenci sayısı,
+  - Başarıyla kütükle eşleşen öğrenci sayısı,
+  - Eşleşmeyen öğrenci sayısı özet kartları.
+
+#### C. Eşleşmeyen Öğrenciler Onay & Yönetim Paneli
+Kütükte bulunamayan öğrenciler için:
+- Kodlanan No ve İsim (`00091 - YİĞİT GEÇKOL - 8/A`)
+- 3 Hızlı Aksiyon:
+  - `[ + Yeni Öğrenci Olarak Kütüğe Ekle ]`
+  - `[ 🔍 Mevcut Öğrenciyle Eşleştir ]` (Arama menüsü)
+  - `[ Bu Satırı Atla ]`
+
+#### D. Sonuç Önizleme ve Tek Tıkla Kayıt
+- Her öğrencinin 6 ders bazında Doğru / Yanlış / Boş / Net dökümü ve LGS toplam puanı.
+- Varsa `Mevcut Sonuç Güncellenecek` rozeti.
+- `[ Tüm Sonuçları Kaydet ve Karne Oluştur ]` butonu.
 
 ---
 
-## 4. Technical Architecture & Data Strategy
+### 3. Key Product Decisions & Trade-Offs
+
+- **Karar 1: Sadece Kurum İçi Sınav Filtresi**
+  - *Seçilen Yaklaşım*: `selectedExam.examType === 'internal'` veya kuruma özel cevap anahtarlı sınavlar için aktif edilir.
+  - *Neden*: Harici yayınevi sınavlarında farklı soru sayıları, yayınevi şablonları veya harici veri formatları olabileceğinden karışıklık önlenir.
+- **Karar 2: 280 Karakter Ertem-840 Satır Ayrıştırma Standardı**
+  - `0 - 3`: Form Kodu (`840`)
+  - `3 - 9`: Kurum Kodu (`707487`)
+  - `9 - 14`: Öğrenci No (`00091` -> `91`)
+  - `14 - 34`: Ad Soyad (`YİĞİT GEÇKOL`)
+  - `56`: Sınıf (`8`)
+  - `57`: Şube (`A`)
+  - `58`: Cinsiyet (`E` / `K`)
+  - `59`: Kitapçık (`A` / `B` - boşsa 'A' kabul edilir)
+  - `160 - 280`: 4-8. Sınıf Cevap Alanı (20 Türkçe, 20 Sosyal/İnkılap, 20 Din, 20 İngilizce, 20 Matematik, 20 Fen)
+- **Karar 3: Türkçe Karakter Kodlaması (Windows-1254 / ISO-8859-9)**
+  - Sekonic makinelerinden çıkan dosyalarda "İ, Ğ, Ş, Ç, Ö, Ü" karakterleri Windows-1254 tablosunda yer alır. `FileReader.readAsText(file, 'windows-1254')` kullanılarak isimlerin bozulması önlenir.
+
+---
+
+### 4. Technical Architecture & Data Strategy
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        ÖĞRETMEN MOBİL CİHAZI                           │
+│                        ScanView (Kurum İçi Sınav)                      │
 │                                                                        │
-│  ┌───────────────────────┐             ┌────────────────────────────┐  │
-│  │ LocalStorage / Auth   │             │   Background Sync Engine   │  │
-│  │ Persistent Token      │────────────>│   (Every 5 min / Window    │  │
-│  │ & Approved State      │             │    Focus Trigger)          │  │
-│  └───────────────────────┘             └──────────────┬─────────────┘  │
-│                                                       │                │
-│                                                       │ (Fetch File)   │
-│                                                       ▼                │
-│  ┌───────────────────────┐             ┌────────────────────────────┐  │
-│  │ Local Master Cache    │<────────────│ Google Drive API /         │  │
-│  │ (Offline Fallback)    │ (Auto Save) │ Express RAM Proxy          │  │
-│  └───────────────────────┘             └──────────────┴─────────────┘  │
+│   Sınav: [ Atatürk Ortaokulu 8. Sınıf Son Viraj (Kurum İçi) ]          │
+│                                                                        │
+│  ┌───────────────────────┬───────────────────┬───────────────────────┐ │
+│  │ 📷 Kamera Taraması    │ 📄 PDF / Görsel   │ ⚡ Sekonic TXT Yükle  │ │
+│  └───────────────────────┴───────────────────┴───────────┬───────────┘ │
+└──────────────────────────────────────────────────────────┼─────────────┘
+                                                           │ (Yalnızca Kurum İçi)
+                                                           ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                     sekonicParser.ts                                   │
+│                                                                        │
+│   - Windows-1254 decoder                                               │
+│   - 280-char Ertem-840 validator                                       │
+│   - Extract Student No, Name, Class/Section, Booklet, 6 Subject Answers│
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                   Student Matching & Resolution                        │
+│                                                                        │
+│   - Matched by Student No + Name Check (Auto-approved)                 │
+│   - Unmatched Review List: [Add to Roster] | [Link to Student] | [Skip]│
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                Scoring & Persistence (Internal Exam)                   │
+│                                                                        │
+│   - Score against Internal Exam Answer Keys (Booklet A/B)              │
+│   - Overwrite existing results for re-uploaded students                │
+│   - saveOmrExamResults() -> AppContext state & Firestore sync          │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Mimaride Yapılacak Güncellemeler**:
-  1. `src/lib/firebase.ts`: `getCachedAccessToken`, `connectGoogleDrive` ve token depolama mantığı `localStorage` ile kalıcı hale getirilecek, sessiz yenileme mekanizması kurulacak.
-  2. `src/context/AppContext.tsx`: `checkDriveRemoteUpdate` periyodu 30s yerine 5 dakikaya optimize edilecek, açılışta ve sekme odağında otomatik arka plan indiricisi entegre edilecek.
-  3. `src/App.tsx`: Öğretmen oturumlarında manuel onay ekranı yerine sessiz arka plan yükleme akışı etkinleştirilecek.
+#### Bileşen ve Dosya Planı
+1. **`src/lib/sekonicParser.ts` (Yeni Dosya)**:
+   - Ertem-840 / Sekonic SR-55D satır çözümleyici fonksiyonları.
+   - Kurum kodu, öğrenci no, ad-soyad, sınıf, şube, kitapçık türü ve 6 branş cevap haritası.
+   - Windows-1254 metin okuyucu.
+2. **`src/views/ScanView.tsx` (Entegrasyon)**:
+   - Seçili sınavın kurum içi denetimi (`isInternalExam`).
+   - Yalnızca kurum içi sınavlarda görünen `Sekonic TXT Yükle` sekmesi.
+   - Dosya yükleme, eşleşmeyen öğrenciler paneli, önizleme tablosu ve kaydetme akışı.
+3. **`src/lib/omrTemplates.ts`**:
+   - Ertem-840 kamera vizör kılavuzu ve şablon tanımları (yalnızca kurum içi sınav taramalarında geçerli).

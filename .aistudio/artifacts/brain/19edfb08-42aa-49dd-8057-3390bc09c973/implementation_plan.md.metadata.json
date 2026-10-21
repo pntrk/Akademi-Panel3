@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan for persistent background authentication and 5-minute silent Google Drive master roster sync for teacher mobile devices.",
-  "updatedAt": "2026-10-19T11:07:41.180550953Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "Yalnızca Kurum İçi Deneme Sınavları için geçerli Sekonic SR-55D (Ertem-840) TXT ve Optik Entegrasyonu Planı.\nKurum içi sınav filtresi, 280 karakter sabit genişlikli ayrıştırıcı, eşleşmeyen öğrenci onay mekanizması ve sonuç güncelleme mantığı.",
+  "updatedAt":  "2026-10-21T10:35:33.701382177Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }
