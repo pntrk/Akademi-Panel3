@@ -66,7 +66,8 @@ import {
   Check,
   UserPlus,
   Link2,
-  Search
+  Search,
+  Printer
 } from 'lucide-react';
 import { 
   parseSekonicErtem840, 
@@ -2605,20 +2606,20 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
       )}
 
       {/* Top Header Bar */}
-      <div className="bg-slate-900/90 backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2 border-b border-slate-800 shrink-0">
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+      <div className="bg-slate-900/90 backdrop-blur-md px-2.5 py-2 sm:px-4 sm:py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 border-b border-slate-800 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-900/30 shrink-0">
             <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm sm:text-base font-bold tracking-tight text-white truncate">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <h3 className="text-xs sm:text-base font-bold tracking-tight text-white truncate">
                 Akıllı Optik Tarayıcı & OMR
               </h3>
-              <div className="flex items-center gap-1.5 bg-slate-800/90 border border-emerald-500/40 rounded-lg px-2 py-0.5">
+              <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-800/90 border border-emerald-500/40 rounded-lg px-1.5 sm:px-2 py-0.5 max-w-[170px] xs:max-w-[220px] sm:max-w-none">
                 <span className="text-[10px] sm:text-[11px] font-bold text-slate-300 shrink-0 flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-emerald-400" />
-                  Şablon:
+                  <span className="hidden xs:inline">Şablon:</span>
                 </span>
                 <select
                   value={lockToSelectedExam ? selectedExamId : 'auto'}
@@ -2632,12 +2633,12 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                       handleExamChange(val);
                     }
                   }}
-                  className="bg-slate-900 text-emerald-400 font-bold text-xs rounded border border-slate-700 px-2 py-0.5 outline-none cursor-pointer max-w-[220px] sm:max-w-xs truncate"
+                  className="bg-slate-900 text-emerald-400 font-bold text-[11px] sm:text-xs rounded border border-slate-700 px-1 sm:px-2 py-0.5 outline-none cursor-pointer max-w-[95px] xs:max-w-[130px] sm:max-w-xs truncate"
                   title="Okutulacak Kurum İçi Sınav Şablonu"
                 >
-                  <option value="auto">⚡ Otomatik (QR Kodundan Algıla)</option>
+                  <option value="auto">⚡ Otomatik (QR)</option>
                   {internalExams.length === 0 ? (
-                    <option value="" disabled>-- Kayıtlı Kurum İçi Sınav Yok --</option>
+                    <option value="" disabled>-- Kayıtlı Sınav Yok --</option>
                   ) : (
                     internalExams.map(e => {
                       const qCount = e.subjects?.reduce((sum, s) => sum + s.count, 0) || (e.omrMap?.totalQuestions) || (e.keys?.A?.length) || 0;
@@ -2653,7 +2654,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                   <button
                     type="button"
                     onClick={() => setLockToSelectedExam(prev => !prev)}
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer ${
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer shrink-0 ${
                       lockToSelectedExam 
                         ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
                         : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
@@ -2678,7 +2679,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 </span>
               )}
               {isInternalExam(exam) && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] bg-indigo-950/80 text-indigo-300 border border-indigo-500/40 rounded font-semibold" title="OptikAI Kurum İçi OMR Motoru (maxD >= 40, diff >= 15, Satır Kilitleme)">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] bg-indigo-950/80 text-indigo-300 border border-indigo-500/40 rounded font-semibold" title="OptikAI Kurum İçi OMR Motoru">
                   <Zap className="w-2.5 h-2.5 text-indigo-400" /> OptikAI Motoru
                 </span>
               )}
@@ -2686,26 +2687,27 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap sm:flex-nowrap justify-end ml-auto">
           {pendingSyncCount > 0 && (
             <button
               type="button"
               onClick={() => saveNow().catch(() => {})}
-              className="flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition-all border border-amber-500/40 cursor-pointer shadow-xs animate-pulse"
+              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-[11px] sm:text-xs font-bold transition-all border border-amber-500/40 cursor-pointer shadow-xs animate-pulse whitespace-nowrap"
               title="Tampondaki formları hemen buluta aktarmak için tıklayın"
             >
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
-              <span>{pendingSyncCount} Form Tamponda (Şimdi Eşitle)</span>
+              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+              <span className="hidden sm:inline">{pendingSyncCount} Form Tamponda</span>
+              <span className="sm:hidden">{pendingSyncCount} Eşitle</span>
             </button>
           )}
 
           {syncStatus === 'quota_exceeded' && pendingSyncCount === 0 && (
             <div 
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 bg-amber-500/15 text-amber-300 rounded-xl text-xs font-bold border border-amber-500/30"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 bg-amber-500/15 text-amber-300 rounded-xl text-xs font-bold border border-amber-500/30 whitespace-nowrap"
               title="Firestore kotası doldu; taramalarınız cihazınızda kesintisiz ve %100 güvende saklanmaktadır."
             >
               <span className="w-2 h-2 rounded-full bg-amber-400" />
-              <span>⚡ Yerel Mod (%100 Korunuyor)</span>
+              <span>⚡ Yerel Mod</span>
             </div>
           )}
 
@@ -2722,10 +2724,12 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                   (window as any).__keysPrintSetTab('print');
                 }
               }}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-purple-600/50 cursor-pointer shadow-xs"
+              className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white rounded-xl text-[11px] sm:text-xs font-bold transition-all border border-purple-600/50 cursor-pointer shadow-xs whitespace-nowrap active:scale-95"
               title="Karekodlu Optik Form Baskı ve Canlı Önizleme Merkezine Git"
             >
-              <span>🖨️ Form Yazdır / Önizle</span>
+              <Printer className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden xs:inline">Form Yazdır</span>
+              <span className="xs:hidden">Yazdır</span>
             </button>
           )}
 
@@ -2741,11 +2745,11 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 (window as any).__navigateToTab('results');
               }
             }}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-emerald-950/80 border border-slate-700/80 hover:border-emerald-500/50 rounded-xl text-xs font-semibold text-slate-300 hover:text-emerald-300 transition-all cursor-pointer shadow-xs active:scale-95"
+            className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-emerald-950/80 border border-slate-700/80 hover:border-emerald-500/50 rounded-xl text-[11px] sm:text-xs font-semibold text-slate-300 hover:text-emerald-300 transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
             title="Okunan Deneme Sınavının Sonuç ve Analiz Ekranına Git"
           >
-            <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span><strong className="text-emerald-400 font-mono">{(exam.results || []).length}</strong> Okundu (Sonuçları Gör)</span>
+            <FileCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span><strong className="text-emerald-400 font-mono">{(exam.results || []).length}</strong> <span className="hidden xs:inline">Okundu</span></span>
           </button>
 
           {isAdmin && imageLoaded && !isCameraActive && (
@@ -2757,7 +2761,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 setBatchFiles([]);
                 setStatus("");
               }}
-              className="px-2.5 py-1 sm:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs transition-colors border border-slate-700 cursor-pointer font-medium"
+              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-[11px] sm:text-xs transition-colors border border-slate-700 cursor-pointer font-medium whitespace-nowrap"
               title="Formu Temizle"
             >
               Temizle
@@ -2767,7 +2771,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           {isAdmin && onClose && (
             <button
               onClick={onClose}
-              className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+              className="p-1 sm:p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
               title="Kapat"
             >
               <X className="w-4 h-4" />
@@ -2777,29 +2781,32 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
       </div>
 
       {exam.examType === 'publisher' && (
-        <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 flex items-center justify-between text-xs text-amber-200 shrink-0">
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-3.5 py-2 flex items-center justify-between text-xs text-amber-200 shrink-0">
           <div className="flex items-center gap-2">
             <span className="font-bold">⚠️ Bilgilendirme:</span>
-            <span>"{exam.name}" bir <strong>Yayıncı Denemesidir</strong>. Yayıncı denemeleri için sonuçlar 'Öğrenci & Sonuçlar' sekmesinden Excel yüklemesiyle alınır; optik okuma gerektirmez. Optik okuma için lütfen 'Kurum İçi Optik Deneme' türünde bir sınav seçiniz.</span>
+            <span>"{exam.name}" bir <strong>Yayıncı Denemesidir</strong>. Yayıncı denemeleri için sonuçlar 'Öğrenci & Sonuçlar' sekmesinden Excel yüklemesiyle alınır.</span>
           </div>
         </div>
       )}
 
       {/* Kurum İçi Sınavlar İçin Sekme Seçici (Canlı Kamera vs Sekonic SR-55D TXT) */}
       {isInternalExam(exam) && (
-        <div className="bg-slate-900 border-b border-slate-800 px-3.5 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="bg-slate-900 border-b border-slate-800 px-2.5 sm:px-3.5 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setScanViewMode('scanner')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
                 scanViewMode === 'scanner'
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800'
               }`}
             >
-              <Camera className="w-3.5 h-3.5" />
-              <span>📷 Canlı Kamera & Çoklu PDF</span>
+              <Camera className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">
+                <span className="sm:hidden">Kamera & PDF</span>
+                <span className="hidden sm:inline">📷 Canlı Kamera & Çoklu PDF</span>
+              </span>
             </button>
 
             <button
@@ -2808,24 +2815,27 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
                 if (isCameraActive) stopCamera();
                 setScanViewMode('sekonic');
               }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
                 scanViewMode === 'sekonic'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-950/40 ring-1 ring-indigo-400/50'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800'
               }`}
             >
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>⚡ Sekonic TXT Yükle (Ertem-840)</span>
+              <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="truncate">
+                <span className="sm:hidden">Sekonic TXT</span>
+                <span className="hidden sm:inline">⚡ Sekonic TXT Yükle</span>
+              </span>
             </button>
           </div>
 
           {scanViewMode === 'scanner' && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400 hidden md:inline font-medium">Optik Form Şablonu:</span>
+            <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto bg-slate-950/50 sm:bg-transparent px-2.5 py-1 sm:p-0 rounded-lg border sm:border-0 border-slate-800/80">
+              <span className="text-[11px] text-slate-400 font-medium shrink-0">Optik Form:</span>
               <select
                 value={selectedTemplate}
                 onChange={(e) => setSelectedTemplate(e.target.value as OpticalTemplateType)}
-                className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold outline-none cursor-pointer focus:border-emerald-500"
+                className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold outline-none cursor-pointer focus:border-emerald-500 w-full sm:w-auto truncate"
               >
                 <option value="standard_qr">Akıllı Karekodlu Form (Varsayılan)</option>
                 <option value="ertem_840">Ertem Optik-840 (Zamanlama Çubuklu)</option>
@@ -2886,7 +2896,7 @@ export function ScanView({ examId: propExamId, onClose, activeTab = 'scan', onNa
           {/* Main Layout Area */}
           <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden relative bg-slate-950">
         {/* Left Control Panel */}
-        <div className="w-full lg:w-96 flex flex-col gap-3 p-3 sm:p-4 lg:border-r border-slate-800 shrink-0 overflow-y-auto custom-scrollbar">
+        <div className="w-full lg:w-96 flex flex-col gap-3 p-3 sm:p-4 lg:border-r border-slate-800 shrink-0 overflow-y-auto custom-scrollbar pb-24 lg:pb-4">
           {/* Sınav ve OMR Şablonu Kontrol Kartı */}
           <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-700/80 space-y-2.5 shadow-sm">
             <div className="flex items-center justify-between">

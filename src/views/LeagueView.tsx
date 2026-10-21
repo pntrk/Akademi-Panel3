@@ -1754,15 +1754,19 @@ export const LeagueView = () => {
             <div className="md:hidden flex flex-col gap-2">
               {displayedStudents.map((s, idx) => {
                 const lpPoints = (s.displayPoints !== undefined ? s.displayPoints : (selectedMonth === 'all' ? s.leaguePoints : 0)) || 0;
-                const teamBorder = s.leagueTeam === 'Kutup Yıldızları' ? 'border-l-4 border-l-amber-500' :
-                  s.leagueTeam === 'Sıçrama Ustaları' ? 'border-l-4 border-l-blue-500' :
-                  s.leagueTeam === 'Taktik Avcıları' ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-gray-300';
+                const teamBg = s.leagueTeam === 'Kutup Yıldızları' 
+                  ? 'bg-gradient-to-r from-amber-50/80 via-white to-amber-50/40 border-amber-200/90' 
+                  : s.leagueTeam === 'Sıçrama Ustaları' 
+                  ? 'bg-gradient-to-r from-blue-50/80 via-white to-blue-50/40 border-blue-200/90' 
+                  : s.leagueTeam === 'Taktik Avcıları' 
+                  ? 'bg-gradient-to-r from-emerald-50/80 via-white to-emerald-50/40 border-emerald-200/90' 
+                  : 'bg-[#FAF9F6] border-brand-border/80';
                 
                 return (
                   <div 
                     key={s.id ? `card-${s.id}` : `card-${s.no || (s as any).name}-${idx}`}
                     onClick={() => handleSelectStudent(s)}
-                    className={`bg-[#FAF9F6] rounded-2xl p-3 border border-brand-border/80 shadow-2xs flex flex-col gap-1.5 active:scale-[0.98] transition-all cursor-pointer hover:border-brand-border ${teamBorder}`}
+                    className={`rounded-2xl p-3 border shadow-2xs flex flex-col gap-1.5 active:scale-[0.98] transition-all cursor-pointer ${teamBg}`}
                   >
                     {/* Üst Satır: Sıra, İsim, Sınıf ve LP Puanı */}
                     <div className="flex items-center justify-between gap-2">
@@ -1778,7 +1782,7 @@ export const LeagueView = () => {
                         <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
                           <p className="font-bold text-xs sm:text-sm text-brand-ink truncate">{s.name}</p>
                           {s.className && (
-                            <span className="text-[10px] text-brand-ink/60 font-bold bg-white px-1.5 py-0.5 rounded border border-brand-border/60 shrink-0">
+                            <span className="text-[10px] text-brand-ink/60 font-bold bg-white/90 px-1.5 py-0.5 rounded border border-brand-border/60 shrink-0">
                               {s.className}
                             </span>
                           )}
@@ -1796,10 +1800,10 @@ export const LeagueView = () => {
                     <div className="border-t border-brand-border/40 pt-1.5 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 inline-flex items-center gap-1 ${
-                          s.leagueTeam === 'Kutup Yıldızları' ? 'bg-amber-50 text-amber-950 border-amber-200/80' : 
-                          s.leagueTeam === 'Sıçrama Ustaları' ? 'bg-blue-50 text-blue-950 border-blue-200/80' :
-                          s.leagueTeam === 'Taktik Avcıları' ? 'bg-emerald-50 text-emerald-950 border-emerald-200/80' : 
-                          'bg-gray-50 text-gray-700 border-gray-200'
+                          s.leagueTeam === 'Kutup Yıldızları' ? 'bg-amber-100/80 text-amber-950 border-amber-300/80' : 
+                          s.leagueTeam === 'Sıçrama Ustaları' ? 'bg-blue-100/80 text-blue-950 border-blue-300/80' :
+                          s.leagueTeam === 'Taktik Avcıları' ? 'bg-emerald-100/80 text-emerald-950 border-emerald-300/80' : 
+                          'bg-gray-100 text-gray-700 border-gray-200'
                         }`}>
                           <span>{s.leagueTeam === 'Kutup Yıldızları' ? '⭐' : s.leagueTeam === 'Sıçrama Ustaları' ? '🚀' : s.leagueTeam === 'Taktik Avcıları' ? '🛡️' : '⚪'}</span>
                           <span>{s.leagueTeam ? s.leagueTeam.split(' ')[0] : 'Atanmadı'}</span>

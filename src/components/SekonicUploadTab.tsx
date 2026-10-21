@@ -305,7 +305,7 @@ export const SekonicUploadTab: React.FC<SekonicUploadTabProps> = ({ exam, onNavi
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto bg-slate-950 text-slate-100 p-3 sm:p-5">
+    <div className="flex-1 flex flex-col overflow-y-auto bg-slate-950 text-slate-100 p-2.5 sm:p-5 pb-24 sm:pb-8">
       {/* Top Banner: Kurum İçi Sınav Bilgilendirmesi */}
       <div className="bg-gradient-to-r from-indigo-950/80 via-slate-900 to-purple-950/80 border border-indigo-500/40 rounded-2xl p-4 sm:p-5 shadow-xl mb-4 shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -559,14 +559,14 @@ export const SekonicUploadTab: React.FC<SekonicUploadTabProps> = ({ exam, onNavi
                     </div>
 
                     {/* 3 Action Buttons */}
-                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                    <div className="grid grid-cols-3 sm:flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
                       <button
                         type="button"
                         onClick={() => handleAddNewStudentToRoster(studentRow)}
-                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                        className="px-2 py-2 sm:px-2.5 sm:py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
                         title="Bu öğrenciyi okul kütüğüne otomatik ekle ve sonucu bağla"
                       >
-                        <UserPlus className="w-3.5 h-3.5" />
+                        <UserPlus className="w-3.5 h-3.5 shrink-0" />
                         <span>Kütüğe Ekle</span>
                       </button>
 
@@ -576,17 +576,17 @@ export const SekonicUploadTab: React.FC<SekonicUploadTabProps> = ({ exam, onNavi
                           setActiveResolvingRowId(studentRow.rowId);
                           setRosterSearchQuery('');
                         }}
-                        className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                        className="px-2 py-2 sm:px-2.5 sm:py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
                         title="Mevcut öğrenci listesinden arayıp eşleştir"
                       >
-                        <Search className="w-3.5 h-3.5" />
+                        <Search className="w-3.5 h-3.5 shrink-0" />
                         <span>Kütükten Seç</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => handleIgnoreRow(studentRow.rowId)}
-                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 rounded-lg text-xs font-medium transition-all cursor-pointer border border-slate-700"
+                        className="px-2 py-2 sm:px-2.5 sm:py-1.5 bg-slate-800 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 rounded-lg text-[11px] sm:text-xs font-medium transition-all cursor-pointer border border-slate-700 flex items-center justify-center active:scale-95"
                         title="Bu satırı atla (kaydedilmez)"
                       >
                         <span>Atla</span>
@@ -608,7 +608,7 @@ export const SekonicUploadTab: React.FC<SekonicUploadTabProps> = ({ exam, onNavi
                   placeholder="İsim, numara veya sınıfa göre ara..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-800 text-white pl-9 pr-3 py-1.5 rounded-xl border border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-800 text-white pl-9 pr-3 py-2 rounded-xl border border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
@@ -623,17 +623,17 @@ export const SekonicUploadTab: React.FC<SekonicUploadTabProps> = ({ exam, onNavi
               )}
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={handleSaveAll}
                 disabled={isSaving || readyToSaveStudents.length === 0}
-                className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 active:scale-95 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 active:scale-95 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
                 ) : (
-                  <CheckCircle2 className="w-4 h-4" />
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
                 )}
                 <span>
                   {isSaving 
@@ -664,14 +664,14 @@ export const SekonicUploadTab: React.FC<SekonicUploadTabProps> = ({ exam, onNavi
           {saveMessage && !isSaving && (
             <div className="bg-emerald-950/60 border border-emerald-500/50 p-3 rounded-xl flex items-center justify-between text-xs text-emerald-200">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span className="font-bold">{saveMessage}</span>
               </div>
               {onNavigate && (
                 <button
                   type="button"
                   onClick={() => onNavigate('results')}
-                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
                 >
                   Sonuç Ekranına Git →
                 </button>
@@ -679,9 +679,10 @@ export const SekonicUploadTab: React.FC<SekonicUploadTabProps> = ({ exam, onNavi
             </div>
           )}
 
-          {/* RESULTS PREVIEW TABLE */}
+          {/* RESULTS PREVIEW (Desktop Table + Mobile Cards) */}
           <div className="bg-slate-900/90 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
@@ -802,6 +803,119 @@ export const SekonicUploadTab: React.FC<SekonicUploadTabProps> = ({ exam, onNavi
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className="md:hidden p-3 space-y-2 divide-y divide-slate-800/80">
+              {displayedStudents.map((row, idx) => {
+                const isIgnored = ignoredRowIds.has(row.rowId);
+                const manualTarget = manualMappedStudents[row.rowId];
+                const effectiveStudent = manualTarget || row.matchedStudent;
+                const finalName = effectiveStudent ? effectiveStudent.name : row.rawName;
+                const finalNo = effectiveStudent ? effectiveStudent.no : (row.cleanNo || '?');
+                const subScores = row.evaluatedScore?.subjectScores || {};
+
+                return (
+                  <div
+                    key={row.rowId}
+                    className={`pt-2.5 first:pt-0 flex flex-col gap-1.5 text-xs ${
+                      isIgnored ? 'opacity-40' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-6 h-6 rounded-md bg-slate-800 text-slate-300 font-mono font-bold flex items-center justify-center shrink-0 text-[10px]">
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-bold text-white truncate flex items-center gap-1.5">
+                            <span>{finalName}</span>
+                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-300 font-mono">
+                              No: {finalNo}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            Sınıf: {row.classFormatted} • Kitapçık: <strong className="text-indigo-300">{row.booklet}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-black text-emerald-400 font-mono">
+                          {row.totalNet.toFixed(2)} Net
+                        </div>
+                        <div className="text-[10px] font-bold text-amber-400 font-mono">
+                          {row.score.toFixed(1)} LGS Puan
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Subject Nets Mini Row */}
+                    <div className="grid grid-cols-6 gap-1 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800 text-[10px] text-center font-mono">
+                      <div>
+                        <span className="text-slate-500 block text-[8px]">TR</span>
+                        <span className="text-slate-200 font-bold">{subScores['Türkçe'] !== undefined ? subScores['Türkçe'].net.toFixed(1) : '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8px]">SOS</span>
+                        <span className="text-slate-200 font-bold">{subScores['T.C. İnkılap Tarihi ve Atatürkçülük'] !== undefined ? subScores['T.C. İnkılap Tarihi ve Atatürkçülük'].net.toFixed(1) : '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8px]">DİN</span>
+                        <span className="text-slate-200 font-bold">{subScores['Din Kültürü ve Ahlak Bilgisi'] !== undefined ? subScores['Din Kültürü ve Ahlak Bilgisi'].net.toFixed(1) : '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8px]">İNG</span>
+                        <span className="text-slate-200 font-bold">{subScores['İngilizce'] !== undefined ? subScores['İngilizce'].net.toFixed(1) : '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8px]">MAT</span>
+                        <span className="text-slate-200 font-bold">{subScores['Matematik'] !== undefined ? subScores['Matematik'].net.toFixed(1) : '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8px]">FEN</span>
+                        <span className="text-slate-200 font-bold">{subScores['Fen Bilimleri'] !== undefined ? subScores['Fen Bilimleri'].net.toFixed(1) : '-'}</span>
+                      </div>
+                    </div>
+
+                    {/* Bottom Status / Action */}
+                    <div className="flex items-center justify-between pt-0.5">
+                      <span className="text-[10px] text-slate-400">
+                        {isIgnored ? 'Atlandı' : effectiveStudent ? 'Kütükle eşleşti' : 'Kütükte bulunamadı'}
+                      </span>
+
+                      {isIgnored ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreRow(row.rowId)}
+                          className="text-[10px] text-slate-400 hover:text-white underline cursor-pointer"
+                        >
+                          Geri Al
+                        </button>
+                      ) : !effectiveStudent ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveResolvingRowId(row.rowId);
+                            setRosterSearchQuery('');
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-pointer active:scale-95"
+                        >
+                          ⚠️ Eşleştir
+                        </button>
+                      ) : row.isOverwriting ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                          Güncellenecek
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          Yeni
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
