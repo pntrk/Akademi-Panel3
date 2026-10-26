@@ -7,7 +7,7 @@ import {
   ChevronLeft, Printer, RefreshCw, Star, Layers, ArrowRight,
   FileSpreadsheet, Download
 } from 'lucide-react';
-import { determineLeagueTeam, calculateAtaLigPoints, parseDate, normalizeTurkish } from '../lib/utils';
+import { determineLeagueTeam, calculateAtaLigPoints, parseDate, normalizeTurkish, formatDateShort, extractDateFromText } from '../lib/utils';
 import { ALL_BADGE_DEFINITIONS, getBadgeDefinition, BadgeDefinition, BADGE_POINTS, normalizeBadgeKey } from '../lib/badgeDefinitions';
 import { exportTeamToExcel, exportAllTeamsToExcel } from '../lib/arenaExport';
 import RulesView from './RulesView';
@@ -237,10 +237,31 @@ export const LeagueView = () => {
         list = [];
         map.set(key, list);
       }
-      const existingIdx = list.findIndex(e => e.examId === item.examId || (item.name && e.name === item.name));
+      const existingIdx = list.findIndex(e => {
+        // 1. Aynı kesin examId varsa kesinlikle aynı sınavdır
+        if (e.examId && item.examId && String(e.examId) === String(item.examId)) return true;
+        // 2. İsimler aynıysa: Tarihleri farklıysa KESİNLİKLE farklı sınavlardır (örn. 24.10.2026 vs 20.03.2027 ezilmesini engelle)!
+        if (e.name && item.name && e.name.trim().toLowerCase() === item.name.trim().toLowerCase()) {
+          if (e.date && item.date && e.date.trim() !== item.date.trim()) {
+            return false;
+          }
+          return true;
+        }
+        return false;
+      });
       if (existingIdx >= 0) {
-        // Son yüklenen sınav sonucu geçerli kabul edilir (mükerrerliği önleme)
-        list[existingIdx] = item;
+        // Son yüklenen veya daha detaylı olan sınav sonucu geçerli kabul edilir
+        const existing = list[existingIdx];
+        const preferDate = (item.date && item.date.trim()) ? item.date : existing.date;
+        const preferDetails = item.details || existing.details;
+        const preferScore = item.score > 0 ? item.score : existing.score;
+        list[existingIdx] = {
+          ...existing,
+          ...item,
+          date: preferDate,
+          details: preferDetails,
+          score: preferScore
+        };
       } else {
         list.push(item);
       }
@@ -263,10 +284,16 @@ export const LeagueView = () => {
 
         const details = r.evaluatedScore?.subjectScores || r.scores;
 
+        // Sınav adında gömülü açık bir tarih varsa (Örn: "LGS - 24 Ekim 2026"), önceliklendir
+        const embeddedDate = extractDateFromText(exam.name);
+        const resolvedDate = (embeddedDate && (!exam.date || (exam.date !== embeddedDate && !exam.name.includes(exam.date))))
+          ? embeddedDate
+          : (exam.date || embeddedDate || '');
+
         const item = {
           examId: String(exam.id),
           name: exam.name,
-          date: exam.date,
+          date: resolvedDate,
           score,
           details,
           examRes: r
@@ -291,10 +318,29 @@ export const LeagueView = () => {
           // Sadece aktif sınavlar havuzunda yer alan sınavları dahil et (silinen sınavların skoru sızmaz)
           if (!activeExamNames.has(examKey) && !activeExamIds.has(examKey)) return;
           if (typeof scoreVal === 'number' && scoreVal > 0) {
-            const matchingExam = (state.exams || []).find(e => String(e.id) === examKey || e.name === examKey);
+            // Önce ID ile kesin eşleştir
+            let matchingExam = (state.exams || []).find(e => String(e.id) === examKey);
+            if (!matchingExam) {
+              const byName = (state.exams || []).filter(e => e.name === examKey);
+              if (byName.length === 1) {
+                matchingExam = byName[0];
+              } else if (byName.length > 1) {
+                // Aynı ada sahip birden çok sınav varsa (örn. farklı tarihlerdeki denemeler), öğrencinin sonucunun bulunduğu sınavı bul
+                matchingExam = byName.find(e => (e.results || []).some((res: any) =>
+                  (rNo > 0 && (res.no === rNo || res.studentNo === rNo)) ||
+                  (rId && (res.studentId === rId || res.id === rId)) ||
+                  (rNameNorm && (res.name || res.studentName) && normalizeTurkish(res.name || res.studentName).trim().toLowerCase() === rNameNorm)
+                )) || byName.find(e => e.date && r.date && e.date === r.date) || byName[0];
+              }
+            }
+
             const canonicalId = matchingExam ? String(matchingExam.id) : examKey;
             const canonicalName = matchingExam ? matchingExam.name : examKey;
-            const canonicalDate = matchingExam?.date || r.date || '';
+
+            const embeddedDate = extractDateFromText(canonicalName);
+            const canonicalDate = (embeddedDate && (!matchingExam?.date || (matchingExam.date !== embeddedDate && !canonicalName.includes(matchingExam.date))))
+              ? embeddedDate
+              : (matchingExam?.date || r.date || embeddedDate || '');
 
             const item = {
               examId: canonicalId,
@@ -329,16 +375,49 @@ export const LeagueView = () => {
 
       const examListMap = new Map<string, any>();
       for (const e of [...fromNo, ...fromId, ...fromName]) {
-        // Find canonical exam in state.exams
-        const matched = (state.exams || []).find(ex => String(ex.id) === String(e.examId) || ex.name === e.name);
-        const canonKey = matched ? String(matched.id) : (e.examId || e.name);
+        // Önce kesin ID ile eşleştir
+        let matched = (state.exams || []).find(ex => String(ex.id) === String(e.examId));
+        // ID ile bulunamazsa isim ve tarih ile eşleştir
+        if (!matched && e.date) {
+          matched = (state.exams || []).find(ex => ex.name === e.name && ex.date === e.date);
+        }
+        // Tekil isim eşleştirmesi
+        if (!matched) {
+          const byName = (state.exams || []).filter(ex => ex.name === e.name);
+          if (byName.length === 1) {
+            matched = byName[0];
+          }
+        }
+
+        const embeddedDate = extractDateFromText(matched?.name || e.name);
+        const resolvedDate = (embeddedDate && (!matched?.date || (matched.date !== embeddedDate && !(matched?.name || e.name).includes(matched.date))))
+          ? embeddedDate
+          : (matched?.date || e.date || embeddedDate || '');
+
+        // Benzersiz anahtar: ID veya isim+tarih kombini (farklı tarihteki aynı isimli sınavların birleşmesini önler)
+        const canonKey = matched ? String(matched.id) : (e.examId ? String(e.examId) : `${e.name}_${resolvedDate}`);
+        
+        const itemWithCanon = {
+          ...e,
+          date: resolvedDate,
+          name: matched?.name || e.name,
+          examId: matched ? String(matched.id) : (e.examId || canonKey)
+        };
+
         if (!examListMap.has(canonKey)) {
-          examListMap.set(canonKey, e);
+          examListMap.set(canonKey, itemWithCanon);
         } else {
           const existing = examListMap.get(canonKey);
-          if ((!existing.date && e.date) || (!existing.details && e.details)) {
-            examListMap.set(canonKey, e);
-          }
+          const betterDate = resolvedDate || existing.date;
+          const betterDetails = itemWithCanon.details || existing.details;
+          const betterScore = itemWithCanon.score > 0 ? itemWithCanon.score : existing.score;
+          examListMap.set(canonKey, {
+            ...existing,
+            ...itemWithCanon,
+            date: betterDate,
+            details: betterDetails,
+            score: betterScore
+          });
         }
       }
       const studentExams = Array.from(examListMap.values());
@@ -2250,15 +2329,49 @@ export const LeagueView = () => {
 
             const examListMap = new Map<string, any>();
             for (const e of [...fromNo, ...fromId, ...fromName]) {
-              const matched = (state.exams || []).find(ex => String(ex.id) === String(e.examId) || ex.name === e.name);
-              const canonKey = matched ? String(matched.id) : (e.examId || e.name);
+              // 1. Önce ID ile kesin eşleştirme
+              let matched = (state.exams || []).find(ex => String(ex.id) === String(e.examId));
+              // 2. ID bulunamazsa isim ve tarih ile eşleştir
+              if (!matched && e.date) {
+                matched = (state.exams || []).find(ex => ex.name === e.name && ex.date === e.date);
+              }
+              // 3. Tekil isim eşleştirmesi
+              if (!matched) {
+                const byName = (state.exams || []).filter(ex => ex.name === e.name);
+                if (byName.length === 1) {
+                  matched = byName[0];
+                }
+              }
+
+              const embeddedDate = extractDateFromText(matched?.name || e.name);
+              const resolvedDate = (embeddedDate && (!matched?.date || (matched.date !== embeddedDate && !(matched?.name || e.name).includes(matched.date))))
+                ? embeddedDate
+                : (matched?.date || e.date || embeddedDate || '');
+
+              // Benzersiz anahtar: ID veya isim+tarih kombini (farklı tarihteki aynı isimli sınavların birleşmesini önler)
+              const canonKey = matched ? String(matched.id) : (e.examId ? String(e.examId) : `${e.name}_${resolvedDate}`);
+              
+              const itemWithCanon = {
+                ...e,
+                date: resolvedDate,
+                name: matched?.name || e.name,
+                examId: matched ? String(matched.id) : (e.examId || canonKey)
+              };
+
               if (!examListMap.has(canonKey)) {
-                examListMap.set(canonKey, e);
+                examListMap.set(canonKey, itemWithCanon);
               } else {
                 const existing = examListMap.get(canonKey);
-                if ((!existing.date && e.date) || (!existing.details && e.details)) {
-                  examListMap.set(canonKey, e);
-                }
+                const betterDate = resolvedDate || existing.date;
+                const betterDetails = itemWithCanon.details || existing.details;
+                const betterScore = itemWithCanon.score > 0 ? itemWithCanon.score : existing.score;
+                examListMap.set(canonKey, {
+                  ...existing,
+                  ...itemWithCanon,
+                  date: betterDate,
+                  details: betterDetails,
+                  score: betterScore
+                });
               }
             }
             const allHistory = Array.from(examListMap.values());
@@ -2529,7 +2642,7 @@ export const LeagueView = () => {
                                   <p className="text-[11px] text-brand-ink/60 font-medium">{th.examName}</p>
                                 </div>
                                 <div className="text-[10px] font-semibold text-brand-ink/60 bg-white px-2 py-1 rounded-md border border-brand-border/60">
-                                  {parseDate(th.date).toLocaleDateString('tr-TR')}
+                                  {formatDateShort(th.date) || (th.date ? parseDate(th.date).toLocaleDateString('tr-TR') : '')}
                                 </div>
                               </div>
                             ))}
@@ -2588,7 +2701,7 @@ export const LeagueView = () => {
                                 <div>
                                   <h5 className="font-bold text-xs sm:text-sm text-brand-ink">{h.examName}</h5>
                                   <p className="text-[11px] font-medium text-brand-ink/60">
-                                    {parseDate(h.date).toLocaleDateString('tr-TR')} • Puan / Net: <span className="font-bold text-blue-700">{h.score.toFixed(2)}</span>
+                                    {formatDateShort(h.date) || (h.date ? parseDate(h.date).toLocaleDateString('tr-TR') : 'Tarih Belirtilmedi')} • Puan / Net: <span className="font-bold text-blue-700">{h.score.toFixed(2)}</span>
                                   </p>
                                 </div>
                                 <div className={`px-2.5 py-1 rounded-xl text-xs font-bold font-mono shadow-2xs ${
@@ -2628,7 +2741,7 @@ export const LeagueView = () => {
       {/* 10. Tekil Rozet Bilgilendirme Modalı (Spotlight) */}
       {selectedBadgeModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-all animate-fade-in"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-all animate-fade-in"
           onClick={() => setSelectedBadgeModal(null)}
         >
           <div 
@@ -2710,7 +2823,7 @@ export const LeagueView = () => {
       {/* 11. 25 Güncel Rozet Kılavuzu Modalı */}
       {showBadgesGuideModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs transition-all animate-fade-in"
+          className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs transition-all animate-fade-in"
           onClick={() => setShowBadgesGuideModal(false)}
         >
           <div 

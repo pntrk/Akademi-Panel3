@@ -2362,6 +2362,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
           ...existing,
           ...nr,
           id: existing.id,
+          date: targetExam.date || nr.date || existing.date,
           scores: updatedScores,
           evaluatedScore: nr.evaluatedScore || existing.evaluatedScore
         };
@@ -2370,6 +2371,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         existingResults.push({
           ...nr,
           id: newResId,
+          date: targetExam.date || nr.date,
           scores: { ...(nr.scores || {}), [examId]: scoreValue, [targetExam.name]: scoreValue }
         });
       }
@@ -2384,9 +2386,9 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
         (nr.no && (r.no === nr.no || r.studentNo === Number(nr.no)))
       );
       if (idx >= 0) {
-        currentExamResults[idx] = { ...currentExamResults[idx], ...nr };
+        currentExamResults[idx] = { ...currentExamResults[idx], ...nr, date: targetExam.date || nr.date };
       } else {
-        currentExamResults.push(nr);
+        currentExamResults.push({ ...nr, date: targetExam.date || nr.date });
       }
     });
 

@@ -206,6 +206,32 @@ export function formatDateShort(dateStr: string | null | undefined): string {
 }
 
 /**
+ * Metin veya sınav adından tarih çıkartır (Örn: "LGS - 24 Ekim 2026", "Deneme (24.10.2026)" -> "24.10.2026")
+ */
+export function extractDateFromText(text: string | null | undefined): string | null {
+  if (!text || typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  // Standard DD.MM.YYYY, DD/MM/YYYY veya DD-MM-YYYY
+  const dmMatch = trimmed.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})\b/);
+  if (dmMatch) {
+    const day = dmMatch[1].padStart(2, '0');
+    const month = dmMatch[2].padStart(2, '0');
+    let year = dmMatch[3];
+    if (year.length === 2) year = '20' + year;
+    return `${day}.${month}.${year}`;
+  }
+  // Doğal Türkçe tarih (Örn: "24 Ekim 2026")
+  const d = parseDateObj(trimmed);
+  if (d) {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}.${month}.${year}`;
+  }
+  return null;
+}
+
+/**
  * 1. Dönem: Eylül (8) - Ocak (0) ayları arası
  * 2. Dönem: Şubat (1) - Haziran (5) ayları arası
  */
@@ -579,10 +605,30 @@ export function recalculateLeagueForStudents(students: any[], results: any[] = [
       });
       const examRes = matchingExamResults.length > 0 ? matchingExamResults[matchingExamResults.length - 1] : undefined;
 
-      // 2. Global sonuç listesinde skor kontrolü
-      const scoreInGlobal = globalResult?.scores 
-        ? (globalResult.scores[String(exam.id)] ?? globalResult.scores[exam.name]) 
-        : undefined;
+      // 2. Global sonuç listesinde skor kontrolü (Çakışma korumalı: ID öncelikli, isim çakışmasında tarih kontrolü)
+      let scoreInGlobal: number | undefined = undefined;
+      if (globalResult?.scores) {
+        const rawScoreId = globalResult.scores[String(exam.id)];
+        if (rawScoreId !== undefined) {
+          scoreInGlobal = typeof rawScoreId === 'number' ? rawScoreId : (rawScoreId?.net ?? rawScoreId?.score);
+        } else if (exam.name && globalResult.scores[exam.name] !== undefined) {
+          // Eğer aynı ada sahip birden çok sınav varsa (örn. 24.10.2026 ve 20.03.2027 tarihlerindeki denemeler):
+          // Gelecekteki veya farklı tarihteki sınavın skoru çalmasını engelle
+          const sameNameExams = sortedExams.filter(se => se.name === exam.name);
+          if (sameNameExams.length === 1) {
+            const rawScoreName = globalResult.scores[exam.name];
+            scoreInGlobal = typeof rawScoreName === 'number' ? rawScoreName : (rawScoreName?.net ?? rawScoreName?.score);
+          } else {
+            // Sadece öğrencinin bu sınavın results listesinde bulunması veya sınav tarihi ile sonuç tarihinin uyuşması durumunda al
+            const hasInResults = Boolean(examRes);
+            const dateMatches = exam.date && (globalResult.date === exam.date || (globalResult as any).examDate === exam.date);
+            if (hasInResults || dateMatches) {
+              const rawScoreName = globalResult.scores[exam.name];
+              scoreInGlobal = typeof rawScoreName === 'number' ? rawScoreName : (rawScoreName?.net ?? rawScoreName?.score);
+            }
+          }
+        }
+      }
 
       const participated = Boolean(examRes) || (scoreInGlobal !== undefined && scoreInGlobal > 0);
       let teamForThisExam = count > 0 ? determineLeagueTeam(runningSum / count) : 'Taktik Avcıları';

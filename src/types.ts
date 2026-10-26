@@ -160,6 +160,7 @@ export interface ExamResult {
   average?: number;
   earnedLP?: number;
   earnedBadges?: string[];
+  date?: string;
 
   // Optik Okuma (OMR) Verileri
   name?: string;
