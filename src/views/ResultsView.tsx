@@ -22,7 +22,7 @@ import {
   isAytExam,
   calculateAtaLigPoints
 } from '../lib/omrEngine';
-import { generateId, exportToExcel, exportAoaToExcel, importFromExcel } from '../lib/utils';
+import { generateId, exportToExcel, exportAoaToExcel, importFromExcel, parseDateObj } from '../lib/utils';
 import {
   BarChart3,
   Users,
@@ -1825,6 +1825,78 @@ export function findDatabaseStudentIndexed(
   return null;
 }
 
+export function getExamResultCount(examItem: Exam, globalResults: ExamResult[]): number {
+  if (Array.isArray(examItem.results) && examItem.results.length > 0) {
+    return examItem.results.length;
+  }
+  if (Array.isArray(globalResults) && globalResults.length > 0) {
+    const eId = String(examItem.id);
+    const eName = examItem.name;
+    let count = 0;
+    for (let i = 0; i < globalResults.length; i++) {
+      const r = globalResults[i];
+      if (r.scores && (r.scores[eId] !== undefined || (eName && r.scores[eName] !== undefined))) {
+        count++;
+      }
+    }
+    return count;
+  }
+  return 0;
+}
+
+export function getExamTimestamp(examItem: Exam): number | null {
+  if (!examItem.date) return null;
+  const parsed = parseDateObj(examItem.date);
+  if (parsed && !isNaN(parsed.getTime())) {
+    return parsed.getTime();
+  }
+  const fallback = new Date(examItem.date);
+  if (!isNaN(fallback.getTime())) {
+    return fallback.getTime();
+  }
+  return null;
+}
+
+/**
+ * Sonucu yüklenmiş olan ve bugünün tarihine en yakın (en güncel) deneme sınavının ID'sini döndürür.
+ * Hiçbir sınavın sonucu yüklenmemişse tarihsel olarak bugüne en yakın sınavı döndürür.
+ */
+export function findMostRecentExamWithResultsId(exams: Exam[], globalResults: ExamResult[]): string {
+  if (!Array.isArray(exams) || exams.length === 0) return "";
+
+  const now = new Date();
+  const todayTime = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  const examsWithResults = exams.filter(e => getExamResultCount(e, globalResults) > 0);
+  const pool = examsWithResults.length > 0 ? examsWithResults : exams;
+
+  const sorted = [...pool].sort((a, b) => {
+    const timeA = getExamTimestamp(a);
+    const timeB = getExamTimestamp(b);
+
+    if (timeA !== null && timeB !== null) {
+      const diffA = Math.abs(todayTime - timeA);
+      const diffB = Math.abs(todayTime - timeB);
+      if (diffA !== diffB) {
+        return diffA - diffB;
+      }
+      if (timeB !== timeA) {
+        return timeB - timeA;
+      }
+    } else if (timeA !== null) {
+      return -1;
+    } else if (timeB !== null) {
+      return 1;
+    }
+
+    const countDiff = getExamResultCount(b, globalResults) - getExamResultCount(a, globalResults);
+    if (countDiff !== 0) return countDiff;
+    return (b.no || 0) - (a.no || 0);
+  });
+
+  return String(sorted[0].id);
+}
+
 /* =========================================================================
    3. MAIN RESULTS VIEW (3'lü Sekme: Sonuçlar | Devamsızlar | Öğrenci Kayıtları)
    ========================================================================= */
@@ -1844,25 +1916,28 @@ export function ResultsView() {
   const [isMobileControlsOpen, setIsMobileControlsOpen] = useState(false);
   const [isMobileMoreActionsOpen, setIsMobileMoreActionsOpen] = useState(false);
 
-  // Active selected exam
+  // Kullanıcının sınav seçiciyi elle değiştirip değiştirmediğini takip eder
+  const hasManualExamSelectionRef = React.useRef<boolean>(false);
+
+  // Active selected exam: Otomatik olarak en yakın tarihli ve sonucu yüklenmiş deneme sınavı seçilir
   const [selectedExamId, setSelectedExamId] = useState<string>(() => {
-    try {
-      const savedId = sessionStorage.getItem('active_exam_id');
-      if (savedId && state.exams.some(e => String(e.id) === String(savedId))) {
-        return String(savedId);
-      }
-    } catch (e) {}
-    return state.exams.length > 0 ? String(state.exams[0].id) : "";
+    return findMostRecentExamWithResultsId(state.exams, state.results);
   });
 
   useEffect(() => {
-    try {
-      const savedId = sessionStorage.getItem('active_exam_id');
-      if (savedId && state.exams.some(e => String(e.id) === String(savedId))) {
-        setSelectedExamId(String(savedId));
+    if (!state.exams || state.exams.length === 0) return;
+
+    const currentSelected = state.exams.find(e => String(e.id) === String(selectedExamId));
+    const currentHasResults = currentSelected ? getExamResultCount(currentSelected, state.results) > 0 : false;
+    const anyExamHasResults = state.exams.some(e => getExamResultCount(e, state.results) > 0);
+
+    if (!hasManualExamSelectionRef.current || !currentSelected || (!currentHasResults && anyExamHasResults)) {
+      const bestId = findMostRecentExamWithResultsId(state.exams, state.results);
+      if (bestId && String(bestId) !== String(selectedExamId)) {
+        setSelectedExamId(String(bestId));
       }
-    } catch (e) {}
-  }, [state.exams]);
+    }
+  }, [state.exams, state.results]);
 
   const exam: Exam = state.exams.find(e => String(e.id) === String(selectedExamId)) || state.exams[0] || {
     id: "1",
@@ -2008,6 +2083,29 @@ export function ResultsView() {
       r.scores && (r.scores[String(exam.id)] !== undefined || r.scores[exam.name] !== undefined)
     );
   }, [exam, state.results]);
+
+  // Seçilen sınavda mevcut kademe filtresinde öğrenci yoksa, sonucu bulunan kademeye otomatik geç
+  useEffect(() => {
+    if (currentExamResults.length === 0) return;
+    if (selectedGradeFilter !== 'ALL') {
+      const hasInCurrentGrade = currentExamResults.some(r => isStudentInGrade(r, selectedGradeFilter));
+      if (!hasInCurrentGrade) {
+        const countsByGrade: Record<string, number> = {};
+        currentExamResults.forEach(r => {
+          const g = extractGradeLevel(r);
+          if (g) countsByGrade[g] = (countsByGrade[g] || 0) + 1;
+        });
+        const bestGrade = Object.entries(countsByGrade).sort((a, b) => b[1] - a[1])[0]?.[0];
+        if (bestGrade) {
+          setSelectedGradeFilter(bestGrade);
+          setSelectedClassFilter('ALL');
+        } else {
+          setSelectedGradeFilter('ALL');
+          setSelectedClassFilter('ALL');
+        }
+      }
+    }
+  }, [exam.id, currentExamResults]);
 
   const scannedNosSet = useMemo(() => {
     return new Set(currentExamResults.map(r => String(r.no || r.studentNo || '').trim()));
@@ -3874,15 +3972,22 @@ export function ResultsView() {
                 <BookOpen className="w-3.5 h-3.5 text-indigo-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none shrink-0" />
                 <select
                   value={selectedExamId}
-                  onChange={(e) => setSelectedExamId(e.target.value)}
+                  onChange={(e) => {
+                    hasManualExamSelectionRef.current = true;
+                    setSelectedExamId(e.target.value);
+                    try { sessionStorage.setItem('active_exam_id', e.target.value); } catch (err) {}
+                  }}
                   className="w-full bg-indigo-50/70 hover:bg-indigo-100/70 focus:bg-white border border-indigo-200 text-indigo-950 font-bold text-xs rounded-xl pl-8 pr-7 py-2 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none truncate shadow-2xs transition-colors"
                   aria-label="Sınavı Değiştir"
                 >
-                  {state.exams.map(e => (
-                    <option key={e.id} value={e.id}>
-                      {e.examType === 'internal' ? '🎯 ' : '📚 '}{e.name}{e.date ? ` (${e.date})` : ''}
-                    </option>
-                  ))}
+                  {state.exams.map(e => {
+                    const rCount = getExamResultCount(e, state.results);
+                    return (
+                      <option key={e.id} value={e.id}>
+                        {e.examType === 'internal' ? '🎯 ' : '📚 '}{e.name}{e.date ? ` (${e.date})` : ''}{rCount > 0 ? ` • ✓ ${rCount} Öğrenci` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
                 <ChevronDown className="w-3.5 h-3.5 text-indigo-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -4012,15 +4117,22 @@ export function ResultsView() {
                 <BookOpen className="w-3.5 h-3.5 text-indigo-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <select
                   value={selectedExamId}
-                  onChange={(e) => setSelectedExamId(e.target.value)}
+                  onChange={(e) => {
+                    hasManualExamSelectionRef.current = true;
+                    setSelectedExamId(e.target.value);
+                    try { sessionStorage.setItem('active_exam_id', e.target.value); } catch (err) {}
+                  }}
                   className="w-full bg-slate-50 hover:bg-slate-100/90 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-xl pl-8.5 pr-8 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer transition-all truncate shadow-2xs appearance-none"
                   aria-label="Sınav Seçiniz"
                 >
-                  {state.exams.map(e => (
-                    <option key={e.id} value={e.id}>
-                      {e.examType === 'internal' ? '🎯 ' : `📚 [${e.publisher || 'Yayın'}] `}{e.name}{e.date ? ` (${e.date})` : ''}
-                    </option>
-                  ))}
+                  {state.exams.map(e => {
+                    const rCount = getExamResultCount(e, state.results);
+                    return (
+                      <option key={e.id} value={e.id}>
+                        {e.examType === 'internal' ? '🎯 ' : `📚 [${e.publisher || 'Yayın'}] `}{e.name}{e.date ? ` (${e.date})` : ''}{rCount > 0 ? ` • ✓ ${rCount} Öğrenci` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
