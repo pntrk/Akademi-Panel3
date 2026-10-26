@@ -637,12 +637,45 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
       : (currentStudent.studentNo !== undefined ? Number(currentStudent.studentNo) : undefined);
     const studentName = normalizeTurkish(currentStudent.name || currentStudent.studentName || '').trim().toLowerCase();
 
-    // Tüm deneme sınavlarını tarihe göre sırala
-    const candidateExams = [...(state.exams || [])].sort((a, b) => {
-      const dateA = new Date(a.date || 0).getTime();
-      const dateB = new Date(b.date || 0).getTime();
-      if (dateA !== dateB) return dateA - dateB;
-      return (a.no || 0) - (b.no || 0);
+    // 1. Sınav havuzunu birleştir ve mükerrerleri temizle
+    const examPool: Array<any> = [];
+    const poolExamIds = new Set<string>();
+    const poolExamNames = new Set<string>();
+
+    const addExamToPool = (e: any) => {
+      if (!e) return;
+      const eId = String(e.id || '').trim();
+      const eNameNorm = normalizeTurkish(e.name || '').trim().toLowerCase();
+
+      // Zaten havuza eklenmişse atla
+      if (eId && poolExamIds.has(eId)) return;
+      if (eNameNorm && poolExamNames.has(eNameNorm)) return;
+
+      if (eId) poolExamIds.add(eId);
+      if (eNameNorm) poolExamNames.add(eNameNorm);
+      examPool.push(e);
+    };
+
+    // Önce state.exams içindeki sınavları ekle
+    (state.exams || []).forEach(addExamToPool);
+
+    // Eğer şu anki modal sınavı havuzda yoksa ekle
+    const isCurrentInPool = examPool.some(e => 
+      (exam.id && String(e.id) === String(exam.id)) || 
+      (exam.name && normalizeTurkish(e.name || '').trim().toLowerCase() === normalizeTurkish(exam.name || '').trim().toLowerCase())
+    );
+    if (!isCurrentInPool) {
+      examPool.push(exam);
+    }
+
+    // Tarihe göre kronolojik (eskiden yeniye) sırala (DD.MM.YYYY Türkçe tarihleri destekler)
+    const sortedExams = [...examPool].sort((a, b) => {
+      const parsedA = a.date ? parseDateObj(a.date) : null;
+      const parsedB = b.date ? parseDateObj(b.date) : null;
+      const timeA = parsedA ? parsedA.getTime() : (a.date ? new Date(a.date).getTime() || 0 : 0);
+      const timeB = parsedB ? parsedB.getTime() : (b.date ? new Date(b.date).getTime() || 0 : 0);
+      if (timeA !== timeB) return timeA - timeB;
+      return (Number(a.no) || 0) - (Number(b.no) || 0);
     });
 
     const points: Array<{
@@ -654,23 +687,33 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
       correct: number;
       wrong: number;
       isCurrent: boolean;
+      timestamp: number;
     }> = [];
 
-    candidateExams.forEach(ex => {
+    let currentExamPointAdded = false;
+    const addedExamIds = new Set<string>();
+    const addedExamNames = new Set<string>();
+
+    sortedExams.forEach(ex => {
+      const isThisExam = 
+        (exam.id && String(ex.id) === String(exam.id)) || 
+        (exam.name && normalizeTurkish(ex.name || '').trim().toLowerCase() === normalizeTurkish(exam.name || '').trim().toLowerCase());
+
       let dataForEx: { net: number; correct: number; wrong: number; isCurrent: boolean } | null = null;
-      const isThisExam = String(ex.id) === String(exam.id) || ex.name === exam.name;
 
       if (isThisExam) {
-        // Şu anki modalda açık olan sınav (anlık güncellenen karne skoru)
+        // Mevcut sınavın yalnızca bir kez eklenmesini garantiye al
+        if (currentExamPointAdded) return;
+
         const currentNet = scoreData?.total?.net !== undefined 
           ? Number(scoreData.total.net) 
-          : Number(currentStudent.net || currentStudent.average || 0);
+          : Number(currentStudent.net ?? currentStudent.average ?? 0);
         const currentCorrect = scoreData?.total?.correct !== undefined 
           ? Number(scoreData.total.correct) 
-          : Number(currentStudent.totalCorrect || 0);
+          : Number(currentStudent.totalCorrect ?? 0);
         const currentWrong = scoreData?.total?.wrong !== undefined 
           ? Number(scoreData.total.wrong) 
-          : Number(currentStudent.totalWrong || 0);
+          : Number(currentStudent.totalWrong ?? 0);
 
         dataForEx = {
           net: Number(currentNet.toFixed(2)),
@@ -678,6 +721,7 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
           wrong: currentWrong,
           isCurrent: true
         };
+        currentExamPointAdded = true;
       } else {
         // 1. Sınavın kendi altındaki results listesinde öğrenciyi ara
         const matchInExam = (ex.results || []).find((r: any) => {
@@ -687,65 +731,146 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
           return false;
         });
 
-        // 2. Global sonuç listesinde ara
-        const matchInGlobal = !matchInExam ? (state.results || []).find((r: any) => {
-          const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : undefined);
-          const isSame = (studentNo !== undefined && rNo !== undefined && studentNo === rNo) ||
-            (studentName && r.name && normalizeTurkish(r.name).trim().toLowerCase() === studentName);
-          return isSame && r.scores && (r.scores[String(ex.id)] !== undefined || r.scores[ex.name] !== undefined);
-        }) : null;
-
-        const match = matchInExam || matchInGlobal;
-
-        if (match) {
-          const matchScores = match.evaluatedScore || match.scores;
-          let netVal = 0;
+        if (matchInExam) {
+          const matchScores = matchInExam.evaluatedScore || matchInExam.scores;
+          let netVal: number | null = null;
           if (typeof matchScores === 'object' && matchScores?.total?.net !== undefined) {
             netVal = Number(matchScores.total.net);
-          } else if (typeof match.net === 'number') {
-            netVal = match.net;
-          } else if (typeof match.average === 'number') {
-            netVal = match.average;
-          } else if (typeof match.scores?.[String(ex.id)] === 'number') {
-            netVal = match.scores[String(ex.id)];
-          } else if (typeof match.scores?.[ex.name] === 'number') {
-            netVal = match.scores[ex.name];
+          } else if (typeof matchInExam.net === 'number') {
+            netVal = matchInExam.net;
+          } else if (typeof matchInExam.average === 'number') {
+            netVal = matchInExam.average;
+          } else if (typeof matchInExam.scores?.[String(ex.id)] === 'number') {
+            netVal = matchInExam.scores[String(ex.id)];
+          } else if (typeof matchInExam.scores?.[ex.name] === 'number') {
+            netVal = matchInExam.scores[ex.name];
           }
 
-          const cVal = matchScores?.total?.correct !== undefined 
-            ? Number(matchScores.total.correct) 
-            : (match.totalCorrect !== undefined ? Number(match.totalCorrect) : Math.round(netVal));
-          const wVal = matchScores?.total?.wrong !== undefined 
-            ? Number(matchScores.total.wrong) 
-            : (match.totalWrong !== undefined ? Number(match.totalWrong) : 0);
+          if (netVal !== null && !isNaN(netVal)) {
+            const cVal = matchScores?.total?.correct !== undefined 
+              ? Number(matchScores.total.correct) 
+              : (matchInExam.totalCorrect !== undefined ? Number(matchInExam.totalCorrect) : Math.round(netVal));
+            const wVal = matchScores?.total?.wrong !== undefined 
+              ? Number(matchScores.total.wrong) 
+              : (matchInExam.totalWrong !== undefined ? Number(matchInExam.totalWrong) : 0);
 
-          dataForEx = {
-            net: Number(netVal.toFixed(2)),
-            correct: cVal,
-            wrong: wVal,
-            isCurrent: false
-          };
+            dataForEx = {
+              net: Number(netVal.toFixed(2)),
+              correct: cVal,
+              wrong: wVal,
+              isCurrent: false
+            };
+          }
+        } else {
+          // 2. Global sonuç listesinde öğrencinin bu sınava ait net skorunu ara
+          const matchInGlobal = (state.results || []).find((r: any) => {
+            const rNo = r.no !== undefined ? Number(r.no) : (r.studentNo !== undefined ? Number(r.studentNo) : undefined);
+            const isSame = (studentNo !== undefined && rNo !== undefined && studentNo === rNo) ||
+              (studentName && r.name && normalizeTurkish(r.name).trim().toLowerCase() === studentName);
+            return isSame && r.scores && (r.scores[String(ex.id)] !== undefined || r.scores[ex.name] !== undefined);
+          });
+
+          if (matchInGlobal && matchInGlobal.scores) {
+            // ÖNEMLİ: matchInGlobal.evaluatedScore son yüklenen sınavın skoru olduğundan geçmiş sınav için
+            // KESİNLİKLE genel evaluatedScore okunmamalı, sadece bu sınava ait scores anahtarı okunmalıdır!
+            const rawScore = matchInGlobal.scores[String(ex.id)] ?? matchInGlobal.scores[ex.name];
+            let netVal: number | null = null;
+            let cVal = 0;
+            let wVal = 0;
+
+            if (typeof rawScore === 'number') {
+              netVal = rawScore;
+              cVal = Math.round(rawScore);
+            } else if (rawScore && typeof rawScore === 'object' && rawScore.net !== undefined) {
+              netVal = Number(rawScore.net);
+              cVal = rawScore.correct !== undefined ? Number(rawScore.correct) : Math.round(netVal);
+              wVal = rawScore.wrong !== undefined ? Number(rawScore.wrong) : 0;
+            }
+
+            if (netVal !== null && !isNaN(netVal)) {
+              dataForEx = {
+                net: Number(netVal.toFixed(2)),
+                correct: cVal,
+                wrong: wVal,
+                isCurrent: false
+              };
+            }
+          }
         }
       }
 
       if (dataForEx) {
+        const normName = normalizeTurkish(ex.name || '').trim().toLowerCase();
+        const strId = String(ex.id || '').trim();
+
+        // Mükerrer sınav kaydını engelle
+        if ((strId && addedExamIds.has(strId)) || (normName && addedExamNames.has(normName))) {
+          return;
+        }
+        if (strId) addedExamIds.add(strId);
+        if (normName) addedExamNames.add(normName);
+
+        const parsedDate = ex.date ? parseDateObj(ex.date) : null;
+        const formattedDate = parsedDate 
+          ? parsedDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) 
+          : (ex.date ? String(ex.date).substring(0, 5) : '');
         const shortName = ex.name.length > 16 ? ex.name.substring(0, 14) + '..' : ex.name;
+
         points.push({
-          id: ex.id,
+          id: String(ex.id),
           examName: ex.name,
           displayName: shortName,
-          date: ex.date ? new Date(ex.date).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) : '',
+          date: formattedDate,
           net: dataForEx.net,
           correct: dataForEx.correct,
           wrong: dataForEx.wrong,
-          isCurrent: dataForEx.isCurrent
+          isCurrent: dataForEx.isCurrent,
+          timestamp: parsedDate ? parsedDate.getTime() : 0
         });
       }
     });
 
+    // Eğer şu anki sınav döngüde bir sebepten eklenmediyse, kesin olarak tekil olarak ekle
+    if (!currentExamPointAdded) {
+      const currentNet = scoreData?.total?.net !== undefined 
+        ? Number(scoreData.total.net) 
+        : Number(currentStudent.net ?? currentStudent.average ?? 0);
+      const currentCorrect = scoreData?.total?.correct !== undefined 
+        ? Number(scoreData.total.correct) 
+        : Number(currentStudent.totalCorrect ?? 0);
+      const currentWrong = scoreData?.total?.wrong !== undefined 
+        ? Number(scoreData.total.wrong) 
+        : Number(currentStudent.totalWrong ?? 0);
+
+      const parsedDate = exam.date ? parseDateObj(exam.date) : null;
+      const formattedDate = parsedDate 
+        ? parsedDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) 
+        : (exam.date ? String(exam.date).substring(0, 5) : '');
+      const shortName = exam.name.length > 16 ? exam.name.substring(0, 14) + '..' : exam.name;
+
+      points.push({
+        id: String(exam.id || 'current'),
+        examName: exam.name,
+        displayName: shortName,
+        date: formattedDate,
+        net: Number(currentNet.toFixed(2)),
+        correct: currentCorrect,
+        wrong: currentWrong,
+        isCurrent: true,
+        timestamp: parsedDate ? parsedDate.getTime() : Date.now()
+      });
+    }
+
+    // Kronolojik olarak (eskiden yeniye) sırala, mevcut sınav en sonda yer alsın
+    points.sort((a, b) => {
+      if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+      if (a.isCurrent !== b.isCurrent) return a.isCurrent ? 1 : -1;
+      return 0;
+    });
+
     // En son girilen 5 sınavı (veya varsa tümünü) döndür
     return points.length > 5 ? points.slice(-5) : points;
-  }, [state.exams, state.results, currentStudent, exam.id, exam.name, scoreData]);
+  }, [state.exams, state.results, currentStudent, exam.id, exam.name, exam.date, scoreData]);
 
   // Net artış/azalış trendi
   const netTrend = useMemo(() => {
