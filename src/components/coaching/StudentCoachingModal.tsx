@@ -1,0 +1,383 @@
+import React from 'react';
+import { 
+  X, 
+  Printer, 
+  Award, 
+  TrendingUp, 
+  TrendingDown, 
+  Minus, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Target, 
+  Calendar,
+  Sparkles
+} from 'lucide-react';
+import { CoachingReport } from '../../lib/coachEngine';
+
+interface Props {
+  report: CoachingReport | null;
+  onClose: () => void;
+}
+
+export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
+  if (!report) return null;
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const isKutup = report.team === 'Kutup Yıldızları';
+  const isSicrama = report.team === 'Sıçrama Ustaları';
+  const isTaktik = report.team === 'Taktik Avcıları';
+
+  const teamBg = isKutup 
+    ? 'from-amber-500/15 to-amber-600/5 text-amber-950 border-amber-300' 
+    : isSicrama 
+    ? 'from-blue-500/15 to-blue-600/5 text-blue-950 border-blue-300' 
+    : 'from-emerald-500/15 to-emerald-600/5 text-emerald-950 border-emerald-300';
+
+  const teamBadgeColor = isKutup 
+    ? 'bg-amber-100 text-amber-900 border-amber-300' 
+    : isSicrama 
+    ? 'bg-blue-100 text-blue-900 border-blue-300' 
+    : 'bg-emerald-100 text-emerald-900 border-emerald-300';
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
+      <div 
+        className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-brand-border/90 flex flex-col max-h-[92vh] overflow-hidden print:max-h-none print:shadow-none print:border-none print:rounded-none animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Üst Başlık & Kontrol Çubuğu */}
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shrink-0 print:bg-white print:text-black print:border-b-2 print:border-slate-800 print:px-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center text-lg sm:text-xl font-black shadow-md shrink-0 print:bg-slate-200">
+              🎯
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-lg font-bold font-serif tracking-tight truncate">
+                Yönlendirme Koçu & Gelişim Reçetesi
+              </h2>
+              <p className="text-[10px] sm:text-xs text-white/70 print:text-slate-600 font-medium truncate">
+                Son Sınav Netleri ve Aylık Rozet Performansı Analizi
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 print:hidden">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-bold rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Rehberlik Raporunu Yazdır veya PDF olarak kaydet"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Yazdır</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-all cursor-pointer"
+              title="Kapat"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Kaydırılabilir İçerik Alanı (Yazdırıldığında tam döküm) */}
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 custom-scrollbar print:p-0 print:overflow-visible print:space-y-4">
+          
+          {/* 1. Öğrenci Kimlik ve Sınav Karnesi Özeti */}
+          <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-3xl border bg-gradient-to-br ${teamBg} print:bg-white print:border-slate-300 shadow-xs`}>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 pb-3.5 border-b border-black/10 print:border-slate-300">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-white text-brand-ink font-serif font-black text-xl flex items-center justify-center shadow-xs border border-brand-border shrink-0">
+                  {report.studentName.charAt(0)}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-xl font-bold font-serif text-brand-ink">
+                      {report.studentName}
+                    </h3>
+                    {report.className && (
+                      <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md bg-white/90 border border-brand-border/60 text-brand-ink/70">
+                        {report.className}
+                      </span>
+                    )}
+                    {report.studentNo && (
+                      <span className="text-[10px] text-brand-ink/50 font-medium">
+                        (No: {report.studentNo})
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap text-xs font-semibold text-brand-ink/75">
+                    <span className={`px-2 py-0.5 rounded-full border text-[11px] font-bold inline-flex items-center gap-1 ${teamBadgeColor}`}>
+                      <span>{isKutup ? '⭐' : isSicrama ? '🚀' : '🛡️'}</span>
+                      <span>{report.team}</span>
+                    </span>
+                    <span>•</span>
+                    <span>Arena Sırası: <strong className="text-brand-ink">#{report.rank}</strong> / {report.totalStudents}</span>
+                    <span>•</span>
+                    <span>Toplam: <strong className="text-emerald-800 font-mono">{report.leaguePoints} LP</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Son Sınav Puanı ve Trend Göstergesi */}
+              <div className="flex items-center gap-3 self-start md:self-auto bg-white/95 border border-brand-border/80 rounded-2xl p-2.5 sm:px-4 sm:py-2.5 shadow-2xs">
+                <div className="text-right">
+                  <p className="text-[9.5px] font-bold text-brand-ink/50 uppercase tracking-wider">Son LGS Puanı</p>
+                  <p className="text-lg sm:text-2xl font-black text-purple-700 font-mono tabular-nums leading-none">
+                    {report.score > 0 ? report.score.toFixed(2) : '-'}
+                  </p>
+                </div>
+                <div className="h-8 w-px bg-slate-200" />
+                <div>
+                  <p className="text-[9.5px] font-bold text-brand-ink/50 uppercase tracking-wider">Net</p>
+                  <p className="text-base sm:text-lg font-bold text-brand-ink font-mono tabular-nums leading-none">
+                    {report.totalNet.toFixed(2)}
+                  </p>
+                </div>
+                {report.trend !== 'first' && (
+                  <>
+                    <div className="h-8 w-px bg-slate-200" />
+                    <div className="flex items-center gap-1 text-xs font-bold">
+                      {report.trend === 'up' && (
+                        <span className="text-emerald-700 flex items-center gap-0.5" title="Önceki sınava göre puan artışı">
+                          <TrendingUp className="w-4 h-4" /> +{report.trendDifference}
+                        </span>
+                      )}
+                      {report.trend === 'down' && (
+                        <span className="text-rose-600 flex items-center gap-0.5" title="Önceki sınava göre puan değişimi">
+                          <TrendingDown className="w-4 h-4" /> -{report.trendDifference}
+                        </span>
+                      )}
+                      {report.trend === 'steady' && (
+                        <span className="text-slate-500 flex items-center gap-0.5" title="Dengeli seyir">
+                          <Minus className="w-4 h-4" /> Dengeli
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Sınav Adı ve Soru Dağılım Çubuğu */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 text-xs text-brand-ink/75 font-medium">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Calendar className="w-3.5 h-3.5 text-brand-ink/50 shrink-0" />
+                <span className="truncate"><strong>Son Sınav:</strong> {report.examName} {report.examDate ? `(${report.examDate})` : ''}</span>
+              </div>
+              <div className="flex items-center gap-2.5 font-mono text-[11px] shrink-0">
+                <span className="text-emerald-700 font-bold">D: {report.totalCorrect}</span>
+                <span className="text-rose-600 font-bold">Y: {report.totalWrong}</span>
+                <span className="text-amber-700 font-bold">B: {report.totalEmpty}</span>
+                <span className="text-brand-ink font-black">Net: {report.totalNet.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Ana Analiz Bölümü: Güçlü Yönler & Riskli Alanlar Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+            
+            {/* Güçlü Yönler (Pillars of Success) */}
+            <div className="bg-gradient-to-b from-emerald-50/70 via-white to-emerald-50/30 border border-emerald-200/90 rounded-2xl p-4 shadow-2xs flex flex-col gap-3">
+              <div className="flex items-center justify-between pb-2 border-b border-emerald-200/60">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center text-sm font-bold shadow-2xs">
+                    🌟
+                  </div>
+                  <h4 className="text-sm font-bold text-emerald-950">Güçlü Yönler & Kazanımlar</h4>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                  {report.strengths.length} Tespit
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                {report.strengths.map((item, idx) => (
+                  <div key={idx} className="bg-white/95 border border-emerald-100 rounded-xl p-3 shadow-2xs flex items-start gap-2.5">
+                    <span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs font-bold text-emerald-950">{item.title}</p>
+                        {item.tag && (
+                          <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60">
+                            {item.tag}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-emerald-900/80 leading-relaxed mt-0.5">
+                        {item.desc}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Riskli Alanlar & Dikkat Noktaları */}
+            <div className="bg-gradient-to-b from-amber-50/70 via-white to-orange-50/30 border border-amber-200/90 rounded-2xl p-4 shadow-2xs flex flex-col gap-3">
+              <div className="flex items-center justify-between pb-2 border-b border-amber-200/60">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-sm font-bold shadow-2xs">
+                    ⚠️
+                  </div>
+                  <h4 className="text-sm font-bold text-amber-950">Gelişime Açık & Riskli Alanlar</h4>
+                </div>
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full">
+                  {report.risks.length} Dikkat Noktası
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                {report.risks.map((item, idx) => (
+                  <div key={idx} className="bg-white/95 border border-amber-100 rounded-xl p-3 shadow-2xs flex items-start gap-2.5">
+                    <span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs font-bold text-amber-950">{item.title}</p>
+                        {item.tag && (
+                          <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60">
+                            {item.tag}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-amber-900/80 leading-relaxed mt-0.5">
+                        {item.desc}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* 3. Bir Sonraki Sınav İçin 3 Maddelik Somut Taktik Reçetesi */}
+          <div className="bg-gradient-to-br from-indigo-50/90 via-white to-blue-50/60 border border-indigo-200/90 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-indigo-200/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm font-black shadow-xs">
+                  🚀
+                </div>
+                <div>
+                  <h4 className="text-sm sm:text-base font-bold text-indigo-950">
+                    Bir Sonraki Deneme İçin 3 Maddelik Eylem Planı
+                  </h4>
+                  <p className="text-[10px] sm:text-xs text-indigo-900/60 font-medium">
+                    Doğrudan puan ve net artışına odaklanmış pedagojik koçluk adımları
+                  </p>
+                </div>
+              </div>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-black text-indigo-700 bg-indigo-100/80 px-2.5 py-0.5 rounded-full">
+                <Target className="w-3.5 h-3.5" /> Hedef Odaklı
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {report.tactics.map((tactic) => (
+                <div 
+                  key={tactic.step}
+                  className="bg-white border border-indigo-100 hover:border-indigo-300 rounded-2xl p-3.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all relative overflow-hidden"
+                >
+                  <div className="flex items-center justify-between gap-1 mb-2">
+                    <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white font-mono font-black text-xs flex items-center justify-center shadow-2xs">
+                      {tactic.step}
+                    </span>
+                    <span className="text-lg">{tactic.icon}</span>
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-bold text-indigo-950 mb-1 leading-snug">
+                      {tactic.title}
+                    </h5>
+                    <p className="text-[11px] text-brand-ink/75 leading-relaxed font-normal">
+                      {tactic.action}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 4. Ders Dağılım Karnesi ve Koç Notu */}
+          {report.lessons.length > 0 && (
+            <div className="bg-[#FAF9F6] border border-brand-border/80 rounded-2xl p-3.5 sm:p-4">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-brand-border/60">
+                <p className="text-xs font-bold text-brand-ink">Son Deneme Ders Karnesi</p>
+                <p className="text-[10px] text-brand-ink/50 font-medium">Ders bazlı doğruluk ve isabet oranları</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-[10.5px] font-bold text-brand-ink/60 border-b border-brand-border/40">
+                      <th className="py-1 px-2">Ders</th>
+                      <th className="py-1 px-2 text-center text-emerald-700">D</th>
+                      <th className="py-1 px-2 text-center text-rose-600">Y</th>
+                      <th className="py-1 px-2 text-center text-amber-700">B</th>
+                      <th className="py-1 px-2 text-center font-bold text-brand-ink">Net</th>
+                      <th className="py-1 px-2 text-right">İsabet</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-border/30 font-mono">
+                    {report.lessons.map((l, i) => (
+                      <tr key={i} className="hover:bg-white/60 transition-colors">
+                        <td className="py-1.5 px-2 font-sans font-semibold text-brand-ink">{l.name}</td>
+                        <td className="py-1.5 px-2 text-center text-emerald-700 font-bold">{l.correct}</td>
+                        <td className="py-1.5 px-2 text-center text-rose-600 font-bold">{l.wrong}</td>
+                        <td className="py-1.5 px-2 text-center text-amber-700">{l.empty}</td>
+                        <td className="py-1.5 px-2 text-center font-bold text-brand-ink">{l.net.toFixed(2)}</td>
+                        <td className="py-1.5 px-2 text-right font-sans font-semibold text-brand-ink/70">%{l.accuracy}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 5. Koç Özeti & Kapanış Değerlendirmesi */}
+          <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-3.5 sm:p-4 shadow-sm flex items-start gap-3 print:bg-white print:text-black print:border print:border-slate-300">
+            <span className="text-xl shrink-0 mt-0.5">💬</span>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-amber-300 print:text-slate-900 mb-0.5">
+                Rehberlik & Mentorluk Değerlendirmesi
+              </p>
+              <p className="text-[11px] sm:text-xs text-white/90 print:text-slate-700 leading-relaxed font-medium">
+                {report.coachSummary}
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Alt Butonlar */}
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-[#FAF9F6] border-t border-brand-border/70 shrink-0 print:hidden">
+          <div className="text-[11px] text-brand-ink/60 font-medium">
+            Akademi Arena Rehberlik Sistemi • 2026 LGS Projeksiyonu
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Yazdır / PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-1.5 bg-white hover:bg-slate-100 active:scale-95 text-brand-ink border border-brand-border/80 text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer"
+            >
+              Kapat
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+};

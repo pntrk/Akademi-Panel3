@@ -20,7 +20,9 @@ import {
   isLgsExam, 
   isTytExam, 
   isAytExam,
-  calculateAtaLigPoints
+  calculateAtaLigPoints,
+  calculateLgsScoreFromSubjectScores,
+  calculateLgsPercentile
 } from '../lib/omrEngine';
 import { generateId, exportToExcel, exportAoaToExcel, importFromExcel, parseDateObj } from '../lib/utils';
 import {
@@ -518,7 +520,7 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
       }
     });
 
-    const lgsScore = Number(scoreData?.total?.lgsScore) || (isLgs ? (totalD - totalY / 3) * 5 : 0);
+    const lgsScore = Number(scoreData?.total?.lgsScore) || (isLgs ? calculateLgsScoreFromSubjectScores(scoreData?.subjectScores, exam.subjects || [], { correct: totalD, wrong: totalY, empty: totalB, net: (totalD - totalY / 3) }).lgsScore : 0);
 
     // LGS Fatihi
     if (totalD > 0 && totalY === 0 && totalB === 0) {
@@ -2335,6 +2337,23 @@ export function ResultsView() {
       }
 
       if (res.evaluatedScore && typeof res.evaluatedScore === 'object' && res.evaluatedScore.total) {
+        let evScore = res.evaluatedScore;
+        // Eski kayıtlardan kalan veya 1 yanlışı olmasına rağmen 500 hesaplanan hatalı puanları LGS 2026 motoruna göre düzelt
+        if (isLgs && evScore.total) {
+          const tot = evScore.total;
+          const hasMistake = (tot.wrong > 0) || (tot.empty > 0 && tot.net < 89.9) || (tot.correct < 90 && tot.net < 89.9);
+          if (hasMistake && (tot.lgsScore >= 500 || (tot.lgsScore && tot.lgsScore > 497.96 && tot.wrong > 0))) {
+            const recomputed = calculateLgsScoreFromSubjectScores(evScore.subjectScores, exam.subjects || [], tot);
+            evScore = {
+              ...evScore,
+              total: {
+                ...tot,
+                lgsScore: recomputed.lgsScore,
+                percentile: recomputed.percentile
+              }
+            };
+          }
+        }
         return {
           ...res,
           no: effectiveNo,
@@ -2345,8 +2364,8 @@ export function ResultsView() {
           sectionStr: effectiveSec,
           studentClass: effectiveClass,
           isMatchedWithDb: !!dbStudent,
-          evaluatedScore: res.evaluatedScore,
-          scores: res.scores || (res.evaluatedScore as any)
+          evaluatedScore: evScore,
+          scores: res.scores || (evScore as any)
         };
       }
 
@@ -2356,15 +2375,21 @@ export function ResultsView() {
           ? res.average
           : (res.scores?.[String(exam.id)] || res.scores?.[exam.name] || 0));
 
+      const fallbackLgs = isLgs ? calculateLgsScoreFromSubjectScores(
+        typeof res.scores === 'object' ? (res.scores as any) : undefined,
+        exam.subjects || [],
+        { net: Number(totalNet) || 0 }
+      ).lgsScore : undefined;
+
       const fallbackScore: EvaluatedScore = {
         total: {
           correct: 0,
           wrong: 0,
           empty: 0,
           net: Number(totalNet) || 0,
-          lgsScore: isLgs ? (Number(totalNet) * 5) : undefined,
+          lgsScore: fallbackLgs,
           tytScore: isTyt ? (Number(totalNet) * 5) : undefined,
-          percentile: undefined
+          percentile: isLgs && fallbackLgs ? calculateLgsPercentile(fallbackLgs) : undefined
         },
         subjectScores: typeof res.scores === 'object' ? (res.scores as any) : {}
       };
@@ -3360,7 +3385,9 @@ export function ResultsView() {
                 if (isNaN(parsedTotalNet) || parsedTotalNet === 0) parsedTotalNet = parseFloat(sumNets.toFixed(2));
 
                 const rawScore = puanCol >= 0 ? parseFloat(String(row[puanCol] || '').replace(',', '.')) : 0;
-                const lgsScore = !isNaN(rawScore) && rawScore > 0 ? rawScore : (isLgs ? (parsedTotalNet * 5) : 0);
+                const lgsScore = !isNaN(rawScore) && rawScore > 0 && !(totalY > 0 && rawScore >= 500)
+                  ? rawScore
+                  : (isLgs ? calculateLgsScoreFromSubjectScores(subjectScores, exam.subjects || [], { correct: totalD, wrong: totalY, net: parsedTotalNet }).lgsScore : 0);
 
                 const ataLigResult = calculateAtaLigPoints(
                   lgsScore || parsedTotalNet,
@@ -3520,7 +3547,10 @@ export function ResultsView() {
             }
 
             const rawScore = normalizedRow["puan"] || normalizedRow["lgs puanı"] || normalizedRow["lgs puani"] || normalizedRow["tyt puanı"];
-            const lgsScore = parseFloat(String(rawScore).replace(',', '.')) || (isLgs ? (parsedTotalNet * 5) : 0);
+            const parsedScore = parseFloat(String(rawScore).replace(',', '.'));
+            const lgsScore = !isNaN(parsedScore) && parsedScore > 0 && !(parsedTotalNet < 89.9 && parsedScore >= 500)
+              ? parsedScore
+              : (isLgs ? calculateLgsScoreFromSubjectScores(subjectScores, exam.subjects || [], { net: parsedTotalNet }).lgsScore : 0);
 
             const ataLigResult = calculateAtaLigPoints(
               lgsScore || parsedTotalNet,

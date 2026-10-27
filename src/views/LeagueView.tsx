@@ -10,6 +10,8 @@ import {
 import { determineLeagueTeam, calculateAtaLigPoints, parseDate, normalizeTurkish, formatDateShort, extractDateFromText } from '../lib/utils';
 import { ALL_BADGE_DEFINITIONS, getBadgeDefinition, BadgeDefinition, BADGE_POINTS, normalizeBadgeKey } from '../lib/badgeDefinitions';
 import { exportTeamToExcel, exportAllTeamsToExcel } from '../lib/arenaExport';
+import { generateCoachingReport, CoachingReport } from '../lib/coachEngine';
+import { StudentCoachingModal } from '../components/coaching/StudentCoachingModal';
 import RulesView from './RulesView';
 
 export const LeagueView = () => {
@@ -20,6 +22,7 @@ export const LeagueView = () => {
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [modalShowAllExams, setModalShowAllExams] = useState(false);
   const [modalBadgeScope, setModalBadgeScope] = useState<'period' | 'all'>('period');
+  const [coachingReport, setCoachingReport] = useState<CoachingReport | null>(null);
   
   const handleSelectStudent = (st: any) => {
     setSelectedStudent(st);
@@ -569,6 +572,71 @@ export const LeagueView = () => {
   const displayedStudents = useMemo(() => {
     return filteredStudents.slice(0, visibleCount);
   }, [filteredStudents, visibleCount]);
+
+  // Helper to extract clean, sorted exam history for any student (used by coaching and modals)
+  const getStudentSortedExams = (s: any) => {
+    if (!s) return [];
+    const sNo = Number(s.no) || 0;
+    const sId = s.id ? String(s.id) : '';
+    const sNameNorm = s.name ? normalizeTurkish(s.name).trim().toLowerCase() : '';
+
+    const fromNo = sNo > 0 ? (studentExamsMap.get(`no_${sNo}`) || []) : [];
+    const fromId = sId ? (studentExamsMap.get(`id_${sId}`) || []) : [];
+    const fromName = sNameNorm ? (studentExamsMap.get(`name_${sNameNorm}`) || []) : [];
+
+    const examListMap = new Map<string, any>();
+    for (const e of [...fromNo, ...fromId, ...fromName]) {
+      let matched = (state.exams || []).find(ex => String(ex.id) === String(e.examId));
+      if (!matched && e.date) {
+        matched = (state.exams || []).find(ex => ex.name === e.name && ex.date === e.date);
+      }
+      if (!matched) {
+        const byName = (state.exams || []).filter(ex => ex.name === e.name);
+        if (byName.length === 1) matched = byName[0];
+      }
+      const embeddedDate = extractDateFromText(matched?.name || e.name);
+      const resolvedDate = (embeddedDate && (!matched?.date || (matched.date !== embeddedDate && !(matched?.name || e.name).includes(matched.date))))
+        ? embeddedDate
+        : (matched?.date || e.date || embeddedDate || '');
+
+      const canonKey = matched ? String(matched.id) : (e.examId ? String(e.examId) : `${e.name}_${resolvedDate}`);
+      const itemWithCanon = {
+        ...e,
+        date: resolvedDate,
+        name: matched?.name || e.name,
+        examId: matched ? String(matched.id) : (e.examId || canonKey)
+      };
+
+      if (!examListMap.has(canonKey)) {
+        examListMap.set(canonKey, itemWithCanon);
+      } else {
+        const existing = examListMap.get(canonKey);
+        const betterDate = resolvedDate || existing.date;
+        const betterDetails = itemWithCanon.details || existing.details;
+        const betterScore = itemWithCanon.score > 0 ? itemWithCanon.score : existing.score;
+        examListMap.set(canonKey, {
+          ...existing,
+          ...itemWithCanon,
+          date: betterDate,
+          details: betterDetails,
+          score: betterScore
+        });
+      }
+    }
+    const studentExams = Array.from(examListMap.values());
+    studentExams.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+    return studentExams;
+  };
+
+  const handleOpenCoaching = (student: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!student) return;
+    const sortedExams = getStudentSortedExams(student);
+    const rankIndex = baseStudents.findIndex(s => (s.id && s.id === student.id) || (s.no && s.no === student.no) || s.name === student.name);
+    const studentRank = rankIndex >= 0 ? rankIndex + 1 : undefined;
+    const report = generateCoachingReport(student, sortedExams, studentRank, baseStudents.length);
+    setCoachingReport(report);
+  };
 
   // Team arrays for stats
   const kutup = useMemo(() => baseStudents.filter(s => s.leagueTeam === 'Kutup Yıldızları'), [baseStudents]);
@@ -2043,6 +2111,7 @@ export const LeagueView = () => {
                       {selectedMonth === 'all' ? 'Toplam LP' : 'Aylık LP'}
                     </th>
                     <th className="py-3 px-3 min-w-[220px]">Kazanılan Rozetler</th>
+                    <th className="py-3 px-3 text-center w-28">Koç</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-brand-border/40">
@@ -2096,12 +2165,23 @@ export const LeagueView = () => {
                       <td className="py-3 px-3">
                         {renderBadges((s.displayBadges || s.allBadges || s.badges), s.leagueTeam)}
                       </td>
+                      <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenCoaching(s, e)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                          title="Öğrenci Yönlendirme Koçunu Aç"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                          <span>Koç</span>
+                        </button>
+                      </td>
                     </tr>
                   ))}
 
                   {filteredStudents.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-brand-ink/60 bg-[#FAF9F6]/40 rounded-xl">
+                      <td colSpan={6} className="py-12 text-center text-brand-ink/60 bg-[#FAF9F6]/40 rounded-xl">
                         <div className="flex flex-col items-center gap-2">
                           <span className="text-2xl">📅</span>
                           <p className="font-bold text-sm text-brand-ink">
@@ -2157,10 +2237,19 @@ export const LeagueView = () => {
                         </div>
                       </div>
 
-                      <div className="text-right shrink-0">
+                      <div className="text-right shrink-0 flex items-center gap-1.5">
                         <span className="font-serif font-black text-sm text-emerald-800 tabular-nums">
                           {lpPoints} <span className="text-[10px] font-bold">LP</span>
                         </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenCoaching(s, e)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 active:scale-95 text-white text-[11px] font-bold shadow-2xs transition-all shrink-0 cursor-pointer"
+                          title="Yönlendirme Koçunu Aç"
+                        >
+                          <Sparkles className="w-3 h-3 text-amber-200" />
+                          <span>Koç</span>
+                        </button>
                       </div>
                     </div>
 
@@ -2805,12 +2894,23 @@ export const LeagueView = () => {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setSelectedStudent(null)}
-                      className="p-2 text-brand-ink/40 hover:text-brand-ink hover:bg-gray-100 rounded-full transition-colors active:scale-95 cursor-pointer"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCoaching(selectedStudent)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
+                        title="Öğrenci Yönlendirme Koçunu Aç"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                        <span><span className="hidden sm:inline">Yönlendirme </span>Koçu</span>
+                      </button>
+                      <button
+                        onClick={() => setSelectedStudent(null)}
+                        className="p-2 text-brand-ink/40 hover:text-brand-ink hover:bg-gray-100 rounded-full transition-colors active:scale-95 cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                   
                   {/* Modal Content */}
@@ -3122,6 +3222,14 @@ export const LeagueView = () => {
             <RulesView onClose={() => setShowBadgesGuideModal(false)} />
           </div>
         </div>
+      )}
+
+      {/* 12. Öğrenci Yönlendirme Koçu Modalı */}
+      {coachingReport && (
+        <StudentCoachingModal
+          report={coachingReport}
+          onClose={() => setCoachingReport(null)}
+        />
       )}
 
     </div>

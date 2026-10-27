@@ -1,132 +1,147 @@
-# Kurum İçi Sınavlar İçin Sekonic SR-55D (Ertem-840) TXT & Optik Form Entegrasyonu
+# Akademi Arena Yönlendirme Koçu & Gelişim Reçetesi
 
-Fiziksel **Sekonic SR-55D** optik okuyucu makineden alınan **Ertem 840** TXT çıktılarının ve Ertem-840 optik şablonunun **yalnızca Kurum İçi Deneme Sınavlarında** (`examType === 'internal'`) geçerli olacak şekilde sisteme entegre edilmesi.
+Akademi Arena ligindeki her öğrenci için son girdiği deneme sınavı verilerini ve aylık rozet birikimini pedagojik kurallarla analiz eden, güçlü yönleri, riskli dersleri ve bir sonraki sınav için 3 maddelik somut eylem planını sunan interaktif rehberlik koçu ve yazdırılabilir rehberlik kartı sistemi.
 
----
-
-### User Review & Critical Decisions
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> Kullanıcı ile teyit edilen kesin tercihler ve kapsam sınırları:
-> - **Sadece Kurum İçi Sınav Kısıtlaması**: Bu özellik (hem canlı kamera Ertem-840 şablonu hem de Sekonic SR-55D TXT yükleme seçeneği) **yalnızca Kurum İçi Deneme Sınavlarında** (`examType === 'internal'`) aktif olacak; harici yayınevi sınavlarında görünmeyecek ve karışıklık yaratmayacaktır.
-> - **Arayüz Konumu**: Tarama ekranında (ScanView) kurum içi bir sınav seçildiğinde ayrı ve belirgin bir **"⚡ Sekonic TXT Yükle"** sekmesi açılacak.
-> - **Eşleşmeyen Öğrenci Yönetimi**: TXT dosyasında numarası veya adı kütükte bulunamayan öğrenciler için öğretmen onayına sunulan ayrı bir **"Eşleşmeyen Öğrenciler"** paneli sunulacak (Tek tıkla kütüğe ekleme, listeden seçme veya atlama).
-> - **Mevcut Sonuçların Güncellenmesi**: Aynı öğrencinin ilgili kurum içi sınavda önceden bir sonucu varsa, yeni yüklenen TXT verisiyle eski sonuç güncellenecek.
-> - **Karakter Kodlaması**: Sekonic makinelerinin standart Windows-1254 (Türkçe CP1254/ISO-8859-9) karakter yapısı otomatik çözülerek Türkçe karakterler eksiksiz korunacak.
+> Kullanıcı tercihleri doğrultusunda sistem tamamen kural tabanlı pedagojik LGS analiz motoruyla çalışacak, sonuçlar detaylı bir modal pencerede açılacak ve hem ekranda görüntülenebilecek hem de tek tıklamayla yazdırılabilir rehberlik kartı olarak çıktı alınabilecektir.
+
+- **Onaylanan Görünüm Modeli**: Lig tablosunda, mobil kartlarda ve öğrenci detay modalında erişilebilen "🎯 Yönlendirme Koçu" butonu; açılan kapsamlı modal ve yazdırılabilir rehberlik kartı.
+- **Onaylanan Analiz Mantığı**: Deterministik, hızlı ve güvenilir kural tabanlı pedagojik analiz motoru (son deneme netleri, ders bazlı doğruluk oranları, boş/yanlış disiplini ve kazanılan/kaçırılan rozetlerin çapraz sentezi).
+- **Onaylanan İçerik Kapsamı**: 
+  1. Genel Performans & Rozet Nabzı (Son sınav puanı, lig sırası, aylık rozetler).
+  2. Güçlü Yönler (Hangi ders ve alanlarda üstün başarı gösteriyor).
+  3. Riskli Alanlar & Dikkat Noktaları (Net kaybettiren dersler, sallama/boş bırakma alışkanlıkları).
+  4. Bir Sonraki Sınav İçin 3 Maddelik Somut Taktik Reçetesi (Doğrudan net artırmaya yönelik uygulanabilir adımlar).
 
 ---
 
-### 1. Overview & Core Concept
+## 1. Overview & Core Concept
 
-- **Ne Yapıyor?**: Kurum içi deneme sınavlarında iki yeni seçenek sunar:
-  1. Sekonic SR-55D optik okuyucu makinesinden çıkan 280 karakterlik Ertem-840 `.TXT` / `.DAT` dosyasını tek tıkla yükleyip tüm okulun sonuçlarını saniyeler içinde hesaplama.
-  2. Canlı kamera veya PDF taramasında Ertem-840 şablonunu seçebilme.
-- **Kapsam**: Yalnızca kurumun kendi bastığı veya optik makinede okuttuğu kurum içi sınavlar. Harici yayınevi sınavları bu kuralın dışındadır.
-- **Sağlanan Değer**: Okul elindeki Sekonic makinesini doğrudan Akademi Panel ekosistemine bağlar; kurum içi sınavlar için harici karne yazılımlarına veya lisanslara ihtiyaç bırakmaz.
+- **Ne İşe Yarar**: Akademi Arena'da öğrencilerin yalnızca puan ve sıralamasını görmek yerine, sınav performansını ve rozet kazanımlarını pedagojik bir koç perspektifiyle yorumlayarak öğrenciye ve öğretmene bir sonraki deneme için nokta atışı aksiyon planı sunar.
+- **Hedef Kitle**: Öğretmenler, mentorlar, öğrenciler ve veliler.
+- **Sağlanan Temel Fayda**: Ham veriyi (doğru, yanlış, net, rozet) anlamlı bir koçluk tavsiyesine dönüştürür; öğrencinin denemeden denemeye bilinçli hazırlanmasını sağlar.
 
 ---
 
-### 2. User Experience & Visual Design
+## 2. User Experience & Visual Design
 
-#### A. Kurum İçi Sınav Koşullu Sekme Yapısı
-`ScanView` ekranında sadece kurum içi bir sınav seçildiğinde 3. sekme görünür:
-1. `📷 Canlı Kamera Taraması` (Karekodlu & Ertem-840 şablonları)
-2. `📄 PDF / Görsel Toplu Tarama`
-3. `⚡ Sekonic TXT Yükle (Kurum İçi Optik Makine)`
+### A. Temel Kullanıcı Akışı
+1. **Butona Tıklama**: Kullanıcı, Akademi Arena lig tablosunda öğrencinin satırındaki "🎯 Koç Yorumu" butonuna, mobil karttaki koç rozetine veya öğrenci detay modalındaki "Yönlendirme Koçu" butonuna tıklar.
+2. **Koçluk Analizi Ekranı**:
+   - **Başlık & Kimlik**: Öğrenci adı, sınıfı, takımı (⭐ Kutup, 🚀 Sıçrama, 🛡️ Taktik), Arena lig sırası ve son sınav tarihi.
+   - **Son Sınav & Rozet Özeti**: Son sınav LGS puanı, genel net, son sınavda kazanılan rozetler ve bu ay toplanan rozet çeşitleri.
+   - **3 Ana Analiz Kartı**:
+     - 🌟 **Güçlü Yönler**: Örneğin "Sözel branşlarda 0 yanlış ile yüksek konsantrasyon", "Matematikte net artışı".
+     - ⚠️ **Gelişime Açık & Riskli Alanlar**: Örneğin "Fen bilimlerinde 5 yanlış - konu eksiği veya soru kökü dikkatsizliği", "Kalkan rozeti eksik: Emin olunmayan soruları boş bırakmak yerine işaretleme eğilimi".
+     - 🚀 **Bir Sonraki Sınav İçin 3 Maddelik Taktik Reçetesi**:
+       - *1. Taktik (Süre & Strateji)*: Hangi testten başlanmalı, takılınca turlama nasıl yapılmalı.
+       - *2. Taktik (Öncelikli Ders)*: En çok net kazandıracak 1 odak ders ve hedef net.
+       - *3. Taktik (Rozet Hedefi)*: Bir sonraki sınavda hedeflenen rozet (örn. "Kalkan" veya "Denge Cambazı").
+3. **Yazdırma / Paylaşma**: Modal üzerindeki "🖨️ Rehberlik Kartını Yazdır" butonu ile A4 formatında temiz, rozet ve tavsiyeleri içeren şık bir veli/öğrenci rehberlik çıktısı alınır.
 
-*(Harici yayınevi sınavı seçildiğinde yalnızca standart kamera/dosya taraması gösterilir, Sekonic sekmesi gizlenir).*
-
-#### B. Sekonic TXT Yükleme Arayüzü
-- Seçili kurum içi sınavın adını, kitapçık anahtarlarını ve sınıf seviyesini gösteren bilgilendirme başlığı.
-- Sürükle-bırak destekli dosya yükleme alanı (`.txt`, `.dat`).
-- Yükleme sonrası:
-  - Toplam okunan öğrenci sayısı,
-  - Başarıyla kütükle eşleşen öğrenci sayısı,
-  - Eşleşmeyen öğrenci sayısı özet kartları.
-
-#### C. Eşleşmeyen Öğrenciler Onay & Yönetim Paneli
-Kütükte bulunamayan öğrenciler için:
-- Kodlanan No ve İsim (`00091 - YİĞİT GEÇKOL - 8/A`)
-- 3 Hızlı Aksiyon:
-  - `[ + Yeni Öğrenci Olarak Kütüğe Ekle ]`
-  - `[ 🔍 Mevcut Öğrenciyle Eşleştir ]` (Arama menüsü)
-  - `[ Bu Satırı Atla ]`
-
-#### D. Sonuç Önizleme ve Tek Tıkla Kayıt
-- Her öğrencinin 6 ders bazında Doğru / Yanlış / Boş / Net dökümü ve LGS toplam puanı.
-- Varsa `Mevcut Sonuç Güncellenecek` rozeti.
-- `[ Tüm Sonuçları Kaydet ve Karne Oluştur ]` butonu.
+### B. Görsel Kimlik ve Tipografi
+- **Renk Paleti**:
+  - Kutup Yıldızları: Amber & Altın vurgular (`#B08D57`, `#F59E0B`)
+  - Sıçrama Ustaları: Safir Mavi (`#2563EB`)
+  - Taktik Avcıları: Zümrüt Yeşili (`#059669`)
+  - Arka Plan: Yumuşak krem/beyaz kart yapısı (`#FAF9F6`, `bg-white`) ile temiz kenarlıklar (`border-brand-border/80`).
+- **Tipografi**:
+  - Başlıklar: Serif zarafeti (`font-serif`, Cormorant / Playfair)
+  - Metinler: Net okunabilir `Plus Jakarta Sans / Inter`
+  - Sayılar ve Puanlar: `tabular-nums font-mono`
 
 ---
 
-### 3. Key Product Decisions & Trade-Offs
+## 3. Key Product Decisions & Trade-Offs
 
-- **Karar 1: Sadece Kurum İçi Sınav Filtresi**
-  - *Seçilen Yaklaşım*: `selectedExam.examType === 'internal'` veya kuruma özel cevap anahtarlı sınavlar için aktif edilir.
-  - *Neden*: Harici yayınevi sınavlarında farklı soru sayıları, yayınevi şablonları veya harici veri formatları olabileceğinden karışıklık önlenir.
-- **Karar 2: 280 Karakter Ertem-840 Satır Ayrıştırma Standardı**
-  - `0 - 3`: Form Kodu (`840`)
-  - `3 - 9`: Kurum Kodu (`707487`)
-  - `9 - 14`: Öğrenci No (`00091` -> `91`)
-  - `14 - 34`: Ad Soyad (`YİĞİT GEÇKOL`)
-  - `56`: Sınıf (`8`)
-  - `57`: Şube (`A`)
-  - `58`: Cinsiyet (`E` / `K`)
-  - `59`: Kitapçık (`A` / `B` - boşsa 'A' kabul edilir)
-  - `160 - 280`: 4-8. Sınıf Cevap Alanı (20 Türkçe, 20 Sosyal/İnkılap, 20 Din, 20 İngilizce, 20 Matematik, 20 Fen)
-- **Karar 3: Türkçe Karakter Kodlaması (Windows-1254 / ISO-8859-9)**
-  - Sekonic makinelerinden çıkan dosyalarda "İ, Ğ, Ş, Ç, Ö, Ü" karakterleri Windows-1254 tablosunda yer alır. `FileReader.readAsText(file, 'windows-1254')` kullanılarak isimlerin bozulması önlenir.
+- **Karar 1: Kural Tabanlı Pedagojik Motor (Rule-based Engine)**
+  - *Seçilen Yaklaşım*: LGS dinamiklerine göre optimize edilmiş 20+ kurallı deterministik koçluk algoritması.
+  - *Neden*: Sıfır ağ gecikmesi, internet gerektirmemesi, her zaman tutarlı ve pedagojik olarak doğru LGS rehberlik ilkelerine (3 yanlış 1 doğru kuralı, turlama tekniği, boş bırakma disiplini) bağlı kalması.
+- **Karar 2: Yazdırılabilir A4 Rehberlik Kartı (`@media print`)**
+  - *Seçilen Yaklaşım*: Modal içindeki içerik, yazdırıldığında otomatik olarak A4 sayfasına uygun, temiz ve okul logolu bir rehberlik karnesi formatına bürünür.
+  - *Neden*: Öğretmenlerin veli toplantılarında veya birebir koçluk görüşmelerinde öğrenciye somut bir rehberlik kağıdı teslim edebilmesi.
+- **Karar 3: Rozet ve Net Çaprazlama Analizi**
+  - *Seçilen Yaklaşım*: Yalnızca ham netlere değil, "Kalkan", "Tam İsabet", "Kırmızı Kart", "Denge Cambazı", "Zirve Koruma" gibi rozetlerin son denemedeki ve ay genelindeki durumuna göre yorum yapılması.
 
 ---
 
-### 4. Technical Architecture & Data Strategy
+## 4. Technical Architecture & Data Strategy
+
+### A. Sistem Mimarisi & Veri Akışı
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        ScanView (Kurum İçi Sınav)                      │
-│                                                                        │
-│   Sınav: [ Atatürk Ortaokulu 8. Sınıf Son Viraj (Kurum İçi) ]          │
-│                                                                        │
-│  ┌───────────────────────┬───────────────────┬───────────────────────┐ │
-│  │ 📷 Kamera Taraması    │ 📄 PDF / Görsel   │ ⚡ Sekonic TXT Yükle  │ │
-│  └───────────────────────┴───────────────────┴───────────┬───────────┘ │
-└──────────────────────────────────────────────────────────┼─────────────┘
-                                                           │ (Yalnızca Kurum İçi)
-                                                           ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                     sekonicParser.ts                                   │
-│                                                                        │
-│   - Windows-1254 decoder                                               │
-│   - 280-char Ertem-840 validator                                       │
-│   - Extract Student No, Name, Class/Section, Booklet, 6 Subject Answers│
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                   Student Matching & Resolution                        │
-│                                                                        │
-│   - Matched by Student No + Name Check (Auto-approved)                 │
-│   - Unmatched Review List: [Add to Roster] | [Link to Student] | [Skip]│
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                Scoring & Persistence (Internal Exam)                   │
-│                                                                        │
-│   - Score against Internal Exam Answer Keys (Booklet A/B)              │
-│   - Overwrite existing results for re-uploaded students                │
-│   - saveOmrExamResults() -> AppContext state & Firestore sync          │
-└────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    Akademi Arena (LeagueView)                │
+│  - Lig Tablosu (Desktop)                                     │
+│  - Mobil Öğrenci Kartları                                    │
+│  - Öğrenci Detay Modalı (Modal Roster)                       │
+└──────────────────────────────┬───────────────────────────────┘
+                               │ Tıklama: handleOpenCoachingModal(student)
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│       Öğrenci Verisi + Son Sınav + Aylık Rozetler             │
+│  - s.examHistory (Son sınav sonuçları, ders D/Y/B/N)          │
+│  - s.badgeHistory & s.displayBadges (Aylık ve son rozetler)  │
+│  - s.leagueTeam & s.displayPoints                            │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│         coachEngine.ts (Pedagojik Yönlendirme Motoru)        │
+│  1. Sınav net/puan analizi (Türkçe, Mat, Fen, Sözel dersler) │
+│  2. Boş/Yanlış disiplini (Kalkan & Kırmızı Kart kontrolü)    │
+│  3. Rozet kazanımları & eksik rozet analizi                  │
+│  4. Güçlü Yönler (Strengths) üretimi                         │
+│  5. Riskli Alanlar (Weaknesses) üretimi                       │
+│  6. 3 Maddelik Somut Taktik Reçetesi (Actionable Next Steps) │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│         StudentCoachingModal.tsx (Görsel & Yazdırılabilir)   │
+│  - Şık UI: Güçlü yönler, riskli dersler, taktik kartları     │
+│  - Buton: 🖨️ Yazdır / PDF Çıktısı (A4 print optimize)       │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-#### Bileşen ve Dosya Planı
-1. **`src/lib/sekonicParser.ts` (Yeni Dosya)**:
-   - Ertem-840 / Sekonic SR-55D satır çözümleyici fonksiyonları.
-   - Kurum kodu, öğrenci no, ad-soyad, sınıf, şube, kitapçık türü ve 6 branş cevap haritası.
-   - Windows-1254 metin okuyucu.
-2. **`src/views/ScanView.tsx` (Entegrasyon)**:
-   - Seçili sınavın kurum içi denetimi (`isInternalExam`).
-   - Yalnızca kurum içi sınavlarda görünen `Sekonic TXT Yükle` sekmesi.
-   - Dosya yükleme, eşleşmeyen öğrenciler paneli, önizleme tablosu ve kaydetme akışı.
-3. **`src/lib/omrTemplates.ts`**:
-   - Ertem-840 kamera vizör kılavuzu ve şablon tanımları (yalnızca kurum içi sınav taramalarında geçerli).
+### B. Yeni ve Güncellenecek Modüller
+1. **`src/lib/coachEngine.ts` (Yeni Dosya)**:
+   - Öğrencinin son sınavını (`student.examHistory` veya `results`) tespit eden yardımcı.
+   - Son sınavdaki ders bazlı başarı oranlarını (D, Y, B, Net) ve rozetleri değerlendiren kurallar.
+   - Çıktı arayüzü:
+     ```ts
+     interface CoachingReport {
+       studentName: string;
+       className?: string;
+       team: string;
+       rank: number;
+       examName: string;
+       examDate?: string;
+       lgsScore: number;
+       totalNet: number;
+       recentBadges: string[];
+       monthlyBadgeCount: number;
+       strengths: Array<{ title: string; desc: string; icon: string }>;
+       risks: Array<{ title: string; desc: string; icon: string }>;
+       tactics: Array<{ step: number; title: string; action: string; icon: string }>;
+     }
+     ```
+2. **`src/components/coaching/StudentCoachingModal.tsx` (Yeni Bileşen)**:
+   - Öğrencinin rehberlik koçluk raporunu şık bir modalda sunar.
+   - Yazdırma modu (`@media print` veya temiz print stili) ile veli bilgilendirme fişi formatını destekler.
+3. **`src/views/LeagueView.tsx` (Entegrasyon)**:
+   - Masaüstü lig tablosundaki her öğrenci satırına "🎯 Koç" aksiyon butonu.
+   - Mobil öğrenci kartlarına "🎯 Koç Yorumu" butonu.
+   - Öğrenci detay modalının üst kısmına "🎯 Yönlendirme Koçu Analizini Gör" butonu.
+
+---
+
+## 5. Pre-Flight Verification & Execution Checklist
+
+- [ ] `coachEngine.ts` motoru hatasız TypeScript kurallarıyla yazılacak.
+- [ ] 0 yanlış, 1 yanlış, çok yanlış ve boş bırakan tüm öğrenci profilleri için gerçekçi pedagojik tavsiyeler üretilecek.
+- [ ] `StudentCoachingModal` hem ekranda kusursuz responsive olacak hem de yazdırıldığında A4 formatında derli toplu çıkacak.
+- [ ] `LeagueView.tsx` içerisindeki mevcut tıklama ve lig hesaplama fonksiyonları bozulmadan entegre edilecek.
+- [ ] `npm run lint` ve `npm run build` ile derleme doğrulanacak.

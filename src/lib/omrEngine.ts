@@ -566,6 +566,86 @@ export const LGS_2026_PERCENTILE_TABLE = [
   { score: 100.00, percentile: 99.99 }
 ];
 
+// LGS 2026 Resmi MEB Katsayı ve Taban Puan Değerleri
+// 90 soru tam doğru (20 Türkçe + 20 Mat + 20 Fen + 10 İnkılap + 10 Din + 10 İngilizce) yapıldığında:
+// 20*4.107644 + 20*4.632534 + 20*3.889977 + 10*1.729495 + 10*1.817356 + 10*1.531003 = 303.38164 net puanı
+// Taban Puan: 500.0 - 303.38164 = 196.61836 puan
+// Toplam: 196.61836 + 303.38164 = 500.00000 TAM PUAN!
+export const LGS_2026_COEFFICIENTS = {
+  turkce: 4.107644,
+  matematik: 4.632534,
+  fen: 3.889977,
+  inkilap: 1.729495,
+  din: 1.817356,
+  ingilizce: 1.531003,
+  baseScore: 196.61836
+};
+
+export function getLgsSubjectCoeff(subjectName?: string, count: number = 20): number {
+  const norm = normalizeTurkish(subjectName);
+  if (norm.includes("turk")) return LGS_2026_COEFFICIENTS.turkce;
+  if (norm.includes("mat")) return LGS_2026_COEFFICIENTS.matematik;
+  if (norm.includes("fen")) return LGS_2026_COEFFICIENTS.fen;
+  if (norm.includes("ink") || norm.includes("sosyal") || norm.includes("tarih")) return LGS_2026_COEFFICIENTS.inkilap;
+  if (norm.includes("din") || norm.includes("ahlak") || norm.includes("dkab")) return LGS_2026_COEFFICIENTS.din;
+  if (norm.includes("ing") || norm.includes("yabanci") || norm.includes("dil")) return LGS_2026_COEFFICIENTS.ingilizce;
+  return count >= 20 ? 4.10 : 1.65;
+}
+
+export function calculateLgsScoreFromSubjectScores(
+  subjectScores?: Record<string | number, { net?: number; correct?: number; wrong?: number; empty?: number; name?: string }>,
+  subjects: Subject[] = [],
+  totals?: { correct?: number; wrong?: number; empty?: number; net?: number }
+): { lgsScore: number; percentile: number } {
+  let totalNetContribution = 0;
+  let maxNetContribution = 0;
+  let hasAnyNet = false;
+  const totalNet = totals?.net ?? 0;
+  const totalWrong = totals?.wrong ?? 0;
+  const totalEmpty = totals?.empty ?? 0;
+  const totalCorrect = totals?.correct ?? 0;
+
+  if (subjectScores && Object.keys(subjectScores).length > 0) {
+    Object.entries(subjectScores).forEach(([k, s]) => {
+      if (!s) return;
+      const subObj = subjects.find(es => String(es.id) === String(k)) || { name: s.name || String(k), count: 20 };
+      const coeff = getLgsSubjectCoeff(subObj.name, subObj.count);
+      const n = typeof s.net === 'number' ? s.net : ((s.correct || 0) - ((s.wrong || 0) / 3));
+      if (n > 0) hasAnyNet = true;
+      totalNetContribution += (n * coeff);
+      maxNetContribution += ((subObj.count || 20) * coeff);
+    });
+  } else if (totalNet > 0) {
+    hasAnyNet = true;
+    const avgCoeff = 303.38164 / 90.0;
+    totalNetContribution = totalNet * avgCoeff;
+    maxNetContribution = 303.38164;
+  }
+
+  if (maxNetContribution <= 0) maxNetContribution = 303.38164;
+  const baseScore = Math.max(100.0, 500.0 - maxNetContribution);
+
+  if (!hasAnyNet && totalNet <= 0) {
+    return { lgsScore: 100.00, percentile: 99.99 };
+  }
+
+  const isPerfect = (totalWrong === 0 && totalEmpty === 0 && (totalCorrect >= 90 || totalNet >= 89.99)) ||
+                    (!totalWrong && !totalEmpty && totalNet >= 89.99);
+
+  if (isPerfect) {
+    return { lgsScore: 500.00, percentile: 0.01 };
+  }
+
+  const rawScore = baseScore + totalNetContribution;
+  // LGS 2026'da 1 yanlışı olan öğrencinin alabileceği maksimum tavan 497.96'dır (Yabancı Dil 1 Yanlış)
+  // 1 boşu olan öğrencinin alabileceği maksimum tavan 498.47'dir (Yabancı Dil 1 Boş)
+  const maxCap = totalWrong > 0 ? 497.96 : (totalEmpty > 0 ? 498.47 : 498.50);
+  const lgsScore = Math.max(100.0, Math.min(maxCap, Math.round(rawScore * 1000) / 1000));
+  const percentile = calculateLgsPercentile(lgsScore);
+
+  return { lgsScore, percentile };
+}
+
 export function normalizeTurkish(text?: string): string {
   if (!text) return '';
   return text
@@ -668,8 +748,8 @@ export function calculateScore(
   const isAyt = isAytExam(mockExam);
   const isLgs = isLgsExam(mockExam);
 
-  let lgsBaseScore = 194.76;
   let totalNetPointsContribution = 0;
+  let maxNetPointsContribution = 0;
   let allZeroNet = true;
 
   (subjects || []).forEach(sub => {
@@ -722,16 +802,9 @@ export function calculateScore(
       totalNetPointsContribution += (netVal * 2.50);
     } else if (isLgs) {
       // LGS 2026 Resmi MEB Katsayı Değerleri
-      let coeff = 1.60;
-      if (nameNorm.includes("turk")) coeff = 4.326;
-      else if (nameNorm.includes("mat")) coeff = 5.048;
-      else if (nameNorm.includes("fen")) coeff = 4.116;
-      else if (nameNorm.includes("ink") || nameNorm.includes("sosyal") || nameNorm.includes("tarih")) coeff = 1.674;
-      else if (nameNorm.includes("din") || nameNorm.includes("ahlak")) coeff = 1.652;
-      else if (nameNorm.includes("ing") || nameNorm.includes("yabanci") || nameNorm.includes("dil")) coeff = 1.568;
-      else coeff = sub.count >= 20 ? 4.20 : 1.65;
-
+      const coeff = getLgsSubjectCoeff(sub.name, sub.count);
       totalNetPointsContribution += (netVal * coeff);
+      maxNetPointsContribution += (sub.count * coeff);
     }
   });
 
@@ -761,9 +834,24 @@ export function calculateScore(
       total.lgsScore = 100.00;
       total.percentile = 99.99;
     } else {
-      const calculatedScore = lgsBaseScore + totalNetPointsContribution;
-      total.lgsScore = Math.max(100.0, Math.min(500.0, Math.round(calculatedScore * 1000) / 1000));
-      total.percentile = calculateLgsPercentile(total.lgsScore);
+      const isPerfect = total.wrong === 0 && total.empty === 0 && total.correct > 0;
+      const effectiveBaseScore = maxNetPointsContribution > 0 ? (500.0 - maxNetPointsContribution) : LGS_2026_COEFFICIENTS.baseScore;
+
+      if (isPerfect) {
+        // Yalnızca tüm soruları eksiksiz doğru cevaplayan öğrenci 500.00 tam puan alır
+        total.lgsScore = 500.00;
+        total.percentile = 0.01;
+      } else {
+        const calculatedScore = effectiveBaseScore + totalNetPointsContribution;
+        // LGS 2026 MEB katsayılarına göre:
+        // 1 yanlış yapan öğrencinin alabileceği en yüksek puan: 497.96'dır (Yabancı Dil 1 Yanlış: 500 - 1.333*1.531)
+        // 1 boş bırakan öğrencinin alabileceği en yüksek puan: 498.47'dir (Yabancı Dil 1 Boş: 500 - 1.0*1.531)
+        // Matematik 1 yanlış: 493.82 | Türkçe 1 yanlış: 494.52 | Fen 1 yanlış: 494.81
+        // Dolayısıyla 1 yanlışı veya 1 boşu olan hiçbir öğrenci 500 puan alamaz.
+        const maxCap = total.wrong > 0 ? 497.96 : (total.empty > 0 ? 498.47 : 498.50);
+        total.lgsScore = Math.max(100.0, Math.min(maxCap, Math.round(calculatedScore * 1000) / 1000));
+        total.percentile = calculateLgsPercentile(total.lgsScore);
+      }
     }
   } else {
     total.examType = 'standard';
