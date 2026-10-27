@@ -167,7 +167,7 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   // 1. ADMIN / TEACHER HYDRATION: Açılışta canlı kütük yüklenirken yükleme ekranı (Önce kütük indirilir, öğretmen listesi taranır)
   if (appLoading || isInitialHydrating) {
-    if (isWaitingForDriveAuth && userRole === 'admin') {
+    if (isWaitingForDriveAuth && (userRole === 'admin' || userRole === 'teacher')) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF9F5] dark:bg-[#121316] p-4 sm:p-6 text-center font-sans">
           <div className="bg-white dark:bg-[#1A1D24] p-6 sm:p-8 rounded-3xl shadow-xl border border-[#B08D57]/40 dark:border-slate-800 max-w-md w-full flex flex-col items-center animate-fade-in relative overflow-hidden">
@@ -181,7 +181,7 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
               Google Drive Canlı Kütük İndirme
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-5">
-              Google Drive üzerindeki ortak canlı kütüğü doğrudan cihazınıza eksiksiz indirmek için yetkilendirmeyi onaylayın.
+              Google Drive üzerindeki ortak canlı kütüğü doğrudan cihazınıza eksiksiz indirmek için yetkilendirmeyi onaylayın. Drive izinleri bir kez verildikten sonra sonraki girişleriniz tamamen otomatik gerçekleşecektir.
             </p>
 
             <div className="w-full space-y-2.5">
@@ -209,7 +209,7 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
             </div>
 
             <p className="text-[11px] text-slate-400 mt-4 leading-normal">
-              💡 Yönetici hesabınızla Google Drive üzerindeki ortak kütüğe bağlanarak en güncel öğrenci listesini ve sınav sonuçlarını alırsınız.
+              💡 {userRole === 'admin' ? 'Yönetici' : 'Öğretmen'} hesabınızla Google Drive üzerindeki ortak kütüğe bağlanarak en güncel öğrenci listesini ve sınav sonuçlarını alırsınız. İzinler Google hesabınızda kalıcı tutulur.
             </p>
           </div>
         </div>
@@ -639,6 +639,9 @@ export default function App() {
                 </>
               )}
             </button>
+            <p className="text-[10.5px] text-slate-500 dark:text-slate-400 text-center leading-normal px-1">
+              🔐 Öğretmenler ve yöneticiler için ortak Google Drive canlı kütüğü otomatik indirilir. İzinler bir kez onaylandıktan sonra sonraki girişler tek tıkla şeffaf gerçekleşir.
+            </p>
 
             {/* Ayırıcı */}
             <div className="relative flex items-center justify-center my-2">

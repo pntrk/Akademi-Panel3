@@ -290,7 +290,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// Dedicated Google Drive Provider for Drive File sync (Used by Admin when logging in / connecting Google Drive)
+// Dedicated Google Drive Provider for Drive File sync (Used by Admin and Teachers when logging in / connecting Google Drive)
 export const googleDriveProvider = new GoogleAuthProvider();
 googleDriveProvider.setCustomParameters({
   prompt: 'select_account',
@@ -298,6 +298,7 @@ googleDriveProvider.setCustomParameters({
 });
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
+googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
 
 // Token keys for persistent session/local storage
 const DRIVE_TOKEN_KEY = 'akademi_drive_access_token';
@@ -409,7 +410,15 @@ export const loginWithGoogle = async () => {
   }
   isGoogleAuthInProgress = true;
   try {
-    const result = await signInWithPopup(auth, googleProvider);
+    // Öğretmen ve yöneticilerin Google Drive ortak kütük dosyasına erişebilmesi için
+    // Google Drive izinlerini içeren sağlayıcı ile oturum açılır.
+    // İzin bir kez verildikten sonra Google oturumu kalıcı olarak hatırlar ve sonraki girişler şeffaf/tek tıkla gerçekleşir.
+    const result = await signInWithPopup(auth, googleDriveProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      setCachedAccessToken(credential.accessToken);
+      markDrivePreApproved(result.user?.email || auth.currentUser?.email);
+    }
     return result;
   } catch (err: any) {
     if (
@@ -418,6 +427,15 @@ export const loginWithGoogle = async () => {
       err?.message?.includes('Pending promise was never set')
     ) {
       return null;
+    }
+    // Kullanıcı Drive iznini özellikle reddederse temel sağlayıcı ile giriş yapmayı dene
+    if (err?.code === 'auth/access-denied' || err?.code === 'auth/permission-denied') {
+      try {
+        const fallbackResult = await signInWithPopup(auth, googleProvider);
+        return fallbackResult;
+      } catch (fbErr: any) {
+        throw fbErr;
+      }
     }
     console.warn('Google Sign In notice:', err?.message || err);
     throw err;

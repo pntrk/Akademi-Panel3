@@ -1,5 +1,24 @@
 {
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin-allow-popups"
+        },
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "unsafe-none"
+        }
+      ]
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/__/auth/(.*)",
+      "destination": "https://gen-lang-client-0829902235.firebaseapp.com/__/auth/$1"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

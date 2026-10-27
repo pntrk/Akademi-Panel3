@@ -936,7 +936,7 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     try {
       let token = getCachedAccessToken();
       if (!token) {
-        token = await connectGoogleDrive(silentOnly || userRole === 'teacher', false);
+        token = await connectGoogleDrive(silentOnly, false);
       }
 
       // 1. ABSOLUTE TOP PRIORITY: If fixed / locked canonical Drive file exists, load directly from this fixed file!
@@ -1321,34 +1321,29 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
     // Both Admin and Teacher download canonical master 1g24DSyjP7u3OaIoUz3MGeVlS5HsqmrIg directly from Google Drive (0 Firestore Quota)
     setLoading(true);
     setIsInitialHydrating(true);
-    const cachedToken = getCachedAccessToken();
 
-    if (cachedToken) {
-      setDriveStartupStatusText('Google Drive üzerindeki ortak canlı okul kütüğü indiriliyor...');
-      syncFromGoogleDriveOnStartup()
-        .then((synced) => {
-          if (!synced) {
-            return fetchTeacherDataNow();
-          }
-        })
-        .catch((err) => {
-          console.warn('Google Drive startup sync notice:', err);
-        })
-        .finally(() => {
-          isInitialCloudHydrationDoneRef.current = true;
-          setIsInitialHydrating(false);
-          setLoading(false);
-          const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
-          setUserRole(resolvedRole);
-          setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
-          setSyncStatus('synced');
-          setSyncErrorMessage(null);
-        });
-    } else {
-      setDriveStartupStatusText('Canlı kütük verileri arka planda taranıyor...');
-      fetchTeacherDataNow()
-        .then((res) => {
-          if (res && res.success) {
+    (async () => {
+      let cachedToken = getCachedAccessToken();
+
+      // Eğer kullanıcı daha önce Drive izni verdiyse ama bellek boşalmışsa sessizce token al
+      if (!cachedToken && isDrivePreApproved(cleanUserEmail)) {
+        try {
+          cachedToken = await connectGoogleDrive(true);
+        } catch {}
+      }
+
+      if (cachedToken) {
+        setDriveStartupStatusText('Google Drive üzerindeki ortak canlı okul kütüğü indiriliyor...');
+        syncFromGoogleDriveOnStartup()
+          .then((synced) => {
+            if (!synced) {
+              return fetchTeacherDataNow();
+            }
+          })
+          .catch((err) => {
+            console.warn('Google Drive startup sync notice:', err);
+          })
+          .finally(() => {
             isInitialCloudHydrationDoneRef.current = true;
             setIsInitialHydrating(false);
             setLoading(false);
@@ -1357,8 +1352,53 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
             setSyncStatus('synced');
             setSyncErrorMessage(null);
-          } else {
-            // Load local cache immediately so teachers are never blocked
+          });
+      } else {
+        setDriveStartupStatusText('Canlı kütük verileri taranıyor...');
+        fetchTeacherDataNow()
+          .then((res) => {
+            if (res && res.success) {
+              isInitialCloudHydrationDoneRef.current = true;
+              setIsInitialHydrating(false);
+              setLoading(false);
+              const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+              setUserRole(resolvedRole);
+              setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
+              setSyncStatus('synced');
+              setSyncErrorMessage(null);
+            } else {
+              // Load local cache immediately so teachers are never blocked
+              const savedLocal = localStorage.getItem('okulYonetimState');
+              if (savedLocal) {
+                try {
+                  const parsed = JSON.parse(savedLocal);
+                  if (parsed && (parsed.students || parsed.exams)) {
+                    const safeData = sanitizeSchoolState(parsed);
+                    stateRef.current = safeData;
+                    setState(safeData);
+                    setLastDataSource('local');
+                  }
+                } catch (e) {}
+              }
+
+              isInitialCloudHydrationDoneRef.current = true;
+              setIsInitialHydrating(false);
+              setLoading(false);
+              const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
+              setUserRole(resolvedRole);
+              setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
+
+              // Hem yönetici hem de öğretmen kullanıcılar için tek seferlik Drive izin isteği
+              const isStaff = initialComputedRole === 'admin' || initialComputedRole === 'teacher' || resolvedRole === 'admin' || resolvedRole === 'teacher';
+              if (isStaff && !isDrivePreApproved(cleanUserEmail) && !getCachedAccessToken()) {
+                setIsWaitingForDriveAuth(true);
+                setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü indirmek için yetkilendirme bekleniyor.');
+              } else {
+                setIsWaitingForDriveAuth(false);
+              }
+            }
+          })
+          .catch(() => {
             const savedLocal = localStorage.getItem('okulYonetimState');
             if (savedLocal) {
               try {
@@ -1379,44 +1419,16 @@ export const AppProvider = ({ children, user }: { children: ReactNode, user: Use
             setUserRole(resolvedRole);
             setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
 
-            // Never block teachers with drive auth dialog
-            if (initialComputedRole === 'admin' && !isDrivePreApproved(cleanUserEmail)) {
+            const isStaff = initialComputedRole === 'admin' || initialComputedRole === 'teacher' || resolvedRole === 'admin' || resolvedRole === 'teacher';
+            if (isStaff && !isDrivePreApproved(cleanUserEmail) && !getCachedAccessToken()) {
               setIsWaitingForDriveAuth(true);
               setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü indirmek için yetkilendirme bekleniyor.');
             } else {
               setIsWaitingForDriveAuth(false);
             }
-          }
-        })
-        .catch(() => {
-          const savedLocal = localStorage.getItem('okulYonetimState');
-          if (savedLocal) {
-            try {
-              const parsed = JSON.parse(savedLocal);
-              if (parsed && (parsed.students || parsed.exams)) {
-                const safeData = sanitizeSchoolState(parsed);
-                stateRef.current = safeData;
-                setState(safeData);
-                setLastDataSource('local');
-              }
-            } catch (e) {}
-          }
-
-          isInitialCloudHydrationDoneRef.current = true;
-          setIsInitialHydrating(false);
-          setLoading(false);
-          const resolvedRole = evaluateUserRole(cleanUserEmail, stateRef.current.admins, stateRef.current.teachers);
-          setUserRole(resolvedRole);
-          setCachedAuthorizedRole(cleanUserEmail, resolvedRole);
-
-          if (initialComputedRole === 'admin' && !isDrivePreApproved(cleanUserEmail)) {
-            setIsWaitingForDriveAuth(true);
-            setDriveStartupStatusText('Google Drive üzerindeki ortak canlı kütüğü indirmek için yetkilendirme bekleniyor.');
-          } else {
-            setIsWaitingForDriveAuth(false);
-          }
-        });
-    }
+          });
+      }
+    })();
 
     // Register or check user profile in access_requests on login without performing unneeded writes
     if (cleanUserEmail && !isQuotaExceededRef.current && !checkIsQuotaExceededToday() && firebaseConfig.projectId) {
