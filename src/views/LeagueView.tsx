@@ -2782,15 +2782,13 @@ export const LeagueView = () => {
               let badgeLP = 0;
               Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
                 if (typeof count === 'number' && count > 0) {
-                  const pts = BADGE_POINTS[k] || 0;
+                  const pts = BADGE_POINTS[k] !== undefined ? BADGE_POINTS[k] : 0;
                   badgeLP += pts * count;
                 }
               });
 
-              let finalEarnedLP = Math.max(calculatedLP, badgeLP);
-              if (typeof h.examRes?.earnedLP === 'number' && h.examRes.earnedLP > 0) {
-                finalEarnedLP = Math.max(finalEarnedLP, h.examRes.earnedLP);
-              }
+              // Sınavda kazanılan LP doğrudan rozetlerin getirdiği puanların net toplamıdır
+              const finalEarnedLP = Math.max(0, badgeLP);
               
               return {
                 examName: h.name,
@@ -2864,8 +2862,13 @@ export const LeagueView = () => {
 
             const studentRank = baseStudents.findIndex(s => s.no === selectedStudent.no) + 1;
 
-            const periodLP = periodHistory.reduce((sum, h) => sum + (h.earnedLP || 0), 0);
-            const allTimeLP = rawHistory.reduce((sum, h) => sum + (h.earnedLP || 0), 0);
+            const ankaPeriodCount = periodHistory.reduce((sum, h) => sum + (h.badgeCounts?.ankaKusu || 0), 0);
+            const extraPeriodAnkaLP = Math.max(0, (periodBadges.ankaKusu || 0) - ankaPeriodCount) * (BADGE_POINTS.ankaKusu || 25);
+            const periodLP = periodHistory.reduce((sum, h) => sum + (h.earnedLP || 0), 0) + extraPeriodAnkaLP;
+
+            const ankaAllTimeCount = rawHistory.reduce((sum, h) => sum + (h.badgeCounts?.ankaKusu || 0), 0);
+            const extraAllTimeAnkaLP = Math.max(0, (allTimeBadges.ankaKusu || 0) - ankaAllTimeCount) * (BADGE_POINTS.ankaKusu || 25);
+            const allTimeLP = rawHistory.reduce((sum, h) => sum + (h.earnedLP || 0), 0) + extraAllTimeAnkaLP;
             const displayModalLP = selectedMonth === 'all' ? allTimeLP : periodLP;
 
             return (

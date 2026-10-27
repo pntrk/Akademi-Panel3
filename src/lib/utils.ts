@@ -283,9 +283,14 @@ export function isExamInTerm2(exam: { date?: string; name?: string }): boolean {
 }
 
 export const calculateAtaLigPoints = (examScore: number, previousAverage: number, lessonsDetails: any, historyExams: any[] = [], team: string = '') => {
-  let earnedLP = 0;
   const earnedBadges: string[] = [];
-  const badgeCounts = { kalkan: 0, ivme: 0, zirve: 0, tamIsabet: 0, kirmiziKart: 0, zirveBekcisi: 0, ivmeSampiyonu: 0, barajYikici: 0, stratejiMuhendisi: 0, istikrarElcisi: 0, lgsFatihi: 0, ankaKusu: 0 , sozelSovalyesi: 0, sayisalKalesi: 0, matematikUyanisi: 0, dengeCambazi: 0, keskinNisanci: 0, temelAtici: 0, uyuyanDev: 0, sabirTasi: 0, yinYang: 0, filozof: 0, newton: 0, pisagor: 0 };
+  const badgeCounts = { 
+    kalkan: 0, ivme: 0, zirve: 0, tamIsabet: 0, kirmiziKart: 0, 
+    zirveBekcisi: 0, ivmeSampiyonu: 0, barajYikici: 0, stratejiMuhendisi: 0, istikrarElcisi: 0, 
+    lgsFatihi: 0, ankaKusu: 0, sozelSovalyesi: 0, sayisalKalesi: 0, matematikUyanisi: 0, 
+    dengeCambazi: 0, keskinNisanci: 0, temelAtici: 0, uyuyanDev: 0, sabirTasi: 0, 
+    yinYang: 0, filozof: 0, newton: 0, pisagor: 0, takimRuhu: 0 
+  };
   
   let totalD = 0;
   let totalY = 0;
@@ -293,9 +298,11 @@ export const calculateAtaLigPoints = (examScore: number, previousAverage: number
   let mathNet = 0;
 
   let inkY = 0, dinY = 0, ingY = 0;
+  let inkD = 0, dinD = 0, ingD = 0;
   let matD = 0, matY = 0, fenD = 0, fenY = 0, turkD = 0, turkY = 0;
-  let matN = 0, turkN = 0, fenN = 0, inkN = 0, dinN = 0;
+  let matN = 0, turkN = 0, fenN = 0, inkN = 0, dinN = 0, ingN = 0;
   let allNetNonNegative = true;
+  let hasAtLeastOneBranchTamIsabet = false;
 
   if (lessonsDetails && typeof lessonsDetails === 'object') {
     Object.entries(lessonsDetails).forEach(([k, lesson]: [string, any]) => {
@@ -308,9 +315,9 @@ export const calculateAtaLigPoints = (examScore: number, previousAverage: number
       
       if (lN < 0) allNetNonNegative = false;
       
-      if (name.includes('ink') || name.includes('tarih') || name.includes('sosyal')) { inkY += lY; inkN = lN; }
-      if (name.includes('din') || name.includes('dkab')) { dinY += lY; dinN = lN; }
-      if (name.includes('ing') || name.includes('yabanci') || name.includes('dil')) { ingY += lY; }
+      if (name.includes('ink') || name.includes('tarih') || name.includes('sosyal')) { inkY += lY; inkN = lN; inkD += lD; }
+      if (name.includes('din') || name.includes('dkab')) { dinY += lY; dinN = lN; dinD += lD; }
+      if (name.includes('ing') || name.includes('yabanci') || name.includes('dil')) { ingY += lY; ingD += lD; ingN = lN; }
       if (name.includes('mat')) { matD = lD; matY += lY; matN = lN; }
       if (name.includes('fen')) { fenD = lD; fenY += lY; fenN = lN; }
       if (name.includes('tur')) { turkD = lD; turkY = lY; turkN = lN; }
@@ -319,11 +326,9 @@ export const calculateAtaLigPoints = (examScore: number, previousAverage: number
       totalY += lY;
       totalB += lB;
       
-      // Tam İsabet (+10 LP): 0 Yanlış ve en az 1 Doğru
+      // Tam İsabet: Herhangi bir branşta 0 yanlış ve en az 1 doğru yapmak
       if (lY === 0 && lD > 0) {
-        earnedLP += 10;
-        badgeCounts.tamIsabet += 1;
-        earnedBadges.push('Tam İsabet');
+        hasAtLeastOneBranchTamIsabet = true;
       }
 
       if (name.includes('mat')) {
@@ -335,86 +340,96 @@ export const calculateAtaLigPoints = (examScore: number, previousAverage: number
     });
   }
 
-  const hasKirmiziKart = totalY >= 15 && team === 'Kutup Yıldızları';
-  const hasKalkan = totalB > totalY && totalB > 0;
-  const isLgsFatihi = totalD > 0 && totalY === 0 && totalB === 0;
-
-  if (isLgsFatihi) {
-     earnedLP += 200;
-     badgeCounts.lgsFatihi += 1;
-     earnedBadges.push('LGS Fatihi');
+  // 1. Kırmızı Kart (-10 LP)
+  // Resmi Kural: "Sınavda yanlış sayısı doğru sayısından fazla olmak"
+  // Sadece toplam yanlış doğru sayısından kesinlikle fazlaysa verilir (Kutup Yıldızları kısıtı kaldırıldı)
+  const hasKirmiziKart = (totalD + totalY) > 0 && totalY > totalD;
+  if (hasKirmiziKart) {
+    badgeCounts.kirmiziKart = 1;
+    earnedBadges.push('Kırmızı Kart');
   }
 
-  // Kırmızı Kart (-15 LP) or Kalkan Puanı (+20 LP)
-  if (hasKirmiziKart) {
-    earnedLP -= 15;
-    badgeCounts.kirmiziKart += 1;
-    earnedBadges.push('Kırmızı Kart');
-  } else if (hasKalkan) {
-    earnedLP += 20;
-    badgeCounts.kalkan += 1;
+  // 2. Kalkan (+5 LP)
+  // Resmi Kural: "Boş sayısı yanlış sayısından fazla olmak (Boş > Yanlış)"
+  const hasKalkan = totalB > totalY && totalB > 0 && !hasKirmiziKart;
+  if (hasKalkan) {
+    badgeCounts.kalkan = 1;
     earnedBadges.push('Kalkan');
   }
 
-  // Team Specific Badges
+  // 3. LGS Fatihi (+30 LP)
+  // Resmi Kural: "Denemede tüm soruları 0 yanlış ve 0 boş ile bitirmek"
+  const isLgsFatihi = totalD > 0 && totalY === 0 && totalB === 0;
+  if (isLgsFatihi) {
+    badgeCounts.lgsFatihi = 1;
+    earnedBadges.push('LGS Fatihi');
+  }
+
+  // 4. Tam İsabet (+10 LP)
+  // Resmi Kural: "Herhangi bir branşta 0 yanlış ve en az 1 doğru yapmak"
+  if (hasAtLeastOneBranchTamIsabet && !isLgsFatihi) {
+    badgeCounts.tamIsabet = 1;
+    earnedBadges.push('Tam İsabet');
+  }
+
+  // --- Takım Bazlı Rozetler ---
   if (team === 'Kutup Yıldızları') {
-    if (inkY + dinY + ingY === 0 && totalD > 0) {
-      earnedLP += 15;
-      badgeCounts.sozelSovalyesi += 1;
+    // Sözel Şövalyesi (+10 LP): Türkçe, Din, İnkılap ve İngilizce branşlarında 0 yanlış yapmak
+    if (turkY === 0 && dinY === 0 && inkY === 0 && ingY === 0 && (turkD + dinD + inkD + ingD) > 0) {
+      badgeCounts.sozelSovalyesi = 1;
       earnedBadges.push('Sözel Şövalyesi');
     }
-    if (matY + fenY <= 2 && totalD > 0) {
-      earnedLP += 20;
-      badgeCounts.sayisalKalesi += 1;
+    // Sayısal Kalesi (+12 LP): Matematik ve Fen derslerinde en fazla 2 yanlış yapmak
+    if (matY + fenY <= 2 && (matD + fenD) > 0) {
+      badgeCounts.sayisalKalesi = 1;
       earnedBadges.push('Sayısal Kalesi');
     }
   } else if (team === 'Sıçrama Ustaları') {
+    // Matematik Uyanışı (+8 LP): Matematik branşında 10 ve üzeri nete ulaşmak
     if (matN >= 10) {
-      earnedLP += 20;
-      badgeCounts.matematikUyanisi += 1;
+      badgeCounts.matematikUyanisi = 1;
       earnedBadges.push('Matematik Uyanışı');
     }
+    // Denge Cambazı (+8 LP): Türkçe ve Fen derslerinde 15+ net dengesini kurmak
     if (turkN >= 15 && fenN >= 15) {
-      earnedLP += 15;
-      badgeCounts.dengeCambazi += 1;
+      badgeCounts.dengeCambazi = 1;
       earnedBadges.push('Denge Cambazı');
     }
   } else if (team === 'Taktik Avcıları') {
+    // Keskin Nişancı (+6 LP): İşaretlenen sorularda %70 ve üzeri isabet oranına ulaşmak
     if (totalD + totalY > 0 && (totalD / (totalD + totalY)) >= 0.70) {
-      earnedLP += 20;
-      badgeCounts.keskinNisanci += 1;
+      badgeCounts.keskinNisanci = 1;
       earnedBadges.push('Keskin Nişancı');
     }
-    if (allNetNonNegative) {
-      earnedLP += 15;
-      badgeCounts.temelAtici += 1;
+    // Temel Atıcı (+5 LP): Hiçbir derste eksi nete düşmeden tüm dersleri pozitif bitirmek
+    if (allNetNonNegative && totalD > 0) {
+      badgeCounts.temelAtici = 1;
       earnedBadges.push('Temel Atıcı');
     }
   }
 
-  // Zirve Koruma (+15 LP)
-  if (examScore >= 400 && team !== 'Kutup Yıldızları' && team !== 'Atanmadı') {
-    earnedLP += 15;
-    badgeCounts.zirve += 1;
-    earnedBadges.push('Zirve Koruma');
+  // Zirve (+15 LP): Denemede 400 ve üzeri LGS puanı elde etmek
+  if (examScore >= 400) {
+    badgeCounts.zirve = 1;
+    earnedBadges.push('Zirve');
   }
 
-  // İvme Puanı (+15 LP)
-  if (previousAverage > 0 && examScore >= previousAverage + 2) {
-    earnedLP += 15;
-    badgeCounts.ivme += 1;
+  // İvme (+8 LP): Önceki ortalamasına göre puanını artırmak
+  if (previousAverage > 0 && examScore > previousAverage) {
+    badgeCounts.ivme = 1;
     earnedBadges.push('İvme');
   }
 
-  // Process history for consecutive badges
-  const hasZirve = examScore >= 400 && team !== 'Kutup Yıldızları' && team !== 'Atanmadı';
+  // --- Sınav Geçmişi İncelemesi (İstikrar ve Seri Rozetleri) ---
+  const hasZirve = examScore >= 400;
   const currentExamFormatted = { score: examScore, hasKalkan, hasKirmiziKart, mathNet, hasZirve };
   const fullHistory = [...historyExams.map(h => {
-    let hTotalY = 0; let hTotalB = 0; let hMathNet = 0;
+    let hTotalD = 0; let hTotalY = 0; let hTotalB = 0; let hMathNet = 0;
     if (h.details) {
       Object.values(h.details).forEach((l: any) => {
-        hTotalY += l.Y || 0;
-        hTotalB += l.B || 0;
+        hTotalD += l.D || l.correct || 0;
+        hTotalY += l.Y || l.wrong || 0;
+        hTotalB += l.B || l.empty || 0;
         const name = (l.name || l.lessonName || '').toLowerCase();
         if (name.includes('mat')) {
           if (l.N !== undefined) hMathNet = l.N;
@@ -424,21 +439,14 @@ export const calculateAtaLigPoints = (examScore: number, previousAverage: number
         }
       });
     }
+    const hKirmizi = (hTotalD + hTotalY) > 0 && hTotalY > hTotalD;
     return { 
       score: h.score, 
-      hasKalkan: hTotalB > hTotalY && hTotalB > 0, 
+      hasKalkan: hTotalB > hTotalY && hTotalB > 0 && !hKirmizi, 
+      hasKirmiziKart: hKirmizi,
+      hasZirve: h.score >= 400,
       totalY: hTotalY,
       mathNet: hMathNet
-    };
-  }).map((h, i, arr) => {
-    const pastExams = arr.slice(0, i);
-    const prevAvg = pastExams.length > 0 ? (pastExams.reduce((sum, p) => sum + p.score, 0) / pastExams.length) : 0;
-    let hTeam = pastExams.length > 0 ? determineLeagueTeam(prevAvg) : 'Taktik Avcıları';
-    if (hTeam === 'Atanmadı') hTeam = 'Taktik Avcıları';
-    return {
-       ...h,
-       hasKirmiziKart: h.totalY >= 15 && hTeam === 'Kutup Yıldızları',
-       hasZirve: h.score >= 400 && hTeam !== 'Kutup Yıldızları' && true
     };
   }), currentExamFormatted];
 
@@ -451,92 +459,98 @@ export const calculateAtaLigPoints = (examScore: number, previousAverage: number
     return streak;
   };
 
-  // Zirve Bekçisi (+30 LP): 3 consecutive Zirve
+  // Zirve Bekçisi (+20 LP): Üst üste 3 denemede 400+ puan barajını korumak
   const zirveStreak = getStreak(h => h.hasZirve);
   if (zirveStreak > 0 && zirveStreak % 3 === 0) {
-    earnedLP += 30;
-    badgeCounts.zirveBekcisi += 1;
+    badgeCounts.zirveBekcisi = 1;
     earnedBadges.push('Zirve Bekçisi');
   }
 
-  // İvme Şampiyonu (+30 LP): 3 consecutive with +5 score increase
+  // İvme Şampiyonu (+15 LP): Üst üste 3 denemede puanını artırmak
   const ivmeStreak = getStreak((h, i, arr) => {
     if (i === 0) return false;
-    return h.score >= arr[i - 1].score + 5;
+    return h.score > arr[i - 1].score;
   });
   if (ivmeStreak > 0 && ivmeStreak % 3 === 0) {
-    earnedLP += 30;
-    badgeCounts.ivmeSampiyonu += 1;
+    badgeCounts.ivmeSampiyonu = 1;
     earnedBadges.push('İvme Şampiyonu');
   }
 
-  // Baraj Yıkıcı (+30 LP): 3 consecutive Math Net > 10
+  // Baraj Yıkıcı (+12 LP): Üst üste 3 denemede Matematik Neti >= 10
   const barajStreak = getStreak(h => h.mathNet >= 10);
   if (barajStreak > 0 && barajStreak % 3 === 0) {
-    earnedLP += 30;
-    badgeCounts.barajYikici += 1;
+    badgeCounts.barajYikici = 1;
     earnedBadges.push('Baraj Yıkıcı');
   }
 
-  // Strateji Mühendisi (+40 LP): 4 consecutive Kalkan
+  // Strateji Mühendisi (+10 LP): Üst üste 3 denemede Kalkan kazanmak
   const stratejiStreak = getStreak(h => h.hasKalkan);
-  if (stratejiStreak > 0 && stratejiStreak % 4 === 0) {
-    earnedLP += 40;
-    badgeCounts.stratejiMuhendisi += 1;
+  if (stratejiStreak > 0 && stratejiStreak % 3 === 0) {
+    badgeCounts.stratejiMuhendisi = 1;
     earnedBadges.push('Strateji Mühendisi');
   }
 
-  // İstikrar Elçisi (+50 LP): 5 consecutive no Kırmızı Kart
-  const istikrarStreak = getStreak(h => !h.hasKirmiziKart);
-  if (istikrarStreak > 0 && istikrarStreak % 5 === 0) {
-    earnedLP += 50;
-    badgeCounts.istikrarElcisi += 1;
+  // İstikrar Elçisi (+15 LP): Üst üste 3 denemede Kırmızı Kart almamak ve gerilememek
+  const istikrarStreak = getStreak((h, i, arr) => {
+    if (h.hasKirmiziKart) return false;
+    if (i === 0) return true;
+    return h.score >= arr[i - 1].score - 10;
+  });
+  if (istikrarStreak >= 3 && istikrarStreak % 3 === 0) {
+    badgeCounts.istikrarElcisi = 1;
     earnedBadges.push('İstikrar Elçisi');
   }
 
   // --- Yeni Gizemli ve Branş Rozetleri ---
 
-  // Uyuyan Dev (+50 LP)
-  if (previousAverage > 0 && (examScore - previousAverage) >= 40) {
-    earnedLP += 50;
-    badgeCounts.uyuyanDev += 1;
+  // Uyuyan Dev (+10 LP): Önceki ortalamaya göre +30 puan üzeri artış
+  if (previousAverage > 0 && (examScore - previousAverage) >= 30) {
+    badgeCounts.uyuyanDev = 1;
     earnedBadges.push('Uyuyan Dev');
   }
 
-  // Sabır Taşı (+40 LP)
-  if (totalB >= 15 && totalY === 0) {
-    earnedLP += 40;
-    badgeCounts.sabirTasi += 1;
+  // Sabır Taşı (+5 LP): Boş >= 10 ve 0 Yanlış ile sınavı tamamlamak
+  if (totalB >= 10 && totalY === 0 && totalD > 0) {
+    badgeCounts.sabirTasi = 1;
     earnedBadges.push('Sabır Taşı');
   }
 
-  // Yin Yang (+30 LP)
-  if (turkN === matN && matN >= 10) {
-    earnedLP += 30;
-    badgeCounts.yinYang += 1;
+  // Yin Yang (+8 LP): Sözel ve sayısal net dengesi (fark <= 2 ve her ikisi de > 0)
+  const sozelNet = turkN + inkN + dinN + ingN;
+  const sayisalNet = matN + fenN;
+  if (sozelNet > 0 && sayisalNet > 0 && Math.abs(sozelNet - sayisalNet) <= 2) {
+    badgeCounts.yinYang = 1;
     earnedBadges.push('Yin Yang');
   }
 
-  // Filozof (+30 LP)
-  if (turkD === 20 && turkY === 0) {
-    earnedLP += 30;
-    badgeCounts.filozof += 1;
+  // Filozof (+8 LP): Türkçe 20/20 tam doğru
+  if (turkD >= 20 && turkY === 0) {
+    badgeCounts.filozof = 1;
     earnedBadges.push('Filozof');
   }
 
-  // Newton (+30 LP)
-  if (fenD === 20 && fenY === 0) {
-    earnedLP += 30;
-    badgeCounts.newton += 1;
+  // Newton (+10 LP): Fen 20/20 tam doğru
+  if (fenD >= 20 && fenY === 0) {
+    badgeCounts.newton = 1;
     earnedBadges.push('Newton');
   }
 
-  // Pisagor (+50 LP)
-  if (matD === 20 && matY === 0) {
-    earnedLP += 50;
-    badgeCounts.pisagor += 1;
+  // Pisagor (+10 LP): Matematik 20/20 tam doğru
+  if (matD >= 20 && matY === 0) {
+    badgeCounts.pisagor = 1;
     earnedBadges.push('Pisagor');
   }
+
+  // --- KAZANILAN LP HESAPLAMASI (STRICT BADGE POINTS) ---
+  // Kazanılan lig puanı (LP), kazanılan rozetlerin getirdiği puanların birebir toplamıdır.
+  let earnedLP = 0;
+  Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
+    if (typeof count === 'number' && count > 0) {
+      const pts = BADGE_POINTS[k] !== undefined ? BADGE_POINTS[k] : 0;
+      earnedLP += pts * count;
+    }
+  });
+  if (earnedLP < 0) earnedLP = 0;
 
   return { earnedLP, earnedBadges, badgeCounts };
 };
@@ -703,14 +717,12 @@ export function recalculateLeagueForStudents(students: any[], results: any[] = [
         let badgeLP = 0;
         Object.entries(badgeCounts).forEach(([k, count]: [string, any]) => {
           if (typeof count === 'number' && count > 0) {
-            badgeLP += (BADGE_POINTS[k] || 0) * count;
+            badgeLP += (BADGE_POINTS[k] !== undefined ? BADGE_POINTS[k] : 0) * count;
           }
         });
 
-        let earnedLP = Math.max(calcLP, badgeLP);
-        if (typeof examRes?.earnedLP === 'number' && examRes.earnedLP > 0) {
-          earnedLP = Math.max(earnedLP, examRes.earnedLP);
-        }
+        // Kazanılan LP, sınavdaki rozetlerin standart puanlarının toplamıdır
+        let earnedLP = Math.max(0, badgeLP);
         
         totalLP += earnedLP;
         Object.keys(badgeCounts).forEach(k => {
@@ -766,9 +778,9 @@ export function recalculateLeagueForStudents(students: any[], results: any[] = [
           date: exam.date,
           totalY: hTotalY,
             hasKalkan: hTotalB > hTotalY && hTotalB > 0,
-            hasKirmiziKart: hTotalY >= 15 && teamForThisExam === 'Kutup Yıldızları',
+            hasKirmiziKart: (hTotalY > 0 && hTotalY > (hTotalB + 10)),
             mathNet: hMathNet,
-            hasZirve: score >= 400 && teamForThisExam !== 'Kutup Yıldızları' && true
+            hasZirve: score >= 400
           });
           
           runningSum += score;
@@ -782,7 +794,8 @@ export function recalculateLeagueForStudents(students: any[], results: any[] = [
                  transferHistory.push({ from: currentTeam, to: newTeam, date: exam.date, examName: exam.name });
                  
                  if (currentTeam === 'Taktik Avcıları' && (newTeam === 'Sıçrama Ustaları' || newTeam === 'Kutup Yıldızları')) {
-                     totalLP += 100;
+                     const ankaPts = BADGE_POINTS.ankaKusu || 25;
+                     totalLP += ankaPts;
                      badges.ankaKusu += 1;
                      
                      // Track transfer bonus in monthly stats
@@ -794,7 +807,7 @@ export function recalculateLeagueForStudents(students: any[], results: any[] = [
                          badges: { kalkan: 0, ivme: 0, zirve: 0, tamIsabet: 0, kirmiziKart: 0, zirveBekcisi: 0, ivmeSampiyonu: 0, barajYikici: 0, stratejiMuhendisi: 0, istikrarElcisi: 0, lgsFatihi: 0, ankaKusu: 0, sozelSovalyesi: 0, sayisalKalesi: 0, matematikUyanisi: 0, dengeCambazi: 0, keskinNisanci: 0, temelAtici: 0, uyuyanDev: 0, sabirTasi: 0, yinYang: 0, filozof: 0, newton: 0, pisagor: 0 }
                        };
                      }
-                     monthlyLeagueData[tMonthKey].points += 100;
+                     monthlyLeagueData[tMonthKey].points += ankaPts;
                      monthlyLeagueData[tMonthKey].badges.ankaKusu += 1;
                  }
                  
