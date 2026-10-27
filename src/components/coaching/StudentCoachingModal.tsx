@@ -42,6 +42,18 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
     ? 'bg-blue-100 text-blue-900 border-blue-300' 
     : 'bg-emerald-100 text-emerald-900 border-emerald-300';
 
+  // Ders kırılımlarını kesin tekilleştir (mükerrer gösterim engeli)
+  const uniqueLessons = React.useMemo(() => {
+    if (!report?.lessons) return [];
+    const seen = new Set<string>();
+    return report.lessons.filter(l => {
+      const key = (l.name || '').trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [report?.lessons]);
+
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
       <div 
@@ -303,27 +315,32 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
           </div>
 
           {/* 4. Ders Dağılım Karnesi ve Koç Notu */}
-          {report.lessons.length > 0 && (
-            <div className="bg-[#FAF9F6] border border-brand-border/80 rounded-2xl p-3.5 sm:p-4">
+          {uniqueLessons.length > 0 && (
+            <div className="bg-[#FAF9F6] border border-brand-border/80 rounded-2xl p-3.5 sm:p-4 shadow-2xs">
               <div className="flex items-center justify-between pb-2 mb-2 border-b border-brand-border/60">
-                <p className="text-xs font-bold text-brand-ink">Son Deneme Ders Karnesi</p>
-                <p className="text-[10px] text-brand-ink/50 font-medium">Ders bazlı doğruluk ve isabet oranları</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">📊</span>
+                  <p className="text-xs font-bold text-brand-ink">Son Deneme Ders Karnesi</p>
+                </div>
+                <p className="text-[10px] text-brand-ink/60 font-medium">
+                  {uniqueLessons.length} Ders • Toplam {report.totalNet.toFixed(2)} Net
+                </p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-left text-xs min-w-[320px]">
                   <thead>
                     <tr className="text-[10.5px] font-bold text-brand-ink/60 border-b border-brand-border/40">
-                      <th className="py-1 px-2">Ders</th>
-                      <th className="py-1 px-2 text-center text-emerald-700">D</th>
-                      <th className="py-1 px-2 text-center text-rose-600">Y</th>
-                      <th className="py-1 px-2 text-center text-amber-700">B</th>
-                      <th className="py-1 px-2 text-center font-bold text-brand-ink">Net</th>
-                      <th className="py-1 px-2 text-right">İsabet</th>
+                      <th className="py-1.5 px-2">Ders</th>
+                      <th className="py-1.5 px-2 text-center text-emerald-700">D</th>
+                      <th className="py-1.5 px-2 text-center text-rose-600">Y</th>
+                      <th className="py-1.5 px-2 text-center text-amber-700">B</th>
+                      <th className="py-1.5 px-2 text-center font-bold text-brand-ink">Net</th>
+                      <th className="py-1.5 px-2 text-right">İsabet</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-brand-border/30 font-mono">
-                    {report.lessons.map((l, i) => (
-                      <tr key={i} className="hover:bg-white/60 transition-colors">
+                    {uniqueLessons.map((l, i) => (
+                      <tr key={`${l.name}-${i}`} className="hover:bg-white/60 transition-colors">
                         <td className="py-1.5 px-2 font-sans font-semibold text-brand-ink">{l.name}</td>
                         <td className="py-1.5 px-2 text-center text-emerald-700 font-bold">{l.correct}</td>
                         <td className="py-1.5 px-2 text-center text-rose-600 font-bold">{l.wrong}</td>
@@ -333,6 +350,22 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                       </tr>
                     ))}
                   </tbody>
+                  {uniqueLessons.length > 1 && (
+                    <tfoot className="border-t-2 border-brand-border/70 font-mono text-[11px] bg-white/70 font-bold">
+                      <tr>
+                        <td className="py-1.5 px-2 font-sans text-brand-ink">Toplam</td>
+                        <td className="py-1.5 px-2 text-center text-emerald-700 font-black">{report.totalCorrect}</td>
+                        <td className="py-1.5 px-2 text-center text-rose-600 font-black">{report.totalWrong}</td>
+                        <td className="py-1.5 px-2 text-center text-amber-700 font-black">{report.totalEmpty}</td>
+                        <td className="py-1.5 px-2 text-center text-brand-ink font-black">{report.totalNet.toFixed(2)}</td>
+                        <td className="py-1.5 px-2 text-right font-sans text-brand-ink/80">
+                          {report.totalCorrect + report.totalWrong > 0 
+                            ? `%${Math.round((report.totalCorrect / (report.totalCorrect + report.totalWrong)) * 100)}` 
+                            : '-'}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
             </div>

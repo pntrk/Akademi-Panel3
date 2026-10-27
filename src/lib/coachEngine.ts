@@ -75,63 +75,158 @@ export function generateCoachingReport(
   const examDate = lastExam?.date || '';
   const score = lastExam?.score || 0;
 
-  // Ders kırılımlarını çıkar
-  const lessons: LessonStat[] = [];
-  let totalCorrect = 0;
-  let totalWrong = 0;
-  let totalEmpty = 0;
-  let totalNet = 0;
+  // Ders isim ve takma adlarını MEB LGS standart derslerine eşleştir
+  const resolveSubjectCanonical = (rawKey: string, valName?: string): { canonKey: string; displayName: string; order: number } | null => {
+    const targetStr = (valName && valName.trim() ? valName : rawKey).trim();
+    const clean = normalizeTurkish(targetStr).toLowerCase().replace(/[\s\.\-_/]+/g, '');
+    if (!clean) return null;
 
-  let turkStat: LessonStat | null = null;
-  let matStat: LessonStat | null = null;
-  let fenStat: LessonStat | null = null;
-  let inkStat: LessonStat | null = null;
-  let dinStat: LessonStat | null = null;
-  let ingStat: LessonStat | null = null;
+    // Özet veya sistem alanlarını ders olarak kabul etme
+    if (
+      clean === 'toplam' || clean === 'genel' || clean === 'toplamnet' ||
+      clean === 'net' || clean === 'puan' || clean === 'lgs' || clean === 'tyt' || clean === 'ayt' ||
+      clean === 'score' || clean === 'average' || clean === 'total' || clean === 'id' || clean === 'date' ||
+      clean === 'examid' || clean === 'sinav'
+    ) {
+      return null;
+    }
 
-  if (lastExam?.details && typeof lastExam.details === 'object') {
-    Object.entries(lastExam.details).forEach(([key, val]: [string, any]) => {
-      if (!val || typeof val !== 'object') return;
-      const rawName = String(val.name || val.lessonName || key);
-      const name = rawName.trim();
-      const norm = normalizeTurkish(name);
+    if (clean.includes('turk')) {
+      return { canonKey: 'turkce', displayName: 'Türkçe', order: 1 };
+    }
+    if (clean.includes('ink') || clean.includes('tarih') || clean.includes('sosyal') || clean === 'tar' || clean === 'sb') {
+      return { canonKey: 'inkilap', displayName: 'T.C. İnkılap Tarihi ve Atatürkçülük', order: 2 };
+    }
+    if (clean.includes('din') || clean.includes('dkab')) {
+      return { canonKey: 'din', displayName: 'Din Kültürü ve Ahlak Bilgisi', order: 3 };
+    }
+    if (clean.includes('ing') || clean.includes('yabanci') || clean.includes('dil') || clean.includes('english')) {
+      return { canonKey: 'ingilizce', displayName: 'İngilizce', order: 4 };
+    }
+    if (clean.includes('mat')) {
+      return { canonKey: 'matematik', displayName: 'Matematik', order: 5 };
+    }
+    if (clean.includes('fen')) {
+      return { canonKey: 'fen', displayName: 'Fen Bilimleri', order: 6 };
+    }
 
-      const d = Number(val.D ?? val.correct ?? 0) || 0;
-      const y = Number(val.Y ?? val.wrong ?? 0) || 0;
-      const b = Number(val.B ?? val.empty ?? 0) || 0;
-      const n = typeof val.N === 'number' ? val.N : (typeof val.net === 'number' ? val.net : (d - y / 3));
+    // Sayısal ID anahtarları (örn: 1..6) için standart MEB LGS branş sıralaması
+    if (/^[1-6]$/.test(clean)) {
+      const num = parseInt(clean, 10);
+      switch (num) {
+        case 1: return { canonKey: 'turkce', displayName: 'Türkçe', order: 1 };
+        case 2: return { canonKey: 'inkilap', displayName: 'T.C. İnkılap Tarihi ve Atatürkçülük', order: 2 };
+        case 3: return { canonKey: 'din', displayName: 'Din Kültürü ve Ahlak Bilgisi', order: 3 };
+        case 4: return { canonKey: 'ingilizce', displayName: 'İngilizce', order: 4 };
+        case 5: return { canonKey: 'matematik', displayName: 'Matematik', order: 5 };
+        case 6: return { canonKey: 'fen', displayName: 'Fen Bilimleri', order: 6 };
+      }
+    }
+
+    return { canonKey: clean, displayName: targetStr, order: 99 };
+  };
+
+  // Ders kırılımlarını çıkar ve mükerrer dersleri (örn: Türkçe ve 1) tekilleştir
+  const canonicalMap = new Map<string, LessonStat & { order: number }>();
+  const rawDetailsSource = lastExam?.details?.lessons 
+    || lastExam?.details 
+    || lastExam?.examRes?.evaluatedScore?.subjectScores 
+    || lastExam?.examRes?.scores;
+
+  if (rawDetailsSource && typeof rawDetailsSource === 'object') {
+    Object.entries(rawDetailsSource).forEach(([key, val]: [string, any]) => {
+      if (val === undefined || val === null) return;
+
+      const valName = typeof val === 'object' ? (val.name || val.lessonName) : undefined;
+      const meta = resolveSubjectCanonical(key, valName);
+      if (!meta) return;
+
+      let d = 0;
+      let y = 0;
+      let b = 0;
+      let n = 0;
+
+      if (typeof val === 'object') {
+        d = Number(val.D ?? val.correct ?? 0) || 0;
+        y = Number(val.Y ?? val.wrong ?? 0) || 0;
+        b = Number(val.B ?? val.empty ?? 0) || 0;
+        n = typeof val.N === 'number' 
+          ? val.N 
+          : (typeof val.net === 'number' 
+              ? val.net 
+              : (typeof val.n === 'number' ? val.n : (d - y / 3)));
+      } else if (typeof val === 'number') {
+        n = val;
+        d = Math.round(val);
+      } else if (typeof val === 'string' && !isNaN(parseFloat(val.replace(',', '.')))) {
+        n = parseFloat(val.replace(',', '.'));
+        d = Math.round(n);
+      } else {
+        return;
+      }
+
       const cleanNet = Math.round(n * 100) / 100;
       const answered = d + y;
-      const accuracy = answered > 0 ? Math.round((d / answered) * 100) : 0;
+      const accuracy = answered > 0 ? Math.round((d / answered) * 100) : (cleanNet > 0 ? 100 : 0);
 
-      const stat: LessonStat = {
-        name,
-        correct: d,
-        wrong: y,
-        empty: b,
-        net: cleanNet,
-        accuracy
-      };
-
-      lessons.push(stat);
-      totalCorrect += d;
-      totalWrong += y;
-      totalEmpty += b;
-      totalNet += cleanNet;
-
-      if (norm.includes('turk')) turkStat = stat;
-      else if (norm.includes('mat')) matStat = stat;
-      else if (norm.includes('fen')) fenStat = stat;
-      else if (norm.includes('ink') || norm.includes('tarih') || norm.includes('sosyal')) inkStat = stat;
-      else if (norm.includes('din') || norm.includes('dkab')) dinStat = stat;
-      else if (norm.includes('ing') || norm.includes('yabanci') || norm.includes('dil')) ingStat = stat;
+      const existing = canonicalMap.get(meta.canonKey);
+      if (!existing) {
+        canonicalMap.set(meta.canonKey, {
+          name: meta.displayName,
+          correct: d,
+          wrong: y,
+          empty: b,
+          net: cleanNet,
+          accuracy,
+          order: meta.order
+        });
+      } else {
+        // Mükerrer kayıt tespit edildiğinde (Örn: "Türkçe" ve subject ID "1")
+        // Doğru/yanlış/boş verisi daha zengin olan kaydı tercih et
+        const currentHasDetails = (existing.correct + existing.wrong + existing.empty) > 0;
+        const newHasDetails = (d + y + b) > 0;
+        if (!currentHasDetails && newHasDetails) {
+          canonicalMap.set(meta.canonKey, {
+            name: existing.name || meta.displayName,
+            correct: d,
+            wrong: y,
+            empty: b,
+            net: cleanNet,
+            accuracy,
+            order: existing.order
+          });
+        }
+      }
     });
   }
 
-  // Eğer toplam net hesaplanmadıysa ama sınav skoru varsa
+  // MEB müfredat sırasına göre dizilmiş kesin tekil ders listesi
+  const lessons: LessonStat[] = Array.from(canonicalMap.values())
+    .sort((a, b) => a.order - b.order)
+    .map(({ order, ...rest }) => rest);
+
+  let totalCorrect = lessons.reduce((sum, l) => sum + l.correct, 0);
+  let totalWrong = lessons.reduce((sum, l) => sum + l.wrong, 0);
+  let totalEmpty = lessons.reduce((sum, l) => sum + l.empty, 0);
+  let totalNet = Math.round(lessons.reduce((sum, l) => sum + l.net, 0) * 100) / 100;
+
+  // Yedek sınav skor doğrulamaları
   if (totalNet === 0 && lastExam?.net) {
     totalNet = Math.round(Number(lastExam.net) * 100) / 100;
   }
+  if (totalCorrect === 0 && lastExam?.examRes?.totalCorrect) {
+    totalCorrect = Number(lastExam.examRes.totalCorrect) || 0;
+  }
+  if (totalWrong === 0 && lastExam?.examRes?.totalWrong) {
+    totalWrong = Number(lastExam.examRes.totalWrong) || 0;
+  }
+
+  const turkStat = canonicalMap.get('turkce') || null;
+  const matStat = canonicalMap.get('matematik') || null;
+  const fenStat = canonicalMap.get('fen') || null;
+  const inkStat = canonicalMap.get('inkilap') || null;
+  const dinStat = canonicalMap.get('din') || null;
+  const ingStat = canonicalMap.get('ingilizce') || null;
 
   // Trend hesabı
   let trend: 'up' | 'down' | 'steady' | 'first' = 'first';
