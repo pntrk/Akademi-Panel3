@@ -244,14 +244,12 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
             <span>Veriler güvenle senkronize ediliyor...</span>
           </div>
 
-          {userRole === 'admin' && (
-            <button
-              onClick={() => skipDriveAndUseCloudStorage()}
-              className="text-[11px] text-[#8e8d82] hover:text-[#5a5a40] dark:text-slate-400 dark:hover:text-slate-200 underline transition-colors cursor-pointer pt-1"
-            >
-              Beklemeden yerel / bulut verileriyle devam et
-            </button>
-          )}
+          <button
+            onClick={() => skipDriveAndUseCloudStorage()}
+            className="text-[11px] text-[#8e8d82] hover:text-[#5a5a40] dark:text-slate-400 dark:hover:text-slate-200 underline transition-colors cursor-pointer pt-1"
+          >
+            Beklemeden yerel / bulut verileriyle devam et
+          </button>
         </div>
       </div>
     );
@@ -352,6 +350,22 @@ function AppContent({ user, onLogout }: { user: User; onLogout: () => void }) {
   );
 }
 
+const detectInAppBrowser = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const ua = (navigator.userAgent || navigator.vendor || (window as any).opera || '').toLowerCase();
+  return (
+    ua.includes('fbav') ||
+    ua.includes('fban') ||
+    ua.includes('instagram') ||
+    ua.includes('whatsapp') ||
+    ua.includes('line') ||
+    ua.includes('micromessenger') ||
+    ua.includes('telegram') ||
+    ua.includes('gsa') ||
+    (ua.includes('android') && (ua.includes('wv') || ua.includes('version/4.0')))
+  );
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -360,6 +374,7 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [copiedDomain, setCopiedDomain] = useState(false);
   const [showDemoOptions, setShowDemoOptions] = useState(false);
+  const [isAppBrowser, setIsAppBrowser] = useState(false);
   
   // Email & Password auth states
   const [emailTab, setEmailTab] = useState(false);
@@ -370,6 +385,17 @@ export default function App() {
   const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
 
   useEffect(() => {
+    const inApp = detectInAppBrowser();
+    setIsAppBrowser(inApp);
+    if (inApp) {
+      setEmailTab(true);
+    }
+
+    // Safety fallback timer to unblock auth loading screen on weak signals
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 3500);
+
     try {
       const saved = localStorage.getItem('akademi_user_session') || sessionStorage.getItem('akademi_preview_user');
       if (saved) {
@@ -379,11 +405,13 @@ export default function App() {
           setUser(restoredUser);
           syncUserRegistration(restoredUser).catch(() => {});
           setLoading(false);
+          clearTimeout(timer);
         }
       }
     } catch (e) {}
 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      clearTimeout(timer);
       if (currentUser) {
         setUser(currentUser);
         try {
@@ -398,7 +426,11 @@ export default function App() {
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, []);
 
   const handleCopyDomain = async (domainToCopy: string) => {
@@ -415,6 +447,9 @@ export default function App() {
     if (isLoggingIn) return;
     setLoginError(null);
     setUnauthorizedDomain(null);
+    if (isAppBrowser) {
+      setEmailTab(true);
+    }
     setIsLoggingIn(true);
     try {
       const res = await loginWithGoogle();
@@ -431,18 +466,21 @@ export default function App() {
       }
     } catch (err: any) {
       console.warn("Login attempt result:", err);
+      setEmailTab(true);
       if (err?.code === 'auth/unauthorized-domain') {
         const hostname = window.location.hostname;
         setUnauthorizedDomain(hostname);
         setLoginError(`Bu alan adı (${hostname}) için Firebase yetki doğrulaması gerekiyor.`);
+      } else if (err?.code === 'auth/popup-blocked' || err?.message?.includes('disallowed_useragent')) {
+        setLoginError('Uygulama içi tarayıcı Google penceresini engelledi. Lütfen aşağıdaki E-Posta ve Şifre bölümüyle doğrudan giriş yapınız.');
       } else if (err?.code === 'auth/popup-closed-by-user') {
-        setLoginError('Giriş penceresi kapatıldı. Lütfen tekrar deneyiniz.');
+        setLoginError('Giriş penceresi kapatıldı. Dilerseniz aşağıdaki E-Posta & Şifre bölümüyle doğrudan giriş yapabilirsiniz.');
       } else if (err?.code === 'auth/cancelled-popup-request') {
         // Ignored
       } else if (err?.message?.includes('Pending promise was never set')) {
-        setLoginError('Pencere geçişi tamamlanamadı. Lütfen birkaç saniye sonra tekrar deneyiniz.');
+        setLoginError('Pencere geçişi tamamlanamadı. Lütfen aşağıdaki E-Posta & Şifre bölümüyle giriş yapınız.');
       } else {
-        setLoginError(err?.message || 'Google ile giriş yapılamadı.');
+        setLoginError(err?.message || 'Google ile giriş yapılamadı. Lütfen aşağıdaki E-Posta & Şifre bölümüyle giriş yapınız.');
       }
     } finally {
       setIsLoggingIn(false);
@@ -600,6 +638,21 @@ export default function App() {
             <h1 className="text-3xl font-serif font-bold text-[#5a5a40] tracking-tight italic">AkademiPanel</h1>
             <p className="text-[#8e8d82] text-xs font-semibold mt-1">Ölçme ve Değerlendirme Yönetim Sistemi</p>
           </div>
+
+          {/* In-App Browser (WhatsApp/Instagram/Telegram WebView) Warning Banner */}
+          {isAppBrowser && (
+            <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200/90 rounded-2xl text-left text-xs text-amber-900 shadow-xs animate-fade-in">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold text-amber-950 mb-0.5">WhatsApp / Uygulama İçi Tarayıcı Algılandı</p>
+                  <p className="text-[11.5px] leading-relaxed text-amber-800">
+                    Google güvenlik politikaları gereği WhatsApp içinden Google ile giriş engellenebilir. Lütfen <strong className="text-amber-950 font-bold">E-Posta ile Giriş Yapın</strong> veya sağ üstteki üç noktadan (⋮) <strong className="text-amber-950 font-bold">'Tarayıcıda Aç' (Chrome)</strong> seçeneğini tıklayın.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Giriş Yöntemi Seçenekleri */}
           <div className="space-y-4 text-left">

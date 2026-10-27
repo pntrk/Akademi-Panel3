@@ -20,8 +20,13 @@
       "destination": "https://gen-lang-client-0829902235.firebaseapp.com/__/auth/$1"
     },
     {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
 }
+

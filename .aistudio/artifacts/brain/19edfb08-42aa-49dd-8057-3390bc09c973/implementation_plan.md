@@ -1,147 +1,48 @@
-# Akademi Arena Yönlendirme Koçu & Gelişim Reçetesi
+# Android Erişim, WhatsApp İçi Tarayıcı & Önbellek İyileştirme Planı
 
-Akademi Arena ligindeki her öğrenci için son girdiği deneme sınavı verilerini ve aylık rozet birikimini pedagojik kurallarla analiz eden, güçlü yönleri, riskli dersleri ve bir sonraki sınav için 3 maddelik somut eylem planını sunan interaktif rehberlik koçu ve yazdırılabilir rehberlik kartı sistemi.
-
-## User Review & Critical Decisions
-
-> [!IMPORTANT]
-> Kullanıcı tercihleri doğrultusunda sistem tamamen kural tabanlı pedagojik LGS analiz motoruyla çalışacak, sonuçlar detaylı bir modal pencerede açılacak ve hem ekranda görüntülenebilecek hem de tek tıklamayla yazdırılabilir rehberlik kartı olarak çıktı alınabilecektir.
-
-- **Onaylanan Görünüm Modeli**: Lig tablosunda, mobil kartlarda ve öğrenci detay modalında erişilebilen "🎯 Yönlendirme Koçu" butonu; açılan kapsamlı modal ve yazdırılabilir rehberlik kartı.
-- **Onaylanan Analiz Mantığı**: Deterministik, hızlı ve güvenilir kural tabanlı pedagojik analiz motoru (son deneme netleri, ders bazlı doğruluk oranları, boş/yanlış disiplini ve kazanılan/kaçırılan rozetlerin çapraz sentezi).
-- **Onaylanan İçerik Kapsamı**: 
-  1. Genel Performans & Rozet Nabzı (Son sınav puanı, lig sırası, aylık rozetler).
-  2. Güçlü Yönler (Hangi ders ve alanlarda üstün başarı gösteriyor).
-  3. Riskli Alanlar & Dikkat Noktaları (Net kaybettiren dersler, sallama/boş bırakma alışkanlıkları).
-  4. Bir Sonraki Sınav İçin 3 Maddelik Somut Taktik Reçetesi (Doğrudan net artırmaya yönelik uygulanabilir adımlar).
+Android cihazlarda, WhatsApp linklerinden tıklamalarda ve mobil ağlarda yaşanan erişim, oturum açma ve sayfa açılmama sorunlarını çözmek için hazırlanan kapsamlı uygulama planıdır.
 
 ---
 
-## 1. Overview & Core Concept
+## 1. Tespit Edilen Kök Nedenler
 
-- **Ne İşe Yarar**: Akademi Arena'da öğrencilerin yalnızca puan ve sıralamasını görmek yerine, sınav performansını ve rozet kazanımlarını pedagojik bir koç perspektifiyle yorumlayarak öğrenciye ve öğretmene bir sonraki deneme için nokta atışı aksiyon planı sunar.
-- **Hedef Kitle**: Öğretmenler, mentorlar, öğrenciler ve veliler.
-- **Sağlanan Temel Fayda**: Ham veriyi (doğru, yanlış, net, rozet) anlamlı bir koçluk tavsiyesine dönüştürür; öğrencinin denemeden denemeye bilinçli hazırlanmasını sağlar.
-
----
-
-## 2. User Experience & Visual Design
-
-### A. Temel Kullanıcı Akışı
-1. **Butona Tıklama**: Kullanıcı, Akademi Arena lig tablosunda öğrencinin satırındaki "🎯 Koç Yorumu" butonuna, mobil karttaki koç rozetine veya öğrenci detay modalındaki "Yönlendirme Koçu" butonuna tıklar.
-2. **Koçluk Analizi Ekranı**:
-   - **Başlık & Kimlik**: Öğrenci adı, sınıfı, takımı (⭐ Kutup, 🚀 Sıçrama, 🛡️ Taktik), Arena lig sırası ve son sınav tarihi.
-   - **Son Sınav & Rozet Özeti**: Son sınav LGS puanı, genel net, son sınavda kazanılan rozetler ve bu ay toplanan rozet çeşitleri.
-   - **3 Ana Analiz Kartı**:
-     - 🌟 **Güçlü Yönler**: Örneğin "Sözel branşlarda 0 yanlış ile yüksek konsantrasyon", "Matematikte net artışı".
-     - ⚠️ **Gelişime Açık & Riskli Alanlar**: Örneğin "Fen bilimlerinde 5 yanlış - konu eksiği veya soru kökü dikkatsizliği", "Kalkan rozeti eksik: Emin olunmayan soruları boş bırakmak yerine işaretleme eğilimi".
-     - 🚀 **Bir Sonraki Sınav İçin 3 Maddelik Taktik Reçetesi**:
-       - *1. Taktik (Süre & Strateji)*: Hangi testten başlanmalı, takılınca turlama nasıl yapılmalı.
-       - *2. Taktik (Öncelikli Ders)*: En çok net kazandıracak 1 odak ders ve hedef net.
-       - *3. Taktik (Rozet Hedefi)*: Bir sonraki sınavda hedeflenen rozet (örn. "Kalkan" veya "Denge Cambazı").
-3. **Yazdırma / Paylaşma**: Modal üzerindeki "🖨️ Rehberlik Kartını Yazdır" butonu ile A4 formatında temiz, rozet ve tavsiyeleri içeren şık bir veli/öğrenci rehberlik çıktısı alınır.
-
-### B. Görsel Kimlik ve Tipografi
-- **Renk Paleti**:
-  - Kutup Yıldızları: Amber & Altın vurgular (`#B08D57`, `#F59E0B`)
-  - Sıçrama Ustaları: Safir Mavi (`#2563EB`)
-  - Taktik Avcıları: Zümrüt Yeşili (`#059669`)
-  - Arka Plan: Yumuşak krem/beyaz kart yapısı (`#FAF9F6`, `bg-white`) ile temiz kenarlıklar (`border-brand-border/80`).
-- **Tipografi**:
-  - Başlıklar: Serif zarafeti (`font-serif`, Cormorant / Playfair)
-  - Metinler: Net okunabilir `Plus Jakarta Sans / Inter`
-  - Sayılar ve Puanlar: `tabular-nums font-mono`
+1. **WhatsApp / Uygulama İçi Tarayıcı (WebView) Engeli:**
+   Öğretmenler siteye WhatsApp veya Telegram içerisinden tıkladığında Android WebView ortamı açılır. Google politikaları gömülü WebView içinde `signInWithPopup` (Google ile Giriş) pencerelerini engeller veya çökertir.
+2. **Eski Servis İşçisi (Service Worker) ve Zombi Önbellekler:**
+   Daha önceki PWA kurulumlarından kalan `sw.js` / Workbox önbellekleri Android tarayıcılarında eski `index.html`'i saklar. Vercel'e yeni kod yüklendiğinde eski `index.html` silinmiş `.js` dosyalarını çağırır ve Vercel `vercel.json` yönlendirmesi yüzünden bu dosyalara `200 OK HTML` döndürerek **tamamen beyaz ekran (MIME type hatası)** verir.
+3. **Senkron Render Bloklayan PDF.js Kütüphanesi:**
+   `index.html` başlığında (`<head>`) yer alan Cloudflare CDN kaynaklı `pdf.min.js` scripti mobil veride veya okul ağında geç yanıt verirse sayfa beyaz ekranda takılır.
+4. **Sonsuz Yüklenme Döngüsü (Timeout Eksikliği):**
+   Android mobil ağlarında Firebase Auth veya Google Drive bağlantısı geciktiğinde `App.tsx` ve `AppContext.tsx` üzerindeki yüklenme ekranlarında öğretmenler için "Beklemeden Devam Et" seçeneği bulunmadığı için ekran dönmeye devam eder.
 
 ---
 
-## 3. Key Product Decisions & Trade-Offs
+## 2. Yapılacak Değişiklikler ve İyileştirmeler
 
-- **Karar 1: Kural Tabanlı Pedagojik Motor (Rule-based Engine)**
-  - *Seçilen Yaklaşım*: LGS dinamiklerine göre optimize edilmiş 20+ kurallı deterministik koçluk algoritması.
-  - *Neden*: Sıfır ağ gecikmesi, internet gerektirmemesi, her zaman tutarlı ve pedagojik olarak doğru LGS rehberlik ilkelerine (3 yanlış 1 doğru kuralı, turlama tekniği, boş bırakma disiplini) bağlı kalması.
-- **Karar 2: Yazdırılabilir A4 Rehberlik Kartı (`@media print`)**
-  - *Seçilen Yaklaşım*: Modal içindeki içerik, yazdırıldığında otomatik olarak A4 sayfasına uygun, temiz ve okul logolu bir rehberlik karnesi formatına bürünür.
-  - *Neden*: Öğretmenlerin veli toplantılarında veya birebir koçluk görüşmelerinde öğrenciye somut bir rehberlik kağıdı teslim edebilmesi.
-- **Karar 3: Rozet ve Net Çaprazlama Analizi**
-  - *Seçilen Yaklaşım*: Yalnızca ham netlere değil, "Kalkan", "Tam İsabet", "Kırmızı Kart", "Denge Cambazı", "Zirve Koruma" gibi rozetlerin son denemedeki ve ay genelindeki durumuna göre yorum yapılması.
+### A. Otomatik WebView / WhatsApp Algılama ve Giriş Yönlendirmesi
+- **`src/App.tsx`**:
+  - `navigator.userAgent` üzerinden WhatsApp (`WhatsApp`, `FBAN/FBAV`), Telegram, Instagram ve Android WebView (`wv`) otomatik tespit edilecek.
+  - WhatsApp/WebView tespit edildiğinde sistem otomatik olarak **E-Posta & Şifre** giriş sekmesini aktif kılacak ve kullanıcıya bilgilendirme sunacak.
+  - E-posta ile kayıtsız öğretmenler dahi e-posta/şifre alanına e-posta adreslerini girerek saniyeler içinde şifresiz/kesintisiz sisteme girebilecek.
+  - Google Giriş butonuna tıklanırsa, uygulama içi tarayıcı uyarısı gösterilecek ve Harici Chrome'da Açma seçeneği sunulacak.
 
----
+### B. Servis İşçisi (Service Worker) Temizliği ve Vercel Yönlendirme Düzeltmesi
+- **`public/sw.js`**:
+  - Servis işçisi güncellenerek `self.skipWaiting()` ve `clients.claim()` ile eski zombi Workbox önbelleklerinin derhal silinmesi (`caches.delete()`) sağlanacak.
+- **`vercel.json`**:
+  - `assets` ve statik kaynak isteklerinin (`.js`, `.css`, `.png`, `.svg`) bulunamadığı durumda `index.html` döndürmesi engellenecek (404 dönecek), böylece zombi önbellek çakışmaları tamamen engellenecek.
+- **`index.html`**:
+  - Önbellek engelleme başlıkları (`Cache-Control: no-cache, no-store, must-revalidate`) ve `pdf.min.js` için `defer` eklenerek hızlı ilk yükleme (First Contentful Paint) garanti edilecek.
 
-## 4. Technical Architecture & Data Strategy
-
-### A. Sistem Mimarisi & Veri Akışı
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Akademi Arena (LeagueView)                │
-│  - Lig Tablosu (Desktop)                                     │
-│  - Mobil Öğrenci Kartları                                    │
-│  - Öğrenci Detay Modalı (Modal Roster)                       │
-└──────────────────────────────┬───────────────────────────────┘
-                               │ Tıklama: handleOpenCoachingModal(student)
-                               ▼
-┌──────────────────────────────────────────────────────────────┐
-│       Öğrenci Verisi + Son Sınav + Aylık Rozetler             │
-│  - s.examHistory (Son sınav sonuçları, ders D/Y/B/N)          │
-│  - s.badgeHistory & s.displayBadges (Aylık ve son rozetler)  │
-│  - s.leagueTeam & s.displayPoints                            │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-                               ▼
-┌──────────────────────────────────────────────────────────────┐
-│         coachEngine.ts (Pedagojik Yönlendirme Motoru)        │
-│  1. Sınav net/puan analizi (Türkçe, Mat, Fen, Sözel dersler) │
-│  2. Boş/Yanlış disiplini (Kalkan & Kırmızı Kart kontrolü)    │
-│  3. Rozet kazanımları & eksik rozet analizi                  │
-│  4. Güçlü Yönler (Strengths) üretimi                         │
-│  5. Riskli Alanlar (Weaknesses) üretimi                       │
-│  6. 3 Maddelik Somut Taktik Reçetesi (Actionable Next Steps) │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-                               ▼
-┌──────────────────────────────────────────────────────────────┐
-│         StudentCoachingModal.tsx (Görsel & Yazdırılabilir)   │
-│  - Şık UI: Güçlü yönler, riskli dersler, taktik kartları     │
-│  - Buton: 🖨️ Yazdır / PDF Çıktısı (A4 print optimize)       │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### B. Yeni ve Güncellenecek Modüller
-1. **`src/lib/coachEngine.ts` (Yeni Dosya)**:
-   - Öğrencinin son sınavını (`student.examHistory` veya `results`) tespit eden yardımcı.
-   - Son sınavdaki ders bazlı başarı oranlarını (D, Y, B, Net) ve rozetleri değerlendiren kurallar.
-   - Çıktı arayüzü:
-     ```ts
-     interface CoachingReport {
-       studentName: string;
-       className?: string;
-       team: string;
-       rank: number;
-       examName: string;
-       examDate?: string;
-       lgsScore: number;
-       totalNet: number;
-       recentBadges: string[];
-       monthlyBadgeCount: number;
-       strengths: Array<{ title: string; desc: string; icon: string }>;
-       risks: Array<{ title: string; desc: string; icon: string }>;
-       tactics: Array<{ step: number; title: string; action: string; icon: string }>;
-     }
-     ```
-2. **`src/components/coaching/StudentCoachingModal.tsx` (Yeni Bileşen)**:
-   - Öğrencinin rehberlik koçluk raporunu şık bir modalda sunar.
-   - Yazdırma modu (`@media print` veya temiz print stili) ile veli bilgilendirme fişi formatını destekler.
-3. **`src/views/LeagueView.tsx` (Entegrasyon)**:
-   - Masaüstü lig tablosundaki her öğrenci satırına "🎯 Koç" aksiyon butonu.
-   - Mobil öğrenci kartlarına "🎯 Koç Yorumu" butonu.
-   - Öğrenci detay modalının üst kısmına "🎯 Yönlendirme Koçu Analizini Gör" butonu.
+### C. Açılış Zaman Aşımı (Timeout) ve Öğretmen Kesintisiz Devam Butonu
+- **`src/context/AppContext.tsx`**:
+  - Açılışta Google Drive veya Firebase kütük eşitlemesi mobil ağda 3.5 saniyeyi geçerse öğretmenler ve tüm kullanıcılar için **"Beklemeden Yerel / Bulut Verisi ile Devam Et"** butonu otomatik olarak belirecek.
+  - `onAuthStateChanged` için 3.5 saniyelik emniyet zaman aşımı eklenecek, böylece beyaz ekranda veya yükleniyor spinner'ında takılma imkansız hale getirilecek.
 
 ---
 
-## 5. Pre-Flight Verification & Execution Checklist
+## 3. Doğrulama ve Test Adımları
 
-- [ ] `coachEngine.ts` motoru hatasız TypeScript kurallarıyla yazılacak.
-- [ ] 0 yanlış, 1 yanlış, çok yanlış ve boş bırakan tüm öğrenci profilleri için gerçekçi pedagojik tavsiyeler üretilecek.
-- [ ] `StudentCoachingModal` hem ekranda kusursuz responsive olacak hem de yazdırıldığında A4 formatında derli toplu çıkacak.
-- [ ] `LeagueView.tsx` içerisindeki mevcut tıklama ve lig hesaplama fonksiyonları bozulmadan entegre edilecek.
-- [ ] `npm run lint` ve `npm run build` ile derleme doğrulanacak.
+1. `compile_applet` ile TypeScript derleme kontrolü yapılması.
+2. `lint_applet` ile kod kalitesi ve eksik import kontrolü yapılması.
+3. WhatsApp user-agent simülasyonu ile otomatik e-posta giriş sekmesine yönlendirme kontrolü.

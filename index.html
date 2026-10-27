@@ -9,6 +9,9 @@
     <meta name="apple-mobile-web-app-title" content="AkademiPanel3" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="format-detection" content="telephone=no" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>AkademiPanel3</title>
     <meta name="description" content="Ölçme ve Değerlendirme Yönetimi" />
     <meta property="og:title" content="AkademiPanel3" />
@@ -35,11 +38,13 @@
     <link rel="shortcut icon" href="/favicon-32x32.png" />
 
     <!-- PDF İşleme Kütüphanesi (Mozilla PDF.js & Worker Yapılandırması) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script>
-      if (window.pdfjsLib) {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-      }
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        }
+      });
     </script>
   </head>
   <body>
