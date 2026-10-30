@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   X, 
   Printer, 
+  Download,
+  Loader2,
   Award, 
   TrendingUp, 
   TrendingDown, 
@@ -12,7 +14,20 @@ import {
   Calendar,
   Sparkles
 } from 'lucide-react';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { CoachingReport } from '../../lib/coachEngine';
+
+// Ensure fonts are registered for pdfMake
+try {
+  if (pdfFonts && (pdfFonts as any).pdfMake && (pdfFonts as any).pdfMake.vfs) {
+    (pdfMake as any).vfs = (pdfFonts as any).pdfMake.vfs;
+  } else if ((pdfFonts as any)?.vfs) {
+    (pdfMake as any).vfs = (pdfFonts as any).vfs;
+  }
+} catch (e) {
+  console.warn('pdfMake font init warning:', e);
+}
 
 interface Props {
   report: CoachingReport | null;
@@ -22,8 +37,289 @@ interface Props {
 export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
   if (!report) return null;
 
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const reportContentRef = useRef<HTMLDivElement>(null);
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!report || isExportingPDF) return;
+    setIsExportingPDF(true);
+
+    try {
+      const cleanName = (report.studentName || 'Ogrenci').replace(/[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ]/g, '_');
+      const filename = `Koc_Raporu_${cleanName}.pdf`;
+
+      const lessonRows = (report.lessons || []).map((l) => [
+        { text: l.name, style: 'tableCell' },
+        { text: String(l.correct), style: 'tableCellCenter', color: '#047857' },
+        { text: String(l.wrong), style: 'tableCellCenter', color: '#dc2626' },
+        { text: String(l.empty), style: 'tableCellCenter', color: '#b45309' },
+        { text: l.net.toFixed(2), style: 'tableCellCenterBold' },
+        { text: `%${l.accuracy}`, style: 'tableCellRight' },
+      ]);
+
+      const docDefinition: any = {
+        pageSize: 'A4',
+        pageMargins: [30, 25, 30, 25],
+        content: [
+          // Banner
+          {
+            table: {
+              widths: ['*'],
+              body: [
+                [
+                  {
+                    fillColor: '#0f172a',
+                    padding: [10, 10, 10, 10],
+                    stack: [
+                      { text: 'AKADEMİ ARENA - YÖNLENDİRME KOÇU & GELİŞİM REÇETESİ', style: 'bannerTitle' },
+                      { text: 'Son Sınav Netleri ve Aylık Rozet Performansı Analizi', style: 'bannerSubtitle' }
+                    ]
+                  }
+                ]
+              ]
+            },
+            layout: 'noBorders',
+            margin: [0, 0, 0, 10]
+          },
+
+          // Student Header Card
+          {
+            table: {
+              widths: ['*', 'auto'],
+              body: [
+                [
+                  {
+                    stack: [
+                      { text: report.studentName, style: 'studentName' },
+                      {
+                        text: [
+                          report.className ? `Sınıf: ${report.className}   ` : '',
+                          report.studentNo ? `No: ${report.studentNo}   ` : '',
+                          `Takım: ${report.team}`
+                        ],
+                        style: 'studentMeta'
+                      },
+                      {
+                        text: `Arena Sıralaması: #${report.rank} / ${report.totalStudents}   |   Toplam: ${report.leaguePoints} LP`,
+                        style: 'studentSubMeta'
+                      }
+                    ]
+                  },
+                  {
+                    alignment: 'right',
+                    stack: [
+                      { text: 'SON LGS PUANI', style: 'scoreLabel' },
+                      { text: report.score > 0 ? report.score.toFixed(2) : '-', style: 'scoreValue' },
+                      { text: `Net: ${report.totalNet.toFixed(2)}`, style: 'netValue' }
+                    ]
+                  }
+                ]
+              ]
+            },
+            layout: {
+              hLineWidth: () => 1,
+              vLineWidth: () => 1,
+              hLineColor: () => '#e2e8f0',
+              vLineColor: () => '#e2e8f0',
+              paddingLeft: () => 10,
+              paddingRight: () => 10,
+              paddingTop: () => 8,
+              paddingBottom: () => 8
+            },
+            margin: [0, 0, 0, 10]
+          },
+
+          // Exam Summary Info Bar
+          {
+            table: {
+              widths: ['*'],
+              body: [
+                [
+                  {
+                    fillColor: '#f8fafc',
+                    padding: [6, 6, 6, 6],
+                    text: [
+                      { text: 'Sınav: ', bold: true, color: '#334155' },
+                      { text: `${report.examName} ${report.examDate ? `(${report.examDate})` : ''}   |   `, color: '#0f172a' },
+                      { text: `D: ${report.totalCorrect}   `, bold: true, color: '#047857' },
+                      { text: `Y: ${report.totalWrong}   `, bold: true, color: '#dc2626' },
+                      { text: `B: ${report.totalEmpty}   `, bold: true, color: '#b45309' },
+                      { text: `Net: ${report.totalNet.toFixed(2)}`, bold: true, color: '#0f172a' }
+                    ],
+                    style: 'examInfoText'
+                  }
+                ]
+              ]
+            },
+            layout: 'noBorders',
+            margin: [0, 0, 0, 12]
+          },
+
+          // Strengths & Risks Columns
+          {
+            columnGap: 10,
+            columns: [
+              // Strengths
+              {
+                width: '*',
+                stack: [
+                  { text: '🌟 GÜÇLÜ YÖNLER & KAZANIMLAR', style: 'sectionHeaderGreen' },
+                  ...report.strengths.map(s => ({
+                    margin: [0, 0, 0, 6],
+                    stack: [
+                      { text: `${s.icon || '⭐'} ${s.title}`, style: 'itemTitle' },
+                      { text: s.desc, style: 'itemDesc' }
+                    ]
+                  }))
+                ]
+              },
+              // Risks
+              {
+                width: '*',
+                stack: [
+                  { text: '⚠️ GELİŞİME AÇIK & RİSKLİ ALANLAR', style: 'sectionHeaderAmber' },
+                  ...report.risks.map(r => ({
+                    margin: [0, 0, 0, 6],
+                    stack: [
+                      { text: `${r.icon || '⚠️'} ${r.title}`, style: 'itemTitle' },
+                      { text: r.desc, style: 'itemDesc' }
+                    ]
+                  }))
+                ]
+              }
+            ],
+            margin: [0, 0, 0, 12]
+          },
+
+          // 3 Step Action Plan
+          {
+            stack: [
+              { text: '🚀 BİR SONRAKİ DENEME İÇİN 3 MADDELİK EYLEM PLANI', style: 'sectionHeaderBlue' },
+              ...report.tactics.map(t => ({
+                margin: [0, 0, 0, 6],
+                stack: [
+                  { text: `Adım ${t.step}: ${t.title}`, style: 'tacticTitle' },
+                  { text: t.action, style: 'tacticDesc' }
+                ]
+              }))
+            ],
+            margin: [0, 0, 0, 12]
+          },
+
+          // Lesson Report Table (if available)
+          ...(report.lessons && report.lessons.length > 0 ? [
+            { text: '📊 SON DENEME DERS KARNESİ', style: 'sectionHeader' },
+            {
+              table: {
+                headerRows: 1,
+                widths: ['*', 35, 35, 35, 45, 55],
+                body: [
+                  [
+                    { text: 'Ders', style: 'tableHeader' },
+                    { text: 'D', style: 'tableHeaderCenter' },
+                    { text: 'Y', style: 'tableHeaderCenter' },
+                    { text: 'B', style: 'tableHeaderCenter' },
+                    { text: 'Net', style: 'tableHeaderCenter' },
+                    { text: 'İsabet', style: 'tableHeaderRight' }
+                  ],
+                  ...lessonRows,
+                  [
+                    { text: 'TOPLAM', style: 'tableHeaderBold' },
+                    { text: String(report.totalCorrect), style: 'tableHeaderCenterBold' },
+                    { text: String(report.totalWrong), style: 'tableHeaderCenterBold' },
+                    { text: String(report.totalEmpty), style: 'tableHeaderCenterBold' },
+                    { text: report.totalNet.toFixed(2), style: 'tableHeaderCenterBold' },
+                    {
+                      text: report.totalCorrect + report.totalWrong > 0
+                        ? `%${Math.round((report.totalCorrect / (report.totalCorrect + report.totalWrong)) * 100)}`
+                        : '-',
+                      style: 'tableHeaderRightBold'
+                    }
+                  ]
+                ]
+              },
+              layout: 'lightHorizontalLines',
+              margin: [0, 0, 0, 12]
+            }
+          ] : []),
+
+          // Coach Note
+          {
+            table: {
+              widths: ['*'],
+              body: [
+                [
+                  {
+                    fillColor: '#f1f5f9',
+                    padding: [8, 8, 8, 8],
+                    stack: [
+                      { text: '💬 REHBERLİK & MENTORLUK DEĞERLENDİRMESİ', style: 'coachHeader' },
+                      { text: report.coachSummary, style: 'coachText' }
+                    ]
+                  }
+                ]
+              ]
+            },
+            layout: 'noBorders',
+            margin: [0, 0, 0, 10]
+          }
+        ],
+
+        footer: (currentPage: number, pageCount: number) => ({
+          text: `Akademi Arena Rehberlik Sistemi • 2026 LGS Projeksiyonu  |  Sayfa ${currentPage} / ${pageCount}`,
+          alignment: 'center',
+          fontSize: 8,
+          color: '#94a3b8',
+          margin: [0, 10, 0, 0]
+        }),
+
+        styles: {
+          bannerTitle: { fontSize: 13, bold: true, color: '#f59e0b', alignment: 'center' },
+          bannerSubtitle: { fontSize: 8.5, color: '#cbd5e1', alignment: 'center', margin: [0, 2, 0, 0] },
+          studentName: { fontSize: 14, bold: true, color: '#0f172a' },
+          studentMeta: { fontSize: 8.5, color: '#475569', margin: [0, 2, 0, 0] },
+          studentSubMeta: { fontSize: 8.5, bold: true, color: '#1e293b', margin: [0, 2, 0, 0] },
+          scoreLabel: { fontSize: 7.5, bold: true, color: '#64748b' },
+          scoreValue: { fontSize: 15, bold: true, color: '#6d28d9' },
+          netValue: { fontSize: 9.5, bold: true, color: '#0f172a' },
+          examInfoText: { fontSize: 8.5 },
+          sectionHeaderGreen: { fontSize: 10, bold: true, color: '#047857', margin: [0, 0, 0, 4] },
+          sectionHeaderAmber: { fontSize: 10, bold: true, color: '#b45309', margin: [0, 0, 0, 4] },
+          sectionHeaderBlue: { fontSize: 10, bold: true, color: '#1d4ed8', margin: [0, 0, 0, 4] },
+          sectionHeader: { fontSize: 10, bold: true, color: '#0f172a', margin: [0, 0, 0, 4] },
+          itemTitle: { fontSize: 8.5, bold: true, color: '#0f172a' },
+          itemDesc: { fontSize: 8, color: '#334155', margin: [0, 1, 0, 0] },
+          tacticTitle: { fontSize: 8.5, bold: true, color: '#1e1b4b' },
+          tacticDesc: { fontSize: 8, color: '#334155', margin: [0, 1, 0, 0] },
+          tableHeader: { fontSize: 8.5, bold: true, color: '#0f172a' },
+          tableHeaderCenter: { fontSize: 8.5, bold: true, color: '#0f172a', alignment: 'center' },
+          tableHeaderRight: { fontSize: 8.5, bold: true, color: '#0f172a', alignment: 'right' },
+          tableHeaderBold: { fontSize: 8.5, bold: true, color: '#0f172a' },
+          tableHeaderCenterBold: { fontSize: 8.5, bold: true, color: '#0f172a', alignment: 'center' },
+          tableHeaderRightBold: { fontSize: 8.5, bold: true, color: '#0f172a', alignment: 'right' },
+          tableCell: { fontSize: 8, color: '#0f172a' },
+          tableCellCenter: { fontSize: 8, alignment: 'center' },
+          tableCellCenterBold: { fontSize: 8, bold: true, color: '#0f172a', alignment: 'center' },
+          tableCellRight: { fontSize: 8, alignment: 'right', color: '#334155' },
+          coachHeader: { fontSize: 9, bold: true, color: '#b45309', margin: [0, 0, 0, 3] },
+          coachText: { fontSize: 8.5, color: '#1e293b' }
+        },
+        defaultStyle: {
+          font: 'Roboto'
+        }
+      };
+
+      pdfMake.createPdf(docDefinition).download(filename);
+    } catch (err) {
+      console.warn('PDF export failed, using print dialog:', err);
+      window.print();
+    } finally {
+      setIsExportingPDF(false);
+    }
   };
 
   const isKutup = report.team === 'Kutup Yıldızları';
@@ -55,7 +351,7 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
   }, [report?.lessons]);
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
+    <div id="coaching-report-printable" className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible print:z-auto">
       <div 
         className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-brand-border/90 flex flex-col max-h-[92vh] overflow-hidden print:max-h-none print:shadow-none print:border-none print:rounded-none animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
@@ -79,9 +375,28 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
           <div className="flex items-center gap-2 shrink-0 print:hidden">
             <button
               type="button"
+              disabled={isExportingPDF}
+              onClick={handleDownloadPDF}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 active:scale-95 text-slate-950 text-xs font-extrabold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Rehberlik Raporunu doğrudan PDF dosyası olarak indir"
+            >
+              {isExportingPDF ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                  <span className="hidden sm:inline">İndiriliyor...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5 text-slate-950" />
+                  <span>PDF İndir</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={handlePrint}
               className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-bold rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Rehberlik Raporunu Yazdır veya PDF olarak kaydet"
+              title="Rehberlik Raporunu Yazdır"
             >
               <Printer className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Yazdır</span>
@@ -97,8 +412,8 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
           </div>
         </div>
 
-        {/* Kaydırılabilir İçerik Alanı (Yazdırıldığında tam döküm) */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 custom-scrollbar print:p-0 print:overflow-visible print:space-y-4">
+        {/* Kaydırılabilir İçerik Alanı (Yazdırıldığında ve PDF alındığında tam döküm) */}
+        <div ref={reportContentRef} className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 custom-scrollbar print:p-0 print:overflow-visible print:space-y-4 bg-white">
           
           {/* 1. Öğrenci Kimlik ve Sınav Karnesi Özeti */}
           <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-3xl border bg-gradient-to-br ${teamBg} print:bg-white print:border-slate-300 shadow-xs`}>
@@ -388,17 +703,35 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
 
         {/* Alt Butonlar */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-[#FAF9F6] border-t border-brand-border/70 shrink-0 print:hidden">
-          <div className="text-[11px] text-brand-ink/60 font-medium">
+          <div className="text-[11px] text-brand-ink/60 font-medium truncate mr-2">
             Akademi Arena Rehberlik Sistemi • 2026 LGS Projeksiyonu
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              disabled={isExportingPDF}
+              onClick={handleDownloadPDF}
+              className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 text-slate-950 text-xs font-black rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {isExportingPDF ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Hazırlanıyor...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>PDF İndir</span>
+                </>
+              )}
+            </button>
             <button
               type="button"
               onClick={handlePrint}
               className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Yazdır / PDF</span>
+              <span>Yazdır</span>
             </button>
             <button
               type="button"

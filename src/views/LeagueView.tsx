@@ -2422,7 +2422,7 @@ export const LeagueView = () => {
 
           {/* 8. Aylık Takım Taktikleri Modalı (Mobil & Masaüstü Optimize) */}
           {showTactics && (
-            <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs transition-all" onClick={() => setShowTactics(false)}>
+            <div id="tactics-modal-printable" className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs transition-all print:p-0 print:bg-white print:static print:overflow-visible" onClick={() => setShowTactics(false)}>
               <div 
                 className="bg-white w-full max-w-5xl rounded-t-[28px] sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[90vh] overflow-hidden animate-slide-up sm:animate-none pb-safe sm:pb-0 border border-brand-border/60"
                 onClick={(e) => e.stopPropagation()}
