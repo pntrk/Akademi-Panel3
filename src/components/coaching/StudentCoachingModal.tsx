@@ -14,7 +14,12 @@ import {
   CheckCircle2,
   Compass,
   BarChart3,
-  Sparkles
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
+  Layers,
+  Check
 } from 'lucide-react';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
@@ -42,7 +47,41 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [selectedOutcomeSubject, setSelectedOutcomeSubject] = useState<string>('all');
   const [showAllOutcomes, setShowAllOutcomes] = useState<boolean>(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    outcomes: true,
+    strengthsRisks: true,
+    lessons: true,
+    tactics: true,
+    guidance: true
+  });
   const reportContentRef = useRef<HTMLDivElement>(null);
+
+  const toggleSection = (key: string) => {
+    setOpenSections(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const expandAllSections = () => {
+    setOpenSections({
+      outcomes: true,
+      strengthsRisks: true,
+      lessons: true,
+      tactics: true,
+      guidance: true
+    });
+  };
+
+  const collapseAllSections = () => {
+    setOpenSections({
+      outcomes: false,
+      strengthsRisks: false,
+      lessons: false,
+      tactics: false,
+      guidance: false
+    });
+  };
 
   const handlePrint = () => {
     window.print();
@@ -764,114 +803,192 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
             )}
           </div>
 
-          {/* 2. Ana Analiz Bölümü: Güçlü Yönler & Nokta Atışı Riskli Alanlar Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
-            
-            {/* Güçlü Yönler */}
-            <div className="bg-gradient-to-b from-emerald-50/70 via-white to-emerald-50/30 border border-emerald-200/90 rounded-2xl p-4 shadow-2xs flex flex-col gap-3">
-              <div className="flex items-center justify-between pb-2 border-b border-emerald-200/60">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center text-sm font-bold shadow-2xs">
-                    🌟
-                  </div>
-                  <h4 className="text-sm font-bold text-emerald-950">Güçlü Yönler & Ortalamalar Üstünlüğü</h4>
-                </div>
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
-                  {report.strengths.length} Tespit
-                </span>
-              </div>
-
-              <div className="space-y-2.5">
-                {report.strengths.map((item, idx) => (
-                  <div key={idx} className="bg-white/95 border border-emerald-100 rounded-xl p-3 shadow-2xs flex items-start gap-2.5">
-                    <span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-xs font-bold text-emerald-950">{item.title}</p>
-                        {item.tag && (
-                          <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60">
-                            {item.tag}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-emerald-900/80 leading-relaxed mt-0.5">
-                        {item.desc}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {/* İntaktif Akordeon Kontrol Çubuğu */}
+          <div className="flex items-center justify-between p-2.5 sm:p-3 bg-indigo-50/80 border border-indigo-100/90 rounded-2xl print:hidden text-xs">
+            <div className="flex items-center gap-2 font-bold text-indigo-950">
+              <SlidersHorizontal className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>Dokunarak Detay Açılan Görünüm (Akordeon Modu)</span>
             </div>
-
-            {/* Riskli Alanlar & Dikkat Noktaları */}
-            <div className="bg-gradient-to-b from-amber-50/70 via-white to-orange-50/30 border border-amber-200/90 rounded-2xl p-4 shadow-2xs flex flex-col gap-3">
-              <div className="flex items-center justify-between pb-2 border-b border-amber-200/60">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-sm font-bold shadow-2xs">
-                    ⚠️
-                  </div>
-                  <h4 className="text-sm font-bold text-amber-950">Nokta Atışı Risk & Kazanım Kaybı Tespitleri</h4>
-                </div>
-                <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full">
-                  {report.risks.length} Kritik Tespit
-                </span>
-              </div>
-
-              <div className="space-y-2.5">
-                {report.risks.map((item, idx) => (
-                  <div key={idx} className="bg-white/95 border border-amber-100 rounded-xl p-3 shadow-2xs flex items-start gap-2.5">
-                    <span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-xs font-bold text-amber-950">{item.title}</p>
-                        {item.tag && (
-                          <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60">
-                            {item.tag}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-amber-900/80 leading-relaxed mt-0.5">
-                        {item.desc}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="flex items-center gap-1.5 font-bold">
+              <button
+                type="button"
+                onClick={expandAllSections}
+                className="px-2.5 py-1 rounded-xl bg-white border border-indigo-200 text-indigo-800 hover:bg-indigo-100/70 transition-colors shadow-2xs cursor-pointer text-[11px]"
+              >
+                Tümünü Genişlet
+              </button>
+              <button
+                type="button"
+                onClick={collapseAllSections}
+                className="px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer text-[11px]"
+              >
+                Tümünü Daralt
+              </button>
             </div>
-
           </div>
-
-          {/* 3. AYLIK / DÖNEMLİK EKSİK KAZANIMLAR & KOÇ TAVSİYELERİ TEŞHİS RAPORU */}
-          <div className="bg-gradient-to-br from-purple-50/90 via-white to-indigo-50/60 border border-purple-200/90 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-purple-200/60">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8.5 h-8.5 rounded-xl bg-purple-700 text-white flex items-center justify-center text-sm font-black shadow-xs shrink-0">
-                  🎯
+          {/* Güçlü Yönler ve Riskli Alanlar Akordeon Kartı */}
+          <div className="bg-gradient-to-br from-slate-50 via-white to-amber-50/40 border border-slate-200/90 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-xs space-y-3">
+            <button
+              type="button"
+              onClick={() => toggleSection('strengthsRisks')}
+              className="w-full flex items-center justify-between gap-2 text-left cursor-pointer group select-none"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8.5 h-8.5 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm font-black shadow-xs shrink-0">
+                  🌟
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-sm sm:text-base font-bold text-purple-950">
-                      Kazanım Odaklı Koç Tavsiyeleri & Hata Reçetesi
+                    <h4 className="text-xs sm:text-base font-bold text-slate-900">
+                      Güçlü Yönler & Nokta Atışı Riskli Alanlar
                     </h4>
-                    {missingOutcomes.length > 0 ? (
-                      <span className="text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full">
-                        {missingOutcomes.length} Eksik Kazanım Tespit Edildi
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
-                        Kazanım Analizi Aktif
-                      </span>
-                    )}
+                    <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
+                      {report.strengths.length} Güçlü Yön
+                    </span>
+                    <span className="text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full">
+                      {report.risks.length} Risk Tespiti
+                    </span>
                   </div>
-                  <p className="text-[11px] text-purple-900/65 font-medium">
-                    Öğrencinin yanlış ve boş bıraktığı soruların eşleştiği kazanımlara özel pedagojik çalışma ve telafi tavsiyeleri
+                  <p className="text-[10.5px] sm:text-[11px] text-slate-500 font-medium truncate">
+                    {openSections.strengthsRisks ? 'Detayları gizlemek için dokunun' : 'Dokunarak öğrencinin avantajlarını ve risk tespiti detaylarını açın'}
                   </p>
                 </div>
               </div>
 
-              {/* Ders Bazlı Kazanım Kavrama Özeti */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10.5px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-lg hidden sm:inline-block">
+                  {openSections.strengthsRisks ? 'Gizle' : 'Detayı Gör'}
+                </span>
+                <div className="p-1 rounded-lg bg-slate-100 text-slate-800 group-hover:bg-slate-200 transition-colors">
+                  {openSections.strengthsRisks ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </div>
+            </button>
+
+            <div className={`${openSections.strengthsRisks ? 'block' : 'hidden'} print:block pt-2 border-t border-slate-200/60 animate-in fade-in duration-150`}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+                
+                {/* Güçlü Yönler */}
+                <div className="bg-gradient-to-b from-emerald-50/70 via-white to-emerald-50/30 border border-emerald-200/90 rounded-2xl p-4 shadow-2xs flex flex-col gap-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-emerald-200/60">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center text-sm font-bold shadow-2xs">
+                        🌟
+                      </div>
+                      <h4 className="text-sm font-bold text-emerald-950">Güçlü Yönler & Ortalamalar Üstünlüğü</h4>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                      {report.strengths.length} Tespit
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {report.strengths.map((item, idx) => (
+                      <div key={idx} className="bg-white/95 border border-emerald-100 rounded-xl p-3 shadow-2xs flex items-start gap-2.5">
+                        <span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs font-bold text-emerald-950">{item.title}</p>
+                            {item.tag && (
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60">
+                                {item.tag}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-emerald-900/80 leading-relaxed mt-0.5">
+                            {item.desc}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Riskli Alanlar & Dikkat Noktaları */}
+                <div className="bg-gradient-to-b from-amber-50/70 via-white to-orange-50/30 border border-amber-200/90 rounded-2xl p-4 shadow-2xs flex flex-col gap-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-amber-200/60">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-sm font-bold shadow-2xs">
+                        ⚠️
+                      </div>
+                      <h4 className="text-sm font-bold text-amber-950">Nokta Atışı Risk & Kazanım Kaybı Tespitleri</h4>
+                    </div>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full">
+                      {report.risks.length} Kritik Tespit
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {report.risks.map((item, idx) => (
+                      <div key={idx} className="bg-white/95 border border-amber-100 rounded-xl p-3 shadow-2xs flex items-start gap-2.5">
+                        <span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs font-bold text-amber-950">{item.title}</p>
+                            {item.tag && (
+                              <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60">
+                                {item.tag}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-amber-900/80 leading-relaxed mt-0.5">
+                            {item.desc}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* 3. AYLIK / DÖNEMLİK EKSİK KAZANIMLAR & KOÇ TAVSİYELERİ TEŞHİS RAPORU */}
+          <div className="bg-gradient-to-br from-purple-50/90 via-white to-indigo-50/60 border border-purple-200/90 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-xs space-y-3">
+            <button
+              type="button"
+              onClick={() => toggleSection('outcomes')}
+              className="w-full flex items-center justify-between gap-2 text-left cursor-pointer group select-none"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8.5 h-8.5 rounded-xl bg-purple-700 text-white flex items-center justify-center text-sm font-black shadow-xs shrink-0">
+                  🎯
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs sm:text-base font-bold text-purple-950">
+                      Kazanım Odaklı Koç Tavsiyeleri & Hata Reçetesi
+                    </h4>
+                    {missingOutcomes.length > 0 ? (
+                      <span className="text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full">
+                        {missingOutcomes.length} Eksik Kazanım
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        Tam Hakimiyet
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10.5px] sm:text-[11px] text-purple-900/65 font-medium truncate">
+                    {openSections.outcomes ? 'Detayları gizlemek için dokunun' : 'Dokunarak tüm eksik kazanımları ve telafi reçetesini açın'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10.5px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-lg hidden sm:inline-block">
+                  {openSections.outcomes ? 'Gizle' : 'Detayı Gör'}
+                </span>
+                <div className="p-1 rounded-lg bg-purple-100 text-purple-800 group-hover:bg-purple-200 transition-colors">
+                  {openSections.outcomes ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </div>
+            </button>
+
+            <div className={`${openSections.outcomes ? 'block' : 'hidden'} print:block space-y-3.5 pt-2 border-t border-purple-200/60 animate-in fade-in duration-150`}>
               {report.subjectOutcomeSummaries && report.subjectOutcomeSummaries.length > 0 && (
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap pb-1">
                   {report.subjectOutcomeSummaries.map((s, idx) => (
                     <span
                       key={idx}
@@ -888,7 +1005,6 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                   ))}
                 </div>
               )}
-            </div>
 
             {missingOutcomes.length > 0 ? (
               <>
@@ -1133,221 +1249,283 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                 </p>
               </div>
             )}
+            </div>
           </div>
 
-          {/* 4. Ders Dağılım Karnesi ve Okul Ortalaması Kıyaslaması */}
+          {/* 4. DERS DAĞILIM KARNESİ AKORDEON KARTI */}
           {uniqueLessons.length > 0 && (
-            <div className="bg-[#FAF9F6] border border-brand-border/80 rounded-2xl p-3.5 sm:p-4 shadow-2xs">
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-brand-border/60 flex-wrap gap-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm">📊</span>
-                  <p className="text-xs sm:text-sm font-bold text-brand-ink">
-                    Detaylı Ders Karnesi & Okul Ortalaması Kıyaslaması
-                  </p>
+            <div className="bg-[#FAF9F6] border border-brand-border/80 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xs space-y-3">
+              <button
+                type="button"
+                onClick={() => toggleSection('lessons')}
+                className="w-full flex items-center justify-between gap-2 text-left cursor-pointer group select-none"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8.5 h-8.5 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm font-black shadow-xs shrink-0">
+                    📊
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-xs sm:text-base font-bold text-brand-ink">
+                        Detaylı Ders Karnesi & Okul Ortalaması Kıyaslaması
+                      </h4>
+                      <span className="text-[10px] font-extrabold bg-blue-100 text-blue-900 border border-blue-200 px-2 py-0.5 rounded-full">
+                        {uniqueLessons.length} Ders • {report.totalNet.toFixed(2)} Net
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] sm:text-[11px] text-brand-ink/60 font-medium truncate">
+                      {openSections.lessons ? 'Detayları gizlemek için dokunun' : 'Dokunarak ders bazlı D/Y/B ve okul ortalamaları tablosunu açın'}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-[10px] text-brand-ink/60 font-medium">
-                  {uniqueLessons.length} Ders • Öğrenci Net: <strong>{report.totalNet.toFixed(2)}</strong>
-                  {comp && comp.schoolAvgNet > 0 ? ` • Okul Ort: ${comp.schoolAvgNet.toFixed(2)} Net` : ''}
-                </p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[480px]">
-                  <thead>
-                    <tr className="text-[10.5px] font-bold text-brand-ink/60 border-b border-brand-border/40">
-                      <th className="py-1.5 px-2">Ders</th>
-                      <th className="py-1.5 px-2 text-center text-emerald-700">D</th>
-                      <th className="py-1.5 px-2 text-center text-rose-600">Y</th>
-                      <th className="py-1.5 px-2 text-center text-amber-700">B</th>
-                      <th className="py-1.5 px-2 text-center font-bold text-brand-ink">Öğrenci Net</th>
-                      {hasSchoolAvgInLessons && (
-                        <>
-                          <th className="py-1.5 px-2 text-center text-indigo-800">Okul Ort.</th>
-                          <th className="py-1.5 px-2 text-center">Ort. Farkı</th>
-                        </>
-                      )}
-                      <th className="py-1.5 px-2 text-center text-blue-800">Dönem Ort.</th>
-                      <th className="py-1.5 px-2 text-right">İsabet</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-brand-border/30 font-mono">
-                    {uniqueLessons.map((l, i) => {
-                      const diff = l.diffFromSchoolAvg;
-                      return (
-                        <tr key={`${l.name}-${i}`} className="hover:bg-white/60 transition-colors">
-                          <td className="py-1.5 px-2 font-sans font-semibold text-brand-ink">{l.name}</td>
-                          <td className="py-1.5 px-2 text-center text-emerald-700 font-bold">{l.correct}</td>
-                          <td className="py-1.5 px-2 text-center text-rose-600 font-bold">{l.wrong}</td>
-                          <td className="py-1.5 px-2 text-center text-amber-700">{l.empty}</td>
-                          <td className="py-1.5 px-2 text-center font-black text-brand-ink">{l.net.toFixed(2)}</td>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10.5px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg hidden sm:inline-block">
+                    {openSections.lessons ? 'Gizle' : 'Detayı Gör'}
+                  </span>
+                  <div className="p-1 rounded-lg bg-slate-200/60 text-slate-800 group-hover:bg-slate-200 transition-colors">
+                    {openSections.lessons ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </div>
+                </div>
+              </button>
+
+              <div className={`${openSections.lessons ? 'block' : 'hidden'} print:block pt-2 border-t border-brand-border/60 animate-in fade-in duration-150`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs min-w-[480px]">
+                    <thead>
+                      <tr className="text-[10.5px] font-bold text-brand-ink/60 border-b border-brand-border/40">
+                        <th className="py-1.5 px-2">Ders</th>
+                        <th className="py-1.5 px-2 text-center text-emerald-700">D</th>
+                        <th className="py-1.5 px-2 text-center text-rose-600">Y</th>
+                        <th className="py-1.5 px-2 text-center text-amber-700">B</th>
+                        <th className="py-1.5 px-2 text-center font-bold text-brand-ink">Öğrenci Net</th>
+                        {hasSchoolAvgInLessons && (
+                          <>
+                            <th className="py-1.5 px-2 text-center text-indigo-800">Okul Ort.</th>
+                            <th className="py-1.5 px-2 text-center">Ort. Farkı</th>
+                          </>
+                        )}
+                        <th className="py-1.5 px-2 text-center text-blue-800">Dönem Ort.</th>
+                        <th className="py-1.5 px-2 text-right">İsabet</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-brand-border/30 font-mono">
+                      {uniqueLessons.map((l, i) => {
+                        const diff = l.diffFromSchoolAvg;
+                        return (
+                          <tr key={`${l.name}-${i}`} className="hover:bg-white/60 transition-colors">
+                            <td className="py-1.5 px-2 font-sans font-semibold text-brand-ink">{l.name}</td>
+                            <td className="py-1.5 px-2 text-center text-emerald-700 font-bold">{l.correct}</td>
+                            <td className="py-1.5 px-2 text-center text-rose-600 font-bold">{l.wrong}</td>
+                            <td className="py-1.5 px-2 text-center text-amber-700">{l.empty}</td>
+                            <td className="py-1.5 px-2 text-center font-black text-brand-ink">{l.net.toFixed(2)}</td>
+                            {hasSchoolAvgInLessons && (
+                              <>
+                                <td className="py-1.5 px-2 text-center text-indigo-900/80 font-semibold">
+                                  {l.schoolAvgNet !== undefined ? l.schoolAvgNet.toFixed(2) : '-'}
+                                </td>
+                                <td className="py-1.5 px-2 text-center">
+                                  {diff !== undefined ? (
+                                    <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold ${
+                                      diff >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'
+                                    }`}>
+                                      {diff >= 0 ? '+' : ''}{diff.toFixed(2)}
+                                    </span>
+                                  ) : '-'}
+                                </td>
+                              </>
+                            )}
+                            <td className="py-1.5 px-2 text-center text-blue-800 font-semibold">
+                              {l.periodAvgNet !== undefined ? l.periodAvgNet.toFixed(2) : l.net.toFixed(2)}
+                            </td>
+                            <td className="py-1.5 px-2 text-right font-sans font-semibold text-brand-ink/70">%{l.accuracy}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {uniqueLessons.length > 1 && (
+                      <tfoot className="border-t-2 border-brand-border/70 font-mono text-[11px] bg-white/70 font-bold">
+                        <tr>
+                          <td className="py-1.5 px-2 font-sans text-brand-ink">Toplam</td>
+                          <td className="py-1.5 px-2 text-center text-emerald-700 font-black">{report.totalCorrect}</td>
+                          <td className="py-1.5 px-2 text-center text-rose-600 font-black">{report.totalWrong}</td>
+                          <td className="py-1.5 px-2 text-center text-amber-700 font-black">{report.totalEmpty}</td>
+                          <td className="py-1.5 px-2 text-center text-brand-ink font-black">{report.totalNet.toFixed(2)}</td>
                           {hasSchoolAvgInLessons && (
                             <>
-                              <td className="py-1.5 px-2 text-center text-indigo-900/80 font-semibold">
-                                {l.schoolAvgNet !== undefined ? l.schoolAvgNet.toFixed(2) : '-'}
+                              <td className="py-1.5 px-2 text-center text-indigo-900 font-black">
+                                {comp && comp.schoolAvgNet > 0 ? comp.schoolAvgNet.toFixed(2) : '-'}
                               </td>
                               <td className="py-1.5 px-2 text-center">
-                                {diff !== undefined ? (
-                                  <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold ${
-                                    diff >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'
+                                {comp && comp.schoolAvgNet > 0 ? (
+                                  <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-black ${
+                                    comp.netDiffFromSchool >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'
                                   }`}>
-                                    {diff >= 0 ? '+' : ''}{diff.toFixed(2)}
+                                    {comp.netDiffFromSchool >= 0 ? '+' : ''}{comp.netDiffFromSchool.toFixed(2)}
                                   </span>
                                 ) : '-'}
                               </td>
                             </>
                           )}
-                          <td className="py-1.5 px-2 text-center text-blue-800 font-semibold">
-                            {l.periodAvgNet !== undefined ? l.periodAvgNet.toFixed(2) : l.net.toFixed(2)}
+                          <td className="py-1.5 px-2 text-center text-blue-900 font-black">
+                            {comp ? comp.studentPeriodAvgNet.toFixed(2) : report.totalNet.toFixed(2)}
                           </td>
-                          <td className="py-1.5 px-2 text-right font-sans font-semibold text-brand-ink/70">%{l.accuracy}</td>
+                          <td className="py-1.5 px-2 text-right font-sans text-brand-ink/80">
+                            {report.totalCorrect + report.totalWrong > 0 
+                              ? `%${Math.round((report.totalCorrect / (report.totalCorrect + report.totalWrong)) * 100)}` 
+                              : '-'}
+                          </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                  {uniqueLessons.length > 1 && (
-                    <tfoot className="border-t-2 border-brand-border/70 font-mono text-[11px] bg-white/70 font-bold">
-                      <tr>
-                        <td className="py-1.5 px-2 font-sans text-brand-ink">Toplam</td>
-                        <td className="py-1.5 px-2 text-center text-emerald-700 font-black">{report.totalCorrect}</td>
-                        <td className="py-1.5 px-2 text-center text-rose-600 font-black">{report.totalWrong}</td>
-                        <td className="py-1.5 px-2 text-center text-amber-700 font-black">{report.totalEmpty}</td>
-                        <td className="py-1.5 px-2 text-center text-brand-ink font-black">{report.totalNet.toFixed(2)}</td>
-                        {hasSchoolAvgInLessons && (
-                          <>
-                            <td className="py-1.5 px-2 text-center text-indigo-900 font-black">
-                              {comp && comp.schoolAvgNet > 0 ? comp.schoolAvgNet.toFixed(2) : '-'}
-                            </td>
-                            <td className="py-1.5 px-2 text-center">
-                              {comp && comp.schoolAvgNet > 0 ? (
-                                <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-black ${
-                                  comp.netDiffFromSchool >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'
-                                }`}>
-                                  {comp.netDiffFromSchool >= 0 ? '+' : ''}{comp.netDiffFromSchool.toFixed(2)}
-                                </span>
-                              ) : '-'}
-                            </td>
-                          </>
-                        )}
-                        <td className="py-1.5 px-2 text-center text-blue-900 font-black">
-                          {comp ? comp.studentPeriodAvgNet.toFixed(2) : report.totalNet.toFixed(2)}
-                        </td>
-                        <td className="py-1.5 px-2 text-right font-sans text-brand-ink/80">
-                          {report.totalCorrect + report.totalWrong > 0 
-                            ? `%${Math.round((report.totalCorrect / (report.totalCorrect + report.totalWrong)) * 100)}` 
-                            : '-'}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
               </div>
             </div>
           )}
 
-          {/* 5. Bir Sonraki Sınav İçin 3 Maddelik Somut Taktik Reçetesi */}
-          <div className="bg-gradient-to-br from-indigo-50/90 via-white to-blue-50/60 border border-indigo-200/90 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs">
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-indigo-200/60">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm font-black shadow-xs">
+          {/* 5. Bir Sonraki Sınav İçin 3 Maddelik Somut Taktik Reçetesi Akordeon Kartı */}
+          <div className="bg-gradient-to-br from-indigo-50/90 via-white to-blue-50/60 border border-indigo-200/90 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-xs space-y-3">
+            <button
+              type="button"
+              onClick={() => toggleSection('tactics')}
+              className="w-full flex items-center justify-between gap-2 text-left cursor-pointer group select-none"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8.5 h-8.5 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm font-black shadow-xs shrink-0">
                   🚀
                 </div>
-                <div>
-                  <h4 className="text-sm sm:text-base font-bold text-indigo-950">
-                    Bir Sonraki Deneme İçin 3 Maddelik Nokta Atışı Eylem Planı
-                  </h4>
-                  <p className="text-[10px] sm:text-xs text-indigo-900/60 font-medium">
-                    Eksik kazanımlar ve okul ortalaması farklarına göre kişiselleştirilmiş çalışma adımları
-                  </p>
-                </div>
-              </div>
-              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-black text-indigo-700 bg-indigo-100/80 px-2.5 py-0.5 rounded-full">
-                <Target className="w-3.5 h-3.5" /> Hedef Odaklı
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {report.tactics.map((tactic) => (
-                <div 
-                  key={tactic.step}
-                  className="bg-white border border-indigo-100 hover:border-indigo-300 rounded-2xl p-3.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all relative overflow-hidden"
-                >
-                  <div className="flex items-center justify-between gap-1 mb-2">
-                    <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white font-mono font-black text-xs flex items-center justify-center shadow-2xs">
-                      {tactic.step}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs sm:text-base font-bold text-indigo-950">
+                      Bir Sonraki Deneme İçin 3 Maddelik Nokta Atışı Eylem Planı
+                    </h4>
+                    <span className="text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full">
+                      3 Somut Adım
                     </span>
-                    <span className="text-lg">{tactic.icon}</span>
                   </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-indigo-950 mb-1 leading-snug">
-                      {tactic.title}
-                    </h5>
-                    <p className="text-[11px] text-brand-ink/75 leading-relaxed font-normal">
-                      {tactic.action}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 6. Rehberlik Servisi Nokta Atışı Yönlendirme & Kapanış Değerlendirmesi */}
-          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-md space-y-4 print:bg-white print:text-black print:border print:border-slate-300">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3 print:border-slate-300">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-400/20 border border-amber-400/40 text-amber-300 flex items-center justify-center text-base shrink-0">
-                  🧭
-                </div>
-                <div>
-                  <h4 className="text-sm sm:text-base font-bold text-amber-300 print:text-slate-900">
-                    Rehberlik Servisi Nokta Atışı Yönlendirme & Çalışma Reçetesi
-                  </h4>
-                  <p className="text-[10px] sm:text-xs text-white/65 print:text-slate-600">
-                    Genel deneme sonucu, detaylı sınav ortalamaları ve eksik kazanım analizine dayalı bütünsel rehberlik raporu
+                  <p className="text-[10.5px] sm:text-[11px] text-indigo-900/60 font-medium truncate">
+                    {openSections.tactics ? 'Detayları gizlemek için dokunun' : 'Dokunarak kişiselleştirilmiş 3 eylem adımını açın'}
                   </p>
                 </div>
               </div>
-            </div>
 
-            {report.guidancePrescription && report.guidancePrescription.length > 0 && (
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10.5px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg hidden sm:inline-block">
+                  {openSections.tactics ? 'Gizle' : 'Detayı Gör'}
+                </span>
+                <div className="p-1 rounded-lg bg-indigo-100 text-indigo-800 group-hover:bg-indigo-200 transition-colors">
+                  {openSections.tactics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </div>
+            </button>
+
+            <div className={`${openSections.tactics ? 'block' : 'hidden'} print:block pt-2 border-t border-indigo-200/60 animate-in fade-in duration-150`}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {report.guidancePrescription.map((gp, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white/5 border border-white/10 rounded-2xl p-3.5 space-y-2 print:bg-slate-50 print:border-slate-200"
+                {report.tactics.map((tactic) => (
+                  <div 
+                    key={tactic.step}
+                    className="bg-white border border-indigo-100 hover:border-indigo-300 rounded-2xl p-3.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all relative overflow-hidden"
                   >
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-base">{gp.icon}</span>
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 print:text-indigo-900">
-                        {gp.category}
+                    <div className="flex items-center justify-between gap-1 mb-2">
+                      <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white font-mono font-black text-xs flex items-center justify-center shadow-2xs">
+                        {tactic.step}
                       </span>
+                      <span className="text-lg">{tactic.icon}</span>
                     </div>
-                    <p className="text-xs font-bold text-white print:text-slate-900 leading-snug">
-                      {gp.title}
-                    </p>
-                    <p className="text-[11px] text-white/75 print:text-slate-700 leading-relaxed">
-                      {gp.summary}
-                    </p>
-                    <ul className="space-y-1.5 pt-1 border-t border-white/10 print:border-slate-200">
-                      {gp.bullets.map((b, bIdx) => (
-                        <li key={bIdx} className="text-[11px] text-white/90 print:text-slate-800 leading-relaxed flex items-start gap-1.5">
-                          <span className="text-amber-400 print:text-indigo-700 font-bold shrink-0">•</span>
-                          <span>{b}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div>
+                      <h5 className="text-xs font-bold text-indigo-950 mb-1 leading-snug">
+                        {tactic.title}
+                      </h5>
+                      <p className="text-[11px] text-brand-ink/75 leading-relaxed font-normal">
+                        {tactic.action}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+          </div>
 
-            <div className="bg-amber-400/10 border border-amber-400/30 rounded-2xl p-3.5 flex items-start gap-3 print:bg-amber-50 print:border-amber-200">
-              <span className="text-xl shrink-0 mt-0.5">💬</span>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-amber-300 print:text-slate-900 mb-0.5">
-                  Rehber Öğretmen & Akademik Koç Değerlendirmesi
-                </p>
-                <p className="text-[11px] sm:text-xs text-white/95 print:text-slate-800 leading-relaxed font-medium">
-                  {report.coachSummary}
-                </p>
+          {/* 6. Rehberlik Servisi Nokta Atışı Yönlendirme & Kapanış Değerlendirmesi Akordeon Kartı */}
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-md space-y-3.5 print:bg-white print:text-black print:border print:border-slate-300">
+            <button
+              type="button"
+              onClick={() => toggleSection('guidance')}
+              className="w-full flex items-center justify-between gap-2 text-left cursor-pointer group select-none"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8.5 h-8.5 rounded-xl bg-amber-400/20 border border-amber-400/40 text-amber-300 flex items-center justify-center text-base shrink-0">
+                  🧭
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs sm:text-base font-bold text-amber-300 print:text-slate-900">
+                      Rehberlik Servisi Nokta Atışı Yönlendirme & Çalışma Reçetesi
+                    </h4>
+                    <span className="text-[10px] font-extrabold bg-amber-400/20 text-amber-200 border border-amber-400/40 px-2 py-0.5 rounded-full print:bg-slate-100 print:text-slate-800">
+                      Koç Yorumu
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] sm:text-[11px] text-white/65 print:text-slate-600 font-medium truncate">
+                    {openSections.guidance ? 'Detayları gizlemek için dokunun' : 'Dokunarak bütünsel rehberlik değerlendirmesini ve koç yorumunu açın'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10.5px] font-bold text-amber-300 bg-white/10 px-2 py-0.5 rounded-lg hidden sm:inline-block print:hidden">
+                  {openSections.guidance ? 'Gizle' : 'Detayı Gör'}
+                </span>
+                <div className="p-1 rounded-lg bg-white/10 text-white group-hover:bg-white/20 transition-colors print:hidden">
+                  {openSections.guidance ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </div>
+            </button>
+
+            <div className={`${openSections.guidance ? 'block' : 'hidden'} print:block space-y-4 pt-2 border-t border-white/10 print:border-slate-300 animate-in fade-in duration-150`}>
+              {report.guidancePrescription && report.guidancePrescription.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {report.guidancePrescription.map((gp, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white/5 border border-white/10 rounded-2xl p-3.5 space-y-2 print:bg-slate-50 print:border-slate-200"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base">{gp.icon}</span>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 print:text-indigo-900">
+                          {gp.category}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-white print:text-slate-900 leading-snug">
+                        {gp.title}
+                      </p>
+                      <p className="text-[11px] text-white/75 print:text-slate-700 leading-relaxed">
+                        {gp.summary}
+                      </p>
+                      <ul className="space-y-1.5 pt-1 border-t border-white/10 print:border-slate-200">
+                        {gp.bullets.map((b, bIdx) => (
+                          <li key={bIdx} className="text-[11px] text-white/90 print:text-slate-800 leading-relaxed flex items-start gap-1.5">
+                            <span className="text-amber-400 print:text-indigo-700 font-bold shrink-0">•</span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="bg-amber-400/10 border border-amber-400/30 rounded-2xl p-3.5 flex items-start gap-3 print:bg-amber-50 print:border-amber-200">
+                <span className="text-xl shrink-0 mt-0.5">💬</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-amber-300 print:text-slate-900 mb-0.5">
+                    Rehber Öğretmen & Akademik Koç Değerlendirmesi
+                  </p>
+                  <p className="text-[11px] sm:text-xs text-white/95 print:text-slate-800 leading-relaxed font-medium">
+                    {report.coachSummary}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
