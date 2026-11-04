@@ -4084,7 +4084,7 @@ export function ResultsView() {
         />
       )}
 
-      {isKazanimModalOpen && (
+      {isKazanimModalOpen && userRole === 'admin' && (
         <KazanimMatchingModal
           exam={exam}
           isOpen={isKazanimModalOpen}
@@ -4527,24 +4527,26 @@ export function ResultsView() {
                   </>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => setIsKazanimModalOpen(true)}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border shadow-2xs transition-all cursor-pointer ${
-                    hasLearningOutcomes
-                      ? 'border-indigo-300 bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-900 hover:from-indigo-100 hover:to-purple-100 ring-1 ring-indigo-300/50'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300'
-                  }`}
-                  title="Soru ve kazanım eşleştirme modalı (Excel, XML ve TXT yükleme & ayrıntılı analiz)"
-                >
-                  <GraduationCap className={`w-3.5 h-3.5 ${hasLearningOutcomes ? 'text-indigo-600' : 'text-slate-600'}`} />
-                  <span>Kazanım Analizi</span>
-                  {hasLearningOutcomes && (
-                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-indigo-600 text-white">
-                      {exam.learningOutcomes?.items?.length}
-                    </span>
-                  )}
-                </button>
+                {userRole === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsKazanimModalOpen(true)}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border shadow-2xs transition-all cursor-pointer ${
+                      hasLearningOutcomes
+                        ? 'border-indigo-300 bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-900 hover:from-indigo-100 hover:to-purple-100 ring-1 ring-indigo-300/50'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                    }`}
+                    title="Soru ve kazanım eşleştirme modalı (Excel, XML ve TXT yükleme & ayrıntılı analiz)"
+                  >
+                    <GraduationCap className={`w-3.5 h-3.5 ${hasLearningOutcomes ? 'text-indigo-600' : 'text-slate-600'}`} />
+                    <span>Kazanım Analizi</span>
+                    {hasLearningOutcomes && (
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-indigo-600 text-white">
+                        {exam.learningOutcomes?.items?.length}
+                      </span>
+                    )}
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -4594,23 +4596,25 @@ export function ResultsView() {
 
               {/* MOBİL: Optimize Edilmiş Tek Satır Hızlı İşlem Çubuğu (md:hidden) */}
               <div className="flex md:hidden items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 w-full">
-                <button
-                  type="button"
-                  onClick={() => setIsKazanimModalOpen(true)}
-                  className={`h-8 px-2.5 text-[11px] font-bold rounded-xl border shadow-2xs active:scale-95 transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
-                    hasLearningOutcomes
-                      ? 'border-indigo-300 bg-indigo-50 text-indigo-900 font-bold'
-                      : 'border-slate-200 bg-white text-slate-700'
-                  }`}
-                >
-                  <GraduationCap className={`w-3.5 h-3.5 shrink-0 ${hasLearningOutcomes ? 'text-indigo-600' : 'text-slate-600'}`} />
-                  <span>Kazanım Analizi</span>
-                  {hasLearningOutcomes && (
-                    <span className="text-[9px] font-bold px-1 py-0.2 rounded-full bg-indigo-600 text-white">
-                      {exam.learningOutcomes?.items?.length}
-                    </span>
-                  )}
-                </button>
+                {userRole === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsKazanimModalOpen(true)}
+                    className={`h-8 px-2.5 text-[11px] font-bold rounded-xl border shadow-2xs active:scale-95 transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                      hasLearningOutcomes
+                        ? 'border-indigo-300 bg-indigo-50 text-indigo-900 font-bold'
+                        : 'border-slate-200 bg-white text-slate-700'
+                    }`}
+                  >
+                    <GraduationCap className={`w-3.5 h-3.5 shrink-0 ${hasLearningOutcomes ? 'text-indigo-600' : 'text-slate-600'}`} />
+                    <span>Kazanım Analizi</span>
+                    {hasLearningOutcomes && (
+                      <span className="text-[9px] font-bold px-1 py-0.2 rounded-full bg-indigo-600 text-white">
+                        {exam.learningOutcomes?.items?.length}
+                      </span>
+                    )}
+                  </button>
+                )}
 
                 <button
                   type="button"
