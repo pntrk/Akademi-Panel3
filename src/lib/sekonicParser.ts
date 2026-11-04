@@ -84,31 +84,76 @@ export function parseSekonicRow(line: string, lineNum: number): { student: Parse
   const cleanNo = normalizeStudentNo(rawNo);
   const rawName = line.slice(14, 34).trim().toUpperCase();
 
-  const grade = line.slice(56, 57).trim() || '8';
-  const section = line.slice(57, 58).trim() || 'A';
-  const gender = line.slice(58, 59).trim() || '';
-  const rawBooklet = line.slice(59, 60).trim();
-  const booklet = (rawBooklet === 'B' || rawBooklet === 'b') ? 'B' : 'A';
+  // Robust booklet & grade/section detection from info block around indices 50-65
+  const infoBlock = line.slice(50, 65).trim();
+  const codeMatch = infoBlock.match(/([4-8])\s*([A-Z])\s*([E|K]?)\s*([A-D])/i);
+
+  let grade = '8';
+  let section = 'A';
+  let gender = '';
+  let booklet = 'A';
+
+  if (codeMatch) {
+    grade = codeMatch[1];
+    section = codeMatch[2].toUpperCase();
+    if (codeMatch[3]) gender = codeMatch[3].toUpperCase();
+    booklet = codeMatch[4].toUpperCase();
+  } else {
+    grade = line.slice(56, 57).trim() || '8';
+    section = line.slice(57, 58).trim() || 'A';
+    gender = line.slice(58, 59).trim() || '';
+    const rawBooklet = line.slice(59, 60).trim().toUpperCase();
+    booklet = (['A', 'B', 'C', 'D'].includes(rawBooklet)) ? rawBooklet : 'A';
+  }
 
   const { cls, sec } = formatClassSec(grade, section);
   const classFormatted = cls && cls !== '-' ? (sec && sec !== '-' ? `${cls}-${sec}` : cls) : '8-A';
 
-  // 4-8. Classes answer area (indices 160 to 280: 120 characters total)
-  let answersRaw = '';
-  if (line.length >= 280) {
-    answersRaw = line.slice(160, 280);
-  } else if (line.length > 160) {
-    answersRaw = line.slice(160).padEnd(120, ' ');
-  } else {
-    answersRaw = ''.padEnd(120, ' ');
-  }
+  // Dynamic gap-based answer block extraction (works for any OMR TXT layout or column offset)
+  let turkce = ''.padEnd(20, ' ');
+  let sosyal = ''.padEnd(20, ' ');
+  let din = ''.padEnd(20, ' ');
+  let ingilizce = ''.padEnd(20, ' ');
+  let matematik = ''.padEnd(20, ' ');
+  let fen = ''.padEnd(20, ' ');
 
-  const turkce = answersRaw.slice(0, 20);
-  const sosyal = answersRaw.slice(20, 40);
-  const din = answersRaw.slice(40, 60);
-  const ingilizce = answersRaw.slice(60, 80);
-  const matematik = answersRaw.slice(80, 100);
-  const fen = answersRaw.slice(100, 120);
+  const relStart = line.slice(80).search(/[A-E]/);
+  if (relStart !== -1) {
+    const startIdx = 80 + relStart;
+
+    // Block 1: Türkçe (20) + Sosyal (10) = 30 chars
+    const b1 = line.slice(startIdx, startIdx + 30);
+    turkce = b1.slice(0, 20).padEnd(20, ' ');
+    sosyal = b1.slice(20, 30).padEnd(20, ' ');
+
+    const restAfterB1 = line.slice(startIdx + 30);
+    const relB2 = restAfterB1.search(/[A-E]/);
+    if (relB2 !== -1) {
+      const startIdx2 = startIdx + 30 + relB2;
+      din = line.slice(startIdx2, startIdx2 + 10).padEnd(20, ' ');
+
+      const restAfterB2 = line.slice(startIdx2 + 10);
+      const relB3 = restAfterB2.search(/[A-E]/);
+      if (relB3 !== -1) {
+        const startIdx3 = startIdx2 + 10 + relB3;
+        ingilizce = line.slice(startIdx3, startIdx3 + 10).padEnd(20, ' ');
+
+        const restAfterB3 = line.slice(startIdx3 + 10);
+        const relB4 = restAfterB3.search(/[A-E]/);
+        if (relB4 !== -1) {
+          const startIdx4 = startIdx3 + 10 + relB4;
+          matematik = line.slice(startIdx4, startIdx4 + 20).padEnd(20, ' ');
+
+          const restAfterB4 = line.slice(startIdx4 + 20);
+          const relB5 = restAfterB4.search(/[A-E]/);
+          if (relB5 !== -1) {
+            const startIdx5 = startIdx4 + 20 + relB5;
+            fen = line.slice(startIdx5, startIdx5 + 20).padEnd(20, ' ');
+          }
+        }
+      }
+    }
+  }
 
   return {
     student: {
@@ -124,7 +169,7 @@ export function parseSekonicRow(line: string, lineNum: number): { student: Parse
       classFormatted,
       gender,
       booklet,
-      rawAnswersString: answersRaw,
+      rawAnswersString: `${turkce}${sosyal}${din}${ingilizce}${matematik}${fen}`,
       branchAnswers: {
         turkce,
         sosyal,
@@ -157,17 +202,25 @@ export function matchStudentInRoster(
 ): Student | null {
   if (!students || students.length === 0) return null;
 
-  // 1. Primary: Exact match by student number
-  if (cleanNo) {
-    const foundByNo = students.find(s => normalizeStudentNo(s.no) === cleanNo);
+  const targetCleanNo = normalizeStudentNo(cleanNo);
+
+  // 1. Primary: Exact or numeric match by student number
+  if (targetCleanNo) {
+    const foundByNo = students.find(s => {
+      const sNoClean = normalizeStudentNo(s.no);
+      if (sNoClean === targetCleanNo) return true;
+      if (String(s.no).trim() === cleanNo.trim()) return true;
+      if (Number(sNoClean) === Number(targetCleanNo) && Number(targetCleanNo) > 0) return true;
+      return false;
+    });
     if (foundByNo) return foundByNo;
   }
 
-  // 2. Secondary: Exact or fuzzy match by normalized name
+  // 2. Secondary: Name match (with fuzzy handling for character encoding artifacts)
   if (rawName && rawName.length >= 3) {
-    const normTarget = normalizeTurkish(rawName).toLowerCase().replace(/\s+/g, ' ').trim();
+    const cleanRawName = rawName.replace(/[\uFFFD\?\b]/g, '').trim();
+    const normTarget = normalizeTurkish(cleanRawName).toLowerCase().replace(/\s+/g, ' ').trim();
 
-    // Exact normalized name
     const exactNameMatch = students.find(s => {
       const sNorm = normalizeTurkish(s.name).toLowerCase().replace(/\s+/g, ' ').trim();
       return sNorm === normTarget;
@@ -184,8 +237,8 @@ export function matchStudentInRoster(
     });
     if (classMatch) return classMatch;
 
-    // General substring match if length >= 5
-    if (normTarget.length >= 5) {
+    // General substring match if length >= 4
+    if (normTarget.length >= 4) {
       const subMatch = students.find(s => {
         const sNorm = normalizeTurkish(s.name).toLowerCase().replace(/\s+/g, ' ').trim();
         return sNorm.includes(normTarget) || normTarget.includes(sNorm);

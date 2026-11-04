@@ -424,19 +424,34 @@ export function getStudentCanonicalSubjectScores(
 interface StudentReportModalProps {
   student: ExamResult & { scores: EvaluatedScore };
   exam: Exam;
+  allStudents?: (ExamResult & { scores: EvaluatedScore })[];
   onClose: () => void;
   onUpdateStudent?: (updated: ExamResult) => void;
+  onSelectStudent?: (st: ExamResult & { scores: EvaluatedScore }) => void;
 }
 
-export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: StudentReportModalProps) {
+export function StudentReportModal({ student, exam, allStudents, onClose, onUpdateStudent, onSelectStudent }: StudentReportModalProps) {
   const { state, userRole } = useAppContext();
   const [currentStudent, setCurrentStudent] = useState<ExamResult & { scores: EvaluatedScore }>(student);
   const [lastEditedQuestion, setLastEditedQuestion] = useState<number | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [reportStudentSearch, setReportStudentSearch] = useState('');
 
   useEffect(() => {
     setCurrentStudent(student);
   }, [student]);
+
+  const filteredReportStudents = useMemo(() => {
+    if (!allStudents || allStudents.length === 0) return [];
+    if (!reportStudentSearch.trim()) return allStudents;
+    const q = normalizeTurkish(reportStudentSearch.trim().toLowerCase());
+    return allStudents.filter(s => {
+      const name = normalizeTurkish(String(s.name || s.studentName || '').toLowerCase());
+      const no = normalizeTurkish(String(s.no || s.studentNo || '').toLowerCase());
+      const cls = normalizeTurkish(String(s.classStr || s.studentClass || '').toLowerCase());
+      return name.includes(q) || no.includes(q) || cls.includes(q);
+    });
+  }, [allStudents, reportStudentSearch]);
 
   const key = exam.keys?.[currentStudent.booklet || "A"] || exam.keys?.["A"] || [];
   const isLgs = isLgsExam(exam);
@@ -1095,8 +1110,8 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
     <div className="fixed inset-0 bg-slate-900/80 z-[200] flex items-center justify-center p-2 sm:p-4 backdrop-blur-xs">
       <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-5xl relative flex flex-col max-h-[92vh] overflow-hidden border border-slate-300">
         {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-2.5">
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
             <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
               <BookOpen className="w-5 h-5" />
             </div>
@@ -1107,9 +1122,54 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
               <p className="text-xs text-slate-500 font-medium">{currentStudent.name} • No: {currentStudent.no}</p>
             </div>
           </div>
+
+          {allStudents && allStudents.length > 0 && onSelectStudent && (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 max-w-xl mx-0 md:mx-3">
+              <div className="relative flex-1 min-w-[150px]">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={reportStudentSearch}
+                  onChange={(e) => setReportStudentSearch(e.target.value)}
+                  placeholder="Öğrenci adı / no ile ara..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                />
+                {reportStudentSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setReportStudentSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                    title="Temizle"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <select
+                value={String(currentStudent.id || currentStudent.no || currentStudent.studentNo)}
+                onChange={(e) => {
+                  const targetVal = e.target.value;
+                  const found = allStudents.find(s => String(s.id || s.no || s.studentNo) === targetVal);
+                  if (found) {
+                    setCurrentStudent(found);
+                    onSelectStudent(found);
+                  }
+                }}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 cursor-pointer max-w-full sm:max-w-[220px] truncate"
+              >
+                {filteredReportStudents.map(st => (
+                  <option key={st.id || st.no} value={String(st.id || st.no || st.studentNo)}>
+                    [{st.no || st.studentNo}] {st.name || st.studentName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             onClick={onClose}
-            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-colors cursor-pointer"
+            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-colors cursor-pointer shrink-0 ml-auto md:ml-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -4006,8 +4066,10 @@ export function ResultsView() {
         <StudentReportModal
           student={selectedStudent}
           exam={exam}
+          allStudents={evaluatedResults}
           onClose={() => setSelectedStudent(null)}
           onUpdateStudent={handleSaveResultEdit}
+          onSelectStudent={(st) => setSelectedStudent(st)}
         />
       )}
       {editingStudent && (

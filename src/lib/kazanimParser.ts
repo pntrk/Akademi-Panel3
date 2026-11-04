@@ -141,6 +141,7 @@ export async function parseKazanimExcel(file: File | ArrayBuffer, exam?: Exam): 
 
   // Search top 25 rows for the actual header row
   let headerRowIdx = -1;
+  let maxHeaderScore = 0;
   let cols = {
     booklet: -1,
     test: -1,
@@ -189,10 +190,10 @@ export async function parseKazanimExcel(file: File | ArrayBuffer, exam?: Exam): 
       }
     }
 
-    if (score >= 4) {
+    if (score > maxHeaderScore) {
+      maxHeaderScore = score;
       headerRowIdx = r;
       cols = tempCols;
-      break;
     }
   }
 
@@ -244,13 +245,33 @@ export async function parseKazanimExcel(file: File | ArrayBuffer, exam?: Exam): 
       const rawQNumB = cols.qNumB !== -1 ? String(row[cols.qNumB] || '').trim() : '';
       const rawAnswer = cols.answer !== -1 ? String(row[cols.answer] || '').trim().toUpperCase() : '';
 
-      // Skip header repetition or metadata rows
+      // Filter out header repetition or title/metadata rows
+      const lowerTitle = rawTitle.toLowerCase().trim();
+      const lowerCode = rawCode.toLowerCase().trim();
       const combinedRowText = row.join(' ').toLowerCase();
-      if (combinedRowText.includes('kitapçık') || combinedRowText.includes('kazanım kodu') || combinedRowText.includes('a soru')) {
+
+      if (
+        combinedRowText.includes('kitapçık') || 
+        combinedRowText.includes('a soru') ||
+        lowerTitle === '8.sınıf' || 
+        lowerTitle === '8.sinif' || 
+        lowerTitle === 'kazanım kodu' || 
+        lowerTitle === 'kazanim-1' || 
+        lowerTitle === 'kazanim' ||
+        lowerTitle === 'ders' ||
+        lowerCode === 'kazanım kodu' ||
+        lowerCode === 'kod' ||
+        (!rawTitle && !rawCode && !rawSubject)
+      ) {
         continue;
       }
 
-      if (!rawTitle && !rawCode && !rawSubject) continue;
+      const validAnswer = (rawAnswer && ['A', 'B', 'C', 'D', 'E'].includes(rawAnswer)) ? rawAnswer : undefined;
+
+      // Skip non-question rows that have no title description and no valid question answer
+      if (!validAnswer && !rawCode && lowerTitle.length < 15 && !rawQNumA) {
+        continue;
+      }
 
       let subjectName = rawSubject ? normalizeKazanimSubject(rawSubject) : '';
       if (!subjectName && rawTest) {
@@ -275,8 +296,6 @@ export async function parseKazanimExcel(file: File | ArrayBuffer, exam?: Exam): 
       if (!isNaN(parsedQNumB) && parsedQNumB > 0) {
         globalB = subjStart + parsedQNumB;
       }
-
-      const validAnswer = (rawAnswer && ['A', 'B', 'C', 'D', 'E'].includes(rawAnswer)) ? rawAnswer : undefined;
 
       if (validAnswer) {
         keyMapA[globalA] = validAnswer;
@@ -324,6 +343,20 @@ export async function parseKazanimExcel(file: File | ArrayBuffer, exam?: Exam): 
       }
 
       if (!rawTitle && !rawCode) continue;
+
+      const lowerTitle = rawTitle.toLowerCase().trim();
+      const lowerCode = rawCode.toLowerCase().trim();
+      if (
+        lowerTitle === '8.sınıf' || 
+        lowerTitle === '8.sinif' || 
+        lowerTitle === 'kazanım kodu' || 
+        lowerTitle === 'kazanim-1' || 
+        lowerTitle === 'kazanim' ||
+        lowerTitle === 'ders' ||
+        lowerCode === 'kazanım kodu'
+      ) {
+        continue;
+      }
 
       const subjectName = rawSubject ? normalizeKazanimSubject(rawSubject) : inferSubjectFromQuestionNumber(autoCounter, exam);
       const validAnswer = (rawAnswer && ['A', 'B', 'C', 'D', 'E'].includes(rawAnswer)) ? rawAnswer : undefined;
@@ -419,6 +452,20 @@ export async function parseKazanimXml(xmlContent: string, exam?: Exam): Promise<
     }
 
     if (!rawTitle && !rawCode) return;
+
+    const lowerTitle = rawTitle.toLowerCase().trim();
+    const lowerCode = rawCode.toLowerCase().trim();
+    if (
+      lowerTitle === '8.sınıf' || 
+      lowerTitle === '8.sinif' || 
+      lowerTitle === 'kazanım kodu' || 
+      lowerTitle === 'kazanim-1' || 
+      lowerTitle === 'kazanim' ||
+      lowerTitle === 'ders' ||
+      lowerCode === 'kazanım kodu'
+    ) {
+      return;
+    }
 
     let qNum = parseInt(rawNo.replace(/[^\d]/g, ''), 10);
     if (isNaN(qNum) || qNum <= 0) {

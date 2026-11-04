@@ -153,14 +153,28 @@ export function KazanimMatchingModal({ exam, isOpen, onClose }: KazanimMatchingM
     });
   }, [analytics.questionStats, selectedSubjectFilter, selectedStatusFilter, searchOutcomeText]);
 
+  // Filtered exam results for student selection search
+  const filteredExamResults = useMemo(() => {
+    if (!studentSearchInput.trim()) return examResults;
+    const query = normalizeTurkish(studentSearchInput.trim().toLowerCase());
+    return examResults.filter(res => {
+      const studentNo = normalizeTurkish(String(res.no || res.studentNo || '').toLowerCase());
+      const studentName = normalizeTurkish(String(res.name || res.studentName || '').toLowerCase());
+      const studentClass = normalizeTurkish(String(res.classStr || res.studentClass || '').toLowerCase());
+      return studentNo.includes(query) || studentName.includes(query) || studentClass.includes(query);
+    });
+  }, [examResults, studentSearchInput]);
+
   // Active student report
   const activeStudentResult = useMemo(() => {
     if (!examResults || examResults.length === 0) return null;
     if (selectedStudentNo) {
-      return examResults.find(r => String(r.no || r.studentNo).trim() === selectedStudentNo.trim()) || examResults[0];
+      const found = examResults.find(r => String(r.no || r.studentNo).trim() === selectedStudentNo.trim());
+      if (found) return found;
     }
+    if (filteredExamResults.length > 0) return filteredExamResults[0];
     return examResults[0];
-  }, [examResults, selectedStudentNo]);
+  }, [examResults, selectedStudentNo, filteredExamResults]);
 
   const studentKazanimReport = useMemo(() => {
     if (!activeStudentResult || outcomes.length === 0) return null;
@@ -1375,23 +1389,62 @@ export function KazanimMatchingModal({ exam, isOpen, onClose }: KazanimMatchingM
           {activeTab === 'student' && (
             <div className="space-y-4 max-w-5xl mx-auto">
               {/* Student Selector Card */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex-1">
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Raporu Görüntülenecek Öğrenciyi Seçiniz:</label>
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <select
-                      value={selectedStudentNo}
-                      onChange={(e) => setSelectedStudentNo(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-8 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 cursor-pointer"
-                    >
-                      {examResults.map(res => (
-                        <option key={res.id} value={String(res.no || res.studentNo)}>
-                          [{res.no || res.studentNo}] {res.name || res.studentName} ({res.classStr || res.studentClass || '-'})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                  {/* Search Input Box */}
+                  <div className="sm:w-60 relative shrink-0">
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Öğrenci Ara (Ad / No):</label>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={studentSearchInput}
+                        onChange={(e) => setStudentSearchInput(e.target.value)}
+                        placeholder="Öğrenci adı veya numarası..."
+                        className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-7 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500 placeholder:text-slate-400 shadow-2xs"
+                      />
+                      {studentSearchInput && (
+                        <button
+                          type="button"
+                          onClick={() => setStudentSearchInput('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                          title="Aramayı Temizle"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Student Selection Dropdown */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-bold text-slate-600 block truncate">Raporu Görüntülenecek Öğrenci:</label>
+                      {studentSearchInput.trim() && (
+                        <span className="text-[10px] text-indigo-600 font-bold shrink-0 ml-1">
+                          {filteredExamResults.length} / {examResults.length} öğrenci
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <GraduationCap className="w-3.5 h-3.5 text-indigo-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <select
+                        value={selectedStudentNo}
+                        onChange={(e) => setSelectedStudentNo(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-8 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 cursor-pointer shadow-2xs truncate"
+                      >
+                        {filteredExamResults.length === 0 ? (
+                          <option value="">Aramaya uygun öğrenci bulunamadı</option>
+                        ) : (
+                          filteredExamResults.map(res => (
+                            <option key={res.id} value={String(res.no || res.studentNo)}>
+                              [{res.no || res.studentNo}] {res.name || res.studentName} ({res.classStr || res.studentClass || '-'})
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
                   </div>
                 </div>
 
