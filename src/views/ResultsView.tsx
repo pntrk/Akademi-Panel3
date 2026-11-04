@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Exam, ExamResult, EvaluatedScore, Student } from '../types';
+import { Exam, ExamResult, EvaluatedScore, Student, QuestionOutcome } from '../types';
 import { useAppContext } from '../context/AppContext';
 import {
   ResponsiveContainer,
@@ -69,6 +69,7 @@ import {
 } from 'lucide-react';
 import { AnalysisView } from './AnalysisView';
 import { generateBatchReportCardsPdf, StudentEvaluatedData } from '../lib/pdfReportGenerator';
+import { KazanimMatchingModal } from '../components/KazanimMatchingModal';
 
 /* =========================================================================
    CANONICAL SUBJECT DEFINITIONS & DEDUPLICATION HELPERS
@@ -1562,6 +1563,73 @@ export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: 
               </div>
             </div>
           )}
+
+          {/* Kazanım Analizi Özeti ve Öğrenci Çalışma Tavsiyeleri */}
+          {exam.learningOutcomes?.items && exam.learningOutcomes.items.length > 0 && (() => {
+            const outcomes = exam.learningOutcomes.items;
+            const key = exam.keys?.[currentStudent.booklet || 'A'] || exam.keys?.['A'] || [];
+            const ansArr = currentStudent.answers || [];
+            
+            let correctCount = 0;
+            const missedItems: QuestionOutcome[] = [];
+
+            outcomes.forEach((outc, idx) => {
+              const qIdx = outc.questionNumber ? outc.questionNumber - 1 : idx;
+              const trueAns = outc.correctAnswer || key[qIdx];
+              const stAns = ansArr[qIdx];
+              if (stAns && trueAns && stAns === trueAns) {
+                correctCount++;
+              } else {
+                missedItems.push(outc);
+              }
+            });
+
+            const rate = outcomes.length > 0 ? Math.round((correctCount / outcomes.length) * 100) : 0;
+
+            return (
+              <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="w-5 h-5 text-indigo-600" />
+                    <div>
+                      <h4 className="font-bold text-indigo-950 text-xs sm:text-sm">Öğrenci Kazanım Değerlendirmesi</h4>
+                      <p className="text-[11px] text-indigo-800">
+                        Bu sınavda ölçülen <strong>{outcomes.length}</strong> kazanımdan <strong>{correctCount}</strong> tanesi kavranmıştır.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-slate-500 block">Kavrama Oranı</span>
+                    <span className="text-base font-black font-mono text-indigo-700">%{rate}</span>
+                  </div>
+                </div>
+
+                {missedItems.length > 0 && (
+                  <div className="space-y-1.5 pt-2 border-t border-indigo-200/80">
+                    <span className="text-[11px] font-bold text-indigo-900 block">
+                      Öğrencinin Eksik Kalan & Tekrar Etmesi Önerilen Konuları ({missedItems.length}):
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {missedItems.slice(0, 6).map((mi) => (
+                        <div key={mi.id} className="bg-white p-2 rounded-lg border border-indigo-100 flex flex-col justify-between">
+                          <div className="font-bold text-slate-800 text-[11px] flex justify-between">
+                            <span>[Soru {mi.questionNumber}] {mi.subjectName}</span>
+                            <span className="text-indigo-600 font-mono text-[10px]">{mi.code || ''}</span>
+                          </div>
+                          <p className="text-slate-600 text-[10px] leading-tight line-clamp-2 mt-0.5">{mi.title}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {missedItems.length > 6 && (
+                      <span className="text-[10px] text-indigo-700 font-semibold block text-right">
+                        + {missedItems.length - 6} konu daha (Ayrıntılar için ana ekrandaki Kazanım Analizi'ni açınız)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Modal Actions */}
@@ -2136,6 +2204,11 @@ export function ResultsView() {
   const [studentToDelete, setStudentToDelete] = useState<ExamResult | null>(null);
   const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isKazanimModalOpen, setIsKazanimModalOpen] = useState(false);
+
+  const hasLearningOutcomes = useMemo(() => {
+    return Boolean(exam?.learningOutcomes?.items && exam.learningOutcomes.items.length > 0);
+  }, [exam?.learningOutcomes]);
 
   // Batch PDF Report Cards Modal State
   const [isBatchPdfModalOpen, setIsBatchPdfModalOpen] = useState(false);
@@ -4011,6 +4084,14 @@ export function ResultsView() {
         />
       )}
 
+      {isKazanimModalOpen && (
+        <KazanimMatchingModal
+          exam={exam}
+          isOpen={isKazanimModalOpen}
+          onClose={() => setIsKazanimModalOpen(false)}
+        />
+      )}
+
       {/* Tek Öğrenci Sonucunu Silme Onay Modalı */}
       {studentToDelete && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
@@ -4448,6 +4529,25 @@ export function ResultsView() {
 
                 <button
                   type="button"
+                  onClick={() => setIsKazanimModalOpen(true)}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border shadow-2xs transition-all cursor-pointer ${
+                    hasLearningOutcomes
+                      ? 'border-indigo-300 bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-900 hover:from-indigo-100 hover:to-purple-100 ring-1 ring-indigo-300/50'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                  }`}
+                  title="Soru ve kazanım eşleştirme modalı (Excel, XML ve TXT yükleme & ayrıntılı analiz)"
+                >
+                  <GraduationCap className={`w-3.5 h-3.5 ${hasLearningOutcomes ? 'text-indigo-600' : 'text-slate-600'}`} />
+                  <span>Kazanım Analizi</span>
+                  {hasLearningOutcomes && (
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-indigo-600 text-white">
+                      {exam.learningOutcomes?.items?.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleExportResultsExcel}
                   disabled={evaluatedResults.length === 0}
                   className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer disabled:opacity-50"
@@ -4494,6 +4594,24 @@ export function ResultsView() {
 
               {/* MOBİL: Optimize Edilmiş Tek Satır Hızlı İşlem Çubuğu (md:hidden) */}
               <div className="flex md:hidden items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 w-full">
+                <button
+                  type="button"
+                  onClick={() => setIsKazanimModalOpen(true)}
+                  className={`h-8 px-2.5 text-[11px] font-bold rounded-xl border shadow-2xs active:scale-95 transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                    hasLearningOutcomes
+                      ? 'border-indigo-300 bg-indigo-50 text-indigo-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                >
+                  <GraduationCap className={`w-3.5 h-3.5 shrink-0 ${hasLearningOutcomes ? 'text-indigo-600' : 'text-slate-600'}`} />
+                  <span>Kazanım Analizi</span>
+                  {hasLearningOutcomes && (
+                    <span className="text-[9px] font-bold px-1 py-0.2 rounded-full bg-indigo-600 text-white">
+                      {exam.learningOutcomes?.items?.length}
+                    </span>
+                  )}
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setIsBatchPdfModalOpen(true)}
@@ -4690,6 +4808,36 @@ export function ResultsView() {
               </div>
             </div>
           </div>
+
+          {/* Kazanım Analizi Bilgi Bandı (Yalnızca kazanım tablosu yüklenmişse görünür) */}
+          {hasLearningOutcomes && (
+            <div className="bg-gradient-to-r from-indigo-50/90 via-purple-50/80 to-blue-50/80 border border-indigo-200/90 rounded-2xl px-3.5 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shadow-2xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <GraduationCap className="w-4 h-4" />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-indigo-950">Kazanım Analizi Aktif</span>
+                    <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                      {exam.learningOutcomes?.items?.length} Soru Eşleştirildi
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-indigo-900/80 truncate">
+                    Öğrenci optik cevapları ile sınav kazanımları eşleştirilmiştir. Soru, şube ve öğrenci karnesi detaylarını inceleyebilirsiniz.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsKazanimModalOpen(true)}
+                className="self-start sm:self-auto px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <span>Kazanım Raporunu Aç</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Search, Filter & View Controls */}
           <div className="bg-white rounded-2xl p-2.5 sm:p-3.5 shadow-2xs border border-slate-200/80 flex flex-col sm:flex-row gap-2 sm:gap-2.5 items-stretch sm:items-center justify-between transition-all">

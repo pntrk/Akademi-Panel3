@@ -4,14 +4,16 @@ import {
   Printer, 
   Download,
   Loader2,
-  Award, 
   TrendingUp, 
   TrendingDown, 
   Minus, 
-  CheckCircle2, 
-  AlertTriangle, 
   Target, 
   Calendar,
+  BookOpen,
+  AlertCircle,
+  CheckCircle2,
+  Compass,
+  BarChart3,
   Sparkles
 } from 'lucide-react';
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -38,11 +40,49 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
   if (!report) return null;
 
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [selectedOutcomeSubject, setSelectedOutcomeSubject] = useState<string>('all');
+  const [showAllOutcomes, setShowAllOutcomes] = useState<boolean>(false);
   const reportContentRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {
     window.print();
   };
+
+  // Ders kırılımlarını kesin tekilleştir (mükerrer gösterim engeli)
+  const uniqueLessons = React.useMemo(() => {
+    if (!report?.lessons) return [];
+    const seen = new Set<string>();
+    return report.lessons.filter(l => {
+      const key = (l.name || '').trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [report?.lessons]);
+
+  const hasSchoolAvgInLessons = React.useMemo(() => {
+    return uniqueLessons.some(l => typeof l.schoolAvgNet === 'number');
+  }, [uniqueLessons]);
+
+  const missingOutcomes = report.monthlyMissingOutcomes || [];
+  const outcomeSubjects = React.useMemo(() => {
+    const subs = new Set<string>();
+    missingOutcomes.forEach(m => {
+      if (m.subject) subs.add(m.subject);
+    });
+    return Array.from(subs);
+  }, [missingOutcomes]);
+
+  const filteredMissingOutcomes = React.useMemo(() => {
+    if (selectedOutcomeSubject === 'all') return missingOutcomes;
+    return missingOutcomes.filter(m => m.subject === selectedOutcomeSubject);
+  }, [missingOutcomes, selectedOutcomeSubject]);
+
+  const displayedMissingOutcomes = showAllOutcomes
+    ? filteredMissingOutcomes
+    : filteredMissingOutcomes.slice(0, 10);
+
+  const comp = report.examComparison;
 
   const handleDownloadPDF = async () => {
     if (!report || isExportingPDF) return;
@@ -50,20 +90,39 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
 
     try {
       const cleanName = (report.studentName || 'Ogrenci').replace(/[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ]/g, '_');
-      const filename = `Koc_Raporu_${cleanName}.pdf`;
+      const filename = `Koc_Rehberlik_Raporu_${cleanName}.pdf`;
 
-      const lessonRows = (report.lessons || []).map((l) => [
+      const lessonRows = uniqueLessons.map((l) => [
         { text: l.name, style: 'tableCell' },
         { text: String(l.correct), style: 'tableCellCenter', color: '#047857' },
         { text: String(l.wrong), style: 'tableCellCenter', color: '#dc2626' },
         { text: String(l.empty), style: 'tableCellCenter', color: '#b45309' },
         { text: l.net.toFixed(2), style: 'tableCellCenterBold' },
+        { text: l.schoolAvgNet !== undefined ? l.schoolAvgNet.toFixed(2) : '-', style: 'tableCellCenter' },
+        {
+          text: l.diffFromSchoolAvg !== undefined
+            ? `${l.diffFromSchoolAvg >= 0 ? '+' : ''}${l.diffFromSchoolAvg.toFixed(2)}`
+            : '-',
+          style: 'tableCellCenterBold',
+          color: (l.diffFromSchoolAvg || 0) >= 0 ? '#047857' : '#dc2626'
+        },
         { text: `%${l.accuracy}`, style: 'tableCellRight' },
       ]);
 
+      const missingOutcomeRows = missingOutcomes.slice(0, 20).map((m) => {
+        const qList = m.questionRefs.map(q => `S.${q.questionNumber} (${q.status === 'wrong' ? 'Y' : 'B'})`).join(', ');
+        return [
+          { text: m.subject, style: 'tableCell' },
+          { text: m.code, style: 'tableCellCenterBold', color: '#4338ca' },
+          { text: qList, style: 'tableCellCenter' },
+          { text: m.title, style: 'tableCell' },
+          { text: m.diagnosisLabel, style: 'tableCell', color: m.priority === 'critical' ? '#be123c' : '#b45309' }
+        ];
+      });
+
       const docDefinition: any = {
         pageSize: 'A4',
-        pageMargins: [30, 25, 30, 25],
+        pageMargins: [28, 24, 28, 24],
         content: [
           // Banner
           {
@@ -73,17 +132,17 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                 [
                   {
                     fillColor: '#0f172a',
-                    padding: [10, 10, 10, 10],
+                    padding: [10, 8, 10, 8],
                     stack: [
-                      { text: 'AKADEMİ ARENA - YÖNLENDİRME KOÇU & GELİŞİM REÇETESİ', style: 'bannerTitle' },
-                      { text: 'Son Sınav Netleri ve Aylık Rozet Performansı Analizi', style: 'bannerSubtitle' }
+                      { text: 'AKADEMİ ARENA - AI KOÇ & NOKTA ATIŞI REHBERLİK RAPORU', style: 'bannerTitle' },
+                      { text: `${report.periodLabel || 'Dönem Analizi'} • Eksik Kazanım Teşhisi, Ortalamalar Kıyaslaması ve Eylem Planı`, style: 'bannerSubtitle' }
                     ]
                   }
                 ]
               ]
             },
             layout: 'noBorders',
-            margin: [0, 0, 0, 10]
+            margin: [0, 0, 0, 8]
           },
 
           // Student Header Card
@@ -104,7 +163,12 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                         style: 'studentMeta'
                       },
                       {
-                        text: `Arena Sıralaması: #${report.rank} / ${report.totalStudents}   |   Toplam: ${report.leaguePoints} LP`,
+                        text: [
+                          `Arena Sırası: #${report.rank} / ${report.totalStudents}   |   Toplam: ${report.leaguePoints} LP`,
+                          comp?.examRank && comp?.examParticipantCount
+                            ? `   |   Sınav Sırası: #${comp.examRank} / ${comp.examParticipantCount} (%${comp.examPercentile})`
+                            : ''
+                        ],
                         style: 'studentSubMeta'
                       }
                     ]
@@ -112,9 +176,9 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                   {
                     alignment: 'right',
                     stack: [
-                      { text: 'SON LGS PUANI', style: 'scoreLabel' },
+                      { text: 'SON DENEME PUANI', style: 'scoreLabel' },
                       { text: report.score > 0 ? report.score.toFixed(2) : '-', style: 'scoreValue' },
-                      { text: `Net: ${report.totalNet.toFixed(2)}`, style: 'netValue' }
+                      { text: `Net: ${report.totalNet.toFixed(2)} (${report.totalCorrect}D / ${report.totalWrong}Y / ${report.totalEmpty}B)`, style: 'netValue' }
                     ]
                   }
                 ]
@@ -127,49 +191,96 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
               vLineColor: () => '#e2e8f0',
               paddingLeft: () => 10,
               paddingRight: () => 10,
-              paddingTop: () => 8,
-              paddingBottom: () => 8
+              paddingTop: () => 7,
+              paddingBottom: () => 7
             },
-            margin: [0, 0, 0, 10]
+            margin: [0, 0, 0, 8]
           },
 
-          // Exam Summary Info Bar
-          {
-            table: {
-              widths: ['*'],
-              body: [
-                [
-                  {
-                    fillColor: '#f8fafc',
-                    padding: [6, 6, 6, 6],
-                    text: [
-                      { text: 'Sınav: ', bold: true, color: '#334155' },
-                      { text: `${report.examName} ${report.examDate ? `(${report.examDate})` : ''}   |   `, color: '#0f172a' },
-                      { text: `D: ${report.totalCorrect}   `, bold: true, color: '#047857' },
-                      { text: `Y: ${report.totalWrong}   `, bold: true, color: '#dc2626' },
-                      { text: `B: ${report.totalEmpty}   `, bold: true, color: '#b45309' },
-                      { text: `Net: ${report.totalNet.toFixed(2)}`, bold: true, color: '#0f172a' }
-                    ],
-                    style: 'examInfoText'
-                  }
+          // Averages Comparison Bar
+          ...(comp ? [
+            {
+              table: {
+                widths: ['*', '*', '*', '*'],
+                body: [
+                  [
+                    {
+                      fillColor: '#f8fafc',
+                      padding: [6, 5, 6, 5],
+                      stack: [
+                        { text: 'SON SINAV SONUCU', fontSize: 7, bold: true, color: '#64748b' },
+                        { text: `${report.score.toFixed(2)} Puan / ${report.totalNet.toFixed(2)} Net`, fontSize: 8.5, bold: true, color: '#0f172a', margin: [0, 2, 0, 0] }
+                      ]
+                    },
+                    {
+                      fillColor: '#f8fafc',
+                      padding: [6, 5, 6, 5],
+                      stack: [
+                        { text: 'OKUL ORTALAMASI', fontSize: 7, bold: true, color: '#64748b' },
+                        {
+                          text: comp.schoolAvgScore > 0
+                            ? `${comp.schoolAvgScore.toFixed(2)} P / ${comp.schoolAvgNet.toFixed(2)} N (${comp.scoreDiffFromSchool >= 0 ? '+' : ''}${comp.scoreDiffFromSchool.toFixed(1)})`
+                            : 'Veri Yok',
+                          fontSize: 8.5,
+                          bold: true,
+                          color: comp.scoreDiffFromSchool >= 0 ? '#047857' : '#dc2626',
+                          margin: [0, 2, 0, 0]
+                        }
+                      ]
+                    },
+                    {
+                      fillColor: '#f8fafc',
+                      padding: [6, 5, 6, 5],
+                      stack: [
+                        { text: `${report.className || 'SINIF'} ORTALAMASI`, fontSize: 7, bold: true, color: '#64748b' },
+                        {
+                          text: comp.classAvgScore > 0
+                            ? `${comp.classAvgScore.toFixed(2)} P / ${comp.classAvgNet.toFixed(2)} N (${comp.scoreDiffFromClass >= 0 ? '+' : ''}${comp.scoreDiffFromClass.toFixed(1)})`
+                            : '-',
+                          fontSize: 8.5,
+                          bold: true,
+                          color: comp.scoreDiffFromClass >= 0 ? '#047857' : '#dc2626',
+                          margin: [0, 2, 0, 0]
+                        }
+                      ]
+                    },
+                    {
+                      fillColor: '#f8fafc',
+                      padding: [6, 5, 6, 5],
+                      stack: [
+                        { text: 'ÖĞRENCİ DÖNEM ORT.', fontSize: 7, bold: true, color: '#64748b' },
+                        {
+                          text: `${comp.studentPeriodAvgScore.toFixed(2)} P / ${comp.studentPeriodAvgNet.toFixed(2)} N`,
+                          fontSize: 8.5,
+                          bold: true,
+                          color: '#1d4ed8',
+                          margin: [0, 2, 0, 0]
+                        }
+                      ]
+                    }
+                  ]
                 ]
-              ]
-            },
-            layout: 'noBorders',
-            margin: [0, 0, 0, 12]
-          },
+              },
+              layout: {
+                hLineWidth: () => 0.5,
+                vLineWidth: () => 0.5,
+                hLineColor: () => '#cbd5e1',
+                vLineColor: () => '#cbd5e1'
+              },
+              margin: [0, 0, 0, 10]
+            }
+          ] : []),
 
           // Strengths & Risks Columns
           {
             columnGap: 10,
             columns: [
-              // Strengths
               {
                 width: '*',
                 stack: [
-                  { text: '🌟 GÜÇLÜ YÖNLER & KAZANIMLAR', style: 'sectionHeaderGreen' },
+                  { text: '🌟 GÜÇLÜ YÖNLER & AVANTAJLAR', style: 'sectionHeaderGreen' },
                   ...report.strengths.map(s => ({
-                    margin: [0, 0, 0, 6],
+                    margin: [0, 0, 0, 5],
                     stack: [
                       { text: `${s.icon || '⭐'} ${s.title}`, style: 'itemTitle' },
                       { text: s.desc, style: 'itemDesc' }
@@ -177,13 +288,12 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                   }))
                 ]
               },
-              // Risks
               {
                 width: '*',
                 stack: [
-                  { text: '⚠️ GELİŞİME AÇIK & RİSKLİ ALANLAR', style: 'sectionHeaderAmber' },
+                  { text: '⚠️ RİSKLİ ALANLAR & NOKTA ATIŞI TESPİTLER', style: 'sectionHeaderAmber' },
                   ...report.risks.map(r => ({
-                    margin: [0, 0, 0, 6],
+                    margin: [0, 0, 0, 5],
                     stack: [
                       { text: `${r.icon || '⚠️'} ${r.title}`, style: 'itemTitle' },
                       { text: r.desc, style: 'itemDesc' }
@@ -192,31 +302,42 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                 ]
               }
             ],
-            margin: [0, 0, 0, 12]
+            margin: [0, 0, 0, 10]
           },
 
-          // 3 Step Action Plan
-          {
-            stack: [
-              { text: '🚀 BİR SONRAKİ DENEME İÇİN 3 MADDELİK EYLEM PLANI', style: 'sectionHeaderBlue' },
-              ...report.tactics.map(t => ({
-                margin: [0, 0, 0, 6],
-                stack: [
-                  { text: `Adım ${t.step}: ${t.title}`, style: 'tacticTitle' },
-                  { text: t.action, style: 'tacticDesc' }
-                ]
-              }))
-            ],
-            margin: [0, 0, 0, 12]
-          },
-
-          // Lesson Report Table (if available)
-          ...(report.lessons && report.lessons.length > 0 ? [
-            { text: '📊 SON DENEME DERS KARNESİ', style: 'sectionHeader' },
+          // Missing Learning Outcomes Table (if available)
+          ...(missingOutcomeRows.length > 0 ? [
+            {
+              text: `🎯 AYLIK EKSİK / KAVRANMAMIŞ KAZANIM RAPORU (Toplam ${missingOutcomes.length} Eksik Kazanım • Kavrama: %${report.overallMasteryPercentage ?? 0})`,
+              style: 'sectionHeaderPurple'
+            },
             {
               table: {
                 headerRows: 1,
-                widths: ['*', 35, 35, 35, 45, 55],
+                widths: [58, 48, 52, '*', 95],
+                body: [
+                  [
+                    { text: 'Ders', style: 'tableHeader' },
+                    { text: 'Kod', style: 'tableHeaderCenter' },
+                    { text: 'Soru (Drm)', style: 'tableHeaderCenter' },
+                    { text: 'Eksik Kazanım Açıklaması', style: 'tableHeader' },
+                    { text: 'Koç Teşhisi', style: 'tableHeader' }
+                  ],
+                  ...missingOutcomeRows
+                ]
+              },
+              layout: 'lightHorizontalLines',
+              margin: [0, 0, 0, 10]
+            }
+          ] : []),
+
+          // Lesson Report Table
+          ...(uniqueLessons.length > 0 ? [
+            { text: '📊 DERS KARNESİ VE OKUL ORTALAMASI KIYASLAMASI', style: 'sectionHeader' },
+            {
+              table: {
+                headerRows: 1,
+                widths: ['*', 26, 26, 26, 38, 42, 42, 38],
                 body: [
                   [
                     { text: 'Ders', style: 'tableHeader' },
@@ -224,6 +345,8 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                     { text: 'Y', style: 'tableHeaderCenter' },
                     { text: 'B', style: 'tableHeaderCenter' },
                     { text: 'Net', style: 'tableHeaderCenter' },
+                    { text: 'Okul Ort.', style: 'tableHeaderCenter' },
+                    { text: 'Fark', style: 'tableHeaderCenter' },
                     { text: 'İsabet', style: 'tableHeaderRight' }
                   ],
                   ...lessonRows,
@@ -233,6 +356,13 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                     { text: String(report.totalWrong), style: 'tableHeaderCenterBold' },
                     { text: String(report.totalEmpty), style: 'tableHeaderCenterBold' },
                     { text: report.totalNet.toFixed(2), style: 'tableHeaderCenterBold' },
+                    { text: comp && comp.schoolAvgNet > 0 ? comp.schoolAvgNet.toFixed(2) : '-', style: 'tableHeaderCenterBold' },
+                    {
+                      text: comp && comp.schoolAvgNet > 0
+                        ? `${comp.netDiffFromSchool >= 0 ? '+' : ''}${comp.netDiffFromSchool.toFixed(2)}`
+                        : '-',
+                      style: 'tableHeaderCenterBold'
+                    },
                     {
                       text: report.totalCorrect + report.totalWrong > 0
                         ? `%${Math.round((report.totalCorrect / (report.totalCorrect + report.totalWrong)) * 100)}`
@@ -243,11 +373,26 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                 ]
               },
               layout: 'lightHorizontalLines',
-              margin: [0, 0, 0, 12]
+              margin: [0, 0, 0, 10]
             }
           ] : []),
 
-          // Coach Note
+          // 3 Step Action Plan
+          {
+            stack: [
+              { text: '🚀 BİR SONRAKİ DENEME İÇİN 3 MADDELİK EYLEM PLANI', style: 'sectionHeaderBlue' },
+              ...report.tactics.map(t => ({
+                margin: [0, 0, 0, 5],
+                stack: [
+                  { text: `Adım ${t.step}: ${t.title}`, style: 'tacticTitle' },
+                  { text: t.action, style: 'tacticDesc' }
+                ]
+              }))
+            ],
+            margin: [0, 0, 0, 10]
+          },
+
+          // Guidance Prescription & Coach Note
           {
             table: {
               widths: ['*'],
@@ -257,56 +402,63 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                     fillColor: '#f1f5f9',
                     padding: [8, 8, 8, 8],
                     stack: [
-                      { text: '💬 REHBERLİK & MENTORLUK DEĞERLENDİRMESİ', style: 'coachHeader' },
-                      { text: report.coachSummary, style: 'coachText' }
+                      { text: '🧭 REHBERLİK SERVİSİ NOKTA ATIŞI YÖNLENDİRME & DEĞERLENDİRME', style: 'coachHeader' },
+                      ...(report.guidancePrescription || []).map(gp => ({
+                        margin: [0, 2, 0, 4],
+                        stack: [
+                          { text: `${gp.icon} ${gp.title}`, fontSize: 8.5, bold: true, color: '#0f172a' },
+                          ...gp.bullets.map(b => ({ text: `• ${b}`, fontSize: 7.8, color: '#334155', margin: [6, 1, 0, 0] }))
+                        ]
+                      })),
+                      { text: report.coachSummary, style: 'coachText', margin: [0, 4, 0, 0] }
                     ]
                   }
                 ]
               ]
             },
             layout: 'noBorders',
-            margin: [0, 0, 0, 10]
+            margin: [0, 0, 0, 6]
           }
         ],
 
         footer: (currentPage: number, pageCount: number) => ({
-          text: `Akademi Arena Rehberlik Sistemi • 2026 LGS Projeksiyonu  |  Sayfa ${currentPage} / ${pageCount}`,
+          text: `Akademi Arena AI Rehberlik & Kazanım Analiz Sistemi • 2026 LGS Projeksiyonu  |  Sayfa ${currentPage} / ${pageCount}`,
           alignment: 'center',
           fontSize: 8,
           color: '#94a3b8',
-          margin: [0, 10, 0, 0]
+          margin: [0, 8, 0, 0]
         }),
 
         styles: {
-          bannerTitle: { fontSize: 13, bold: true, color: '#f59e0b', alignment: 'center' },
-          bannerSubtitle: { fontSize: 8.5, color: '#cbd5e1', alignment: 'center', margin: [0, 2, 0, 0] },
-          studentName: { fontSize: 14, bold: true, color: '#0f172a' },
+          bannerTitle: { fontSize: 12, bold: true, color: '#f59e0b', alignment: 'center' },
+          bannerSubtitle: { fontSize: 8, color: '#cbd5e1', alignment: 'center', margin: [0, 2, 0, 0] },
+          studentName: { fontSize: 13, bold: true, color: '#0f172a' },
           studentMeta: { fontSize: 8.5, color: '#475569', margin: [0, 2, 0, 0] },
-          studentSubMeta: { fontSize: 8.5, bold: true, color: '#1e293b', margin: [0, 2, 0, 0] },
+          studentSubMeta: { fontSize: 8, bold: true, color: '#1e293b', margin: [0, 2, 0, 0] },
           scoreLabel: { fontSize: 7.5, bold: true, color: '#64748b' },
-          scoreValue: { fontSize: 15, bold: true, color: '#6d28d9' },
-          netValue: { fontSize: 9.5, bold: true, color: '#0f172a' },
-          examInfoText: { fontSize: 8.5 },
-          sectionHeaderGreen: { fontSize: 10, bold: true, color: '#047857', margin: [0, 0, 0, 4] },
-          sectionHeaderAmber: { fontSize: 10, bold: true, color: '#b45309', margin: [0, 0, 0, 4] },
-          sectionHeaderBlue: { fontSize: 10, bold: true, color: '#1d4ed8', margin: [0, 0, 0, 4] },
-          sectionHeader: { fontSize: 10, bold: true, color: '#0f172a', margin: [0, 0, 0, 4] },
-          itemTitle: { fontSize: 8.5, bold: true, color: '#0f172a' },
-          itemDesc: { fontSize: 8, color: '#334155', margin: [0, 1, 0, 0] },
-          tacticTitle: { fontSize: 8.5, bold: true, color: '#1e1b4b' },
-          tacticDesc: { fontSize: 8, color: '#334155', margin: [0, 1, 0, 0] },
-          tableHeader: { fontSize: 8.5, bold: true, color: '#0f172a' },
-          tableHeaderCenter: { fontSize: 8.5, bold: true, color: '#0f172a', alignment: 'center' },
-          tableHeaderRight: { fontSize: 8.5, bold: true, color: '#0f172a', alignment: 'right' },
-          tableHeaderBold: { fontSize: 8.5, bold: true, color: '#0f172a' },
-          tableHeaderCenterBold: { fontSize: 8.5, bold: true, color: '#0f172a', alignment: 'center' },
-          tableHeaderRightBold: { fontSize: 8.5, bold: true, color: '#0f172a', alignment: 'right' },
-          tableCell: { fontSize: 8, color: '#0f172a' },
-          tableCellCenter: { fontSize: 8, alignment: 'center' },
-          tableCellCenterBold: { fontSize: 8, bold: true, color: '#0f172a', alignment: 'center' },
-          tableCellRight: { fontSize: 8, alignment: 'right', color: '#334155' },
-          coachHeader: { fontSize: 9, bold: true, color: '#b45309', margin: [0, 0, 0, 3] },
-          coachText: { fontSize: 8.5, color: '#1e293b' }
+          scoreValue: { fontSize: 14, bold: true, color: '#6d28d9' },
+          netValue: { fontSize: 8.5, bold: true, color: '#0f172a' },
+          sectionHeaderGreen: { fontSize: 9.5, bold: true, color: '#047857', margin: [0, 0, 0, 4] },
+          sectionHeaderAmber: { fontSize: 9.5, bold: true, color: '#b45309', margin: [0, 0, 0, 4] },
+          sectionHeaderBlue: { fontSize: 9.5, bold: true, color: '#1d4ed8', margin: [0, 0, 0, 4] },
+          sectionHeaderPurple: { fontSize: 9.5, bold: true, color: '#4338ca', margin: [0, 0, 0, 4] },
+          sectionHeader: { fontSize: 9.5, bold: true, color: '#0f172a', margin: [0, 0, 0, 4] },
+          itemTitle: { fontSize: 8.2, bold: true, color: '#0f172a' },
+          itemDesc: { fontSize: 7.8, color: '#334155', margin: [0, 1, 0, 0] },
+          tacticTitle: { fontSize: 8.2, bold: true, color: '#1e1b4b' },
+          tacticDesc: { fontSize: 7.8, color: '#334155', margin: [0, 1, 0, 0] },
+          tableHeader: { fontSize: 8, bold: true, color: '#0f172a' },
+          tableHeaderCenter: { fontSize: 8, bold: true, color: '#0f172a', alignment: 'center' },
+          tableHeaderRight: { fontSize: 8, bold: true, color: '#0f172a', alignment: 'right' },
+          tableHeaderBold: { fontSize: 8, bold: true, color: '#0f172a' },
+          tableHeaderCenterBold: { fontSize: 8, bold: true, color: '#0f172a', alignment: 'center' },
+          tableHeaderRightBold: { fontSize: 8, bold: true, color: '#0f172a', alignment: 'right' },
+          tableCell: { fontSize: 7.5, color: '#0f172a' },
+          tableCellCenter: { fontSize: 7.5, alignment: 'center' },
+          tableCellCenterBold: { fontSize: 7.5, bold: true, color: '#0f172a', alignment: 'center' },
+          tableCellRight: { fontSize: 7.5, alignment: 'right', color: '#334155' },
+          coachHeader: { fontSize: 9, bold: true, color: '#b45309', margin: [0, 0, 0, 4] },
+          coachText: { fontSize: 8, bold: true, color: '#1e293b' }
         },
         defaultStyle: {
           font: 'Roboto'
@@ -324,7 +476,6 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
 
   const isKutup = report.team === 'Kutup Yıldızları';
   const isSicrama = report.team === 'Sıçrama Ustaları';
-  const isTaktik = report.team === 'Taktik Avcıları';
 
   const teamBg = isKutup 
     ? 'from-amber-500/15 to-amber-600/5 text-amber-950 border-amber-300' 
@@ -338,22 +489,10 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
     ? 'bg-blue-100 text-blue-900 border-blue-300' 
     : 'bg-emerald-100 text-emerald-900 border-emerald-300';
 
-  // Ders kırılımlarını kesin tekilleştir (mükerrer gösterim engeli)
-  const uniqueLessons = React.useMemo(() => {
-    if (!report?.lessons) return [];
-    const seen = new Set<string>();
-    return report.lessons.filter(l => {
-      const key = (l.name || '').trim().toLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [report?.lessons]);
-
   return (
     <div id="coaching-report-printable" className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible print:z-auto">
       <div 
-        className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-brand-border/90 flex flex-col max-h-[92vh] overflow-hidden print:max-h-none print:shadow-none print:border-none print:rounded-none animate-in fade-in zoom-in-95 duration-200"
+        className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-brand-border/90 flex flex-col max-h-[93vh] overflow-hidden print:max-h-none print:shadow-none print:border-none print:rounded-none animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Üst Başlık & Kontrol Çubuğu */}
@@ -363,11 +502,18 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
               🎯
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm sm:text-lg font-bold font-serif tracking-tight truncate">
-                Yönlendirme Koçu & Gelişim Reçetesi
-              </h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-lg font-bold font-serif tracking-tight truncate">
+                  Akademi Arena AI Koç & Rehberlik Analizi
+                </h2>
+                {report.periodLabel && (
+                  <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full">
+                    {report.periodLabel}
+                  </span>
+                )}
+              </div>
               <p className="text-[10px] sm:text-xs text-white/70 print:text-slate-600 font-medium truncate">
-                Son Sınav Netleri ve Aylık Rozet Performansı Analizi
+                Aylık Eksik Kazanım Raporu, Okul/Sınıf Ortalamaları Kıyaslaması ve Nokta Atışı Rehberlik Yönlendirmesi
               </p>
             </div>
           </div>
@@ -412,11 +558,11 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
           </div>
         </div>
 
-        {/* Kaydırılabilir İçerik Alanı (Yazdırıldığında ve PDF alındığında tam döküm) */}
+        {/* Kaydırılabilir İçerik Alanı */}
         <div ref={reportContentRef} className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 custom-scrollbar print:p-0 print:overflow-visible print:space-y-4 bg-white">
           
-          {/* 1. Öğrenci Kimlik ve Sınav Karnesi Özeti */}
-          <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-3xl border bg-gradient-to-br ${teamBg} print:bg-white print:border-slate-300 shadow-xs`}>
+          {/* 1. Öğrenci Kimlik, Sınav Özeti ve Ortalamalar Kıyaslama Kartı */}
+          <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-3xl border bg-gradient-to-br ${teamBg} print:bg-white print:border-slate-300 shadow-xs space-y-3.5`}>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 pb-3.5 border-b border-black/10 print:border-slate-300">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-white text-brand-ink font-serif font-black text-xl flex items-center justify-center shadow-xs border border-brand-border shrink-0">
@@ -445,6 +591,12 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                     </span>
                     <span>•</span>
                     <span>Arena Sırası: <strong className="text-brand-ink">#{report.rank}</strong> / {report.totalStudents}</span>
+                    {comp?.examRank && comp?.examParticipantCount && (
+                      <>
+                        <span>•</span>
+                        <span>Sınav Sırası: <strong className="text-indigo-900">#{comp.examRank}</strong> / {comp.examParticipantCount} <span className="text-indigo-700 font-bold">(% {comp.examPercentile})</span></span>
+                      </>
+                    )}
                     <span>•</span>
                     <span>Toplam: <strong className="text-emerald-800 font-mono">{report.leaguePoints} LP</strong></span>
                   </div>
@@ -461,7 +613,7 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                 </div>
                 <div className="h-8 w-px bg-slate-200" />
                 <div>
-                  <p className="text-[9.5px] font-bold text-brand-ink/50 uppercase tracking-wider">Net</p>
+                  <p className="text-[9.5px] font-bold text-brand-ink/50 uppercase tracking-wider">Toplam Net</p>
                   <p className="text-base sm:text-lg font-bold text-brand-ink font-mono tabular-nums leading-none">
                     {report.totalNet.toFixed(2)}
                   </p>
@@ -492,31 +644,137 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
             </div>
 
             {/* Sınav Adı ve Soru Dağılım Çubuğu */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 text-xs text-brand-ink/75 font-medium">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-brand-ink/75 font-medium">
               <div className="flex items-center gap-1.5 min-w-0">
                 <Calendar className="w-3.5 h-3.5 text-brand-ink/50 shrink-0" />
-                <span className="truncate"><strong>Son Sınav:</strong> {report.examName} {report.examDate ? `(${report.examDate})` : ''}</span>
+                <span className="truncate"><strong>Baz Alınan Son Sınav:</strong> {report.examName} {report.examDate ? `(${report.examDate})` : ''}</span>
               </div>
-              <div className="flex items-center gap-2.5 font-mono text-[11px] shrink-0">
-                <span className="text-emerald-700 font-bold">D: {report.totalCorrect}</span>
-                <span className="text-rose-600 font-bold">Y: {report.totalWrong}</span>
-                <span className="text-amber-700 font-bold">B: {report.totalEmpty}</span>
+              <div className="flex items-center gap-2.5 font-mono text-[11px] shrink-0 bg-white/80 px-3 py-1 rounded-xl border border-black/5">
+                <span className="text-emerald-700 font-bold">Doğru: {report.totalCorrect}</span>
+                <span className="text-rose-600 font-bold">Yanlış: {report.totalWrong}</span>
+                <span className="text-amber-700 font-bold">Boş: {report.totalEmpty}</span>
                 <span className="text-brand-ink font-black">Net: {report.totalNet.toFixed(2)}</span>
               </div>
             </div>
+
+            {/* Detaylı Ortalamalar Kıyaslama Bantları (Okul Ort, Sınıf Ort, Dönem Ort, Kazanım Kavrama) */}
+            {comp && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+                <div className="bg-white/90 border border-black/10 rounded-xl p-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-brand-ink/55 uppercase">
+                    <span>Okul Ortalaması Kıyas</span>
+                    <BarChart3 className="w-3.5 h-3.5 text-indigo-600" />
+                  </div>
+                  {comp.schoolAvgScore > 0 ? (
+                    <div className="mt-1">
+                      <div className="flex items-baseline justify-between gap-1">
+                        <span className="text-xs sm:text-sm font-black font-mono text-brand-ink">
+                          {comp.schoolAvgScore.toFixed(1)} P / {comp.schoolAvgNet.toFixed(1)} N
+                        </span>
+                        <span className={`text-[11px] font-extrabold font-mono px-1.5 py-0.2 rounded ${
+                          comp.scoreDiffFromSchool >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'
+                        }`}>
+                          {comp.scoreDiffFromSchool >= 0 ? '+' : ''}{comp.scoreDiffFromSchool.toFixed(1)} P
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-brand-ink/60 mt-0.5">
+                        Net Farkı: <strong className={comp.netDiffFromSchool >= 0 ? 'text-emerald-700' : 'text-rose-600'}>
+                          {comp.netDiffFromSchool >= 0 ? '+' : ''}{comp.netDiffFromSchool.toFixed(2)} Net
+                        </strong>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs font-semibold text-brand-ink/50 mt-1">Tekil Öğrenci Verisi</p>
+                  )}
+                </div>
+
+                <div className="bg-white/90 border border-black/10 rounded-xl p-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-brand-ink/55 uppercase">
+                    <span>{report.className ? `${report.className} Sınıf Ort.` : 'Sınıf Ortalaması'}</span>
+                    <span className="text-[10px] font-bold text-amber-700">
+                      {comp.classRank && comp.classParticipantCount ? `#${comp.classRank}/${comp.classParticipantCount}` : ''}
+                    </span>
+                  </div>
+                  {comp.classAvgScore > 0 ? (
+                    <div className="mt-1">
+                      <div className="flex items-baseline justify-between gap-1">
+                        <span className="text-xs sm:text-sm font-black font-mono text-brand-ink">
+                          {comp.classAvgScore.toFixed(1)} P / {comp.classAvgNet.toFixed(1)} N
+                        </span>
+                        <span className={`text-[11px] font-extrabold font-mono px-1.5 py-0.2 rounded ${
+                          comp.scoreDiffFromClass >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'
+                        }`}>
+                          {comp.scoreDiffFromClass >= 0 ? '+' : ''}{comp.scoreDiffFromClass.toFixed(1)} P
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-brand-ink/60 mt-0.5">
+                        Sınıf Net Farkı: <strong className={comp.netDiffFromClass >= 0 ? 'text-emerald-700' : 'text-rose-600'}>
+                          {comp.netDiffFromClass >= 0 ? '+' : ''}{comp.netDiffFromClass.toFixed(2)} Net
+                        </strong>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs font-semibold text-brand-ink/50 mt-1">Sınıf Karşılaştırması Yok</p>
+                  )}
+                </div>
+
+                <div className="bg-white/90 border border-black/10 rounded-xl p-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-brand-ink/55 uppercase">
+                    <span>Öğrenci Dönem Ort.</span>
+                    <span className="text-[10px] font-bold text-blue-700">{comp.periodExamCount} Deneme</span>
+                  </div>
+                  <div className="mt-1">
+                    <div className="flex items-baseline justify-between gap-1">
+                      <span className="text-xs sm:text-sm font-black font-mono text-blue-900">
+                        {comp.studentPeriodAvgScore.toFixed(1)} P / {comp.studentPeriodAvgNet.toFixed(1)} N
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-brand-ink/60 mt-0.5">
+                      Genel Ort ({comp.totalExamCount} Sınav): <strong>{comp.studentAllTimeAvgScore.toFixed(1)} P</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white/90 border border-black/10 rounded-xl p-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-brand-ink/55 uppercase">
+                    <span>Kazanım Hakimiyeti</span>
+                    <BookOpen className="w-3.5 h-3.5 text-purple-600" />
+                  </div>
+                  {report.hasKazanimData ? (
+                    <div className="mt-1">
+                      <div className="flex items-baseline justify-between gap-1">
+                        <span className="text-xs sm:text-sm font-black font-mono text-purple-800">
+                          %{report.overallMasteryPercentage} Kavrama
+                        </span>
+                        <span className="text-[10px] font-bold bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded">
+                          {missingOutcomes.length} Eksik Konu
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-brand-ink/60 mt-0.5">
+                        {report.totalMeasuredQuestions} Soruda <strong>{report.totalMasteredQuestions} Doğru Kazanım</strong>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] font-medium text-brand-ink/50 mt-1">
+                      Kazanım anahtarı yüklenmedi
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* 2. Ana Analiz Bölümü: Güçlü Yönler & Riskli Alanlar Grid */}
+          {/* 2. Ana Analiz Bölümü: Güçlü Yönler & Nokta Atışı Riskli Alanlar Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
             
-            {/* Güçlü Yönler (Pillars of Success) */}
+            {/* Güçlü Yönler */}
             <div className="bg-gradient-to-b from-emerald-50/70 via-white to-emerald-50/30 border border-emerald-200/90 rounded-2xl p-4 shadow-2xs flex flex-col gap-3">
               <div className="flex items-center justify-between pb-2 border-b border-emerald-200/60">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center text-sm font-bold shadow-2xs">
                     🌟
                   </div>
-                  <h4 className="text-sm font-bold text-emerald-950">Güçlü Yönler & Kazanımlar</h4>
+                  <h4 className="text-sm font-bold text-emerald-950">Güçlü Yönler & Ortalamalar Üstünlüğü</h4>
                 </div>
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
                   {report.strengths.length} Tespit
@@ -552,10 +810,10 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                   <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-sm font-bold shadow-2xs">
                     ⚠️
                   </div>
-                  <h4 className="text-sm font-bold text-amber-950">Gelişime Açık & Riskli Alanlar</h4>
+                  <h4 className="text-sm font-bold text-amber-950">Nokta Atışı Risk & Kazanım Kaybı Tespitleri</h4>
                 </div>
                 <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full">
-                  {report.risks.length} Dikkat Noktası
+                  {report.risks.length} Kritik Tespit
                 </span>
               </div>
 
@@ -583,7 +841,409 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
 
           </div>
 
-          {/* 3. Bir Sonraki Sınav İçin 3 Maddelik Somut Taktik Reçetesi */}
+          {/* 3. AYLIK / DÖNEMLİK EKSİK KAZANIMLAR & KOÇ TAVSİYELERİ TEŞHİS RAPORU */}
+          <div className="bg-gradient-to-br from-purple-50/90 via-white to-indigo-50/60 border border-purple-200/90 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-purple-200/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8.5 h-8.5 rounded-xl bg-purple-700 text-white flex items-center justify-center text-sm font-black shadow-xs shrink-0">
+                  🎯
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm sm:text-base font-bold text-purple-950">
+                      Kazanım Odaklı Koç Tavsiyeleri & Hata Reçetesi
+                    </h4>
+                    {missingOutcomes.length > 0 ? (
+                      <span className="text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full">
+                        {missingOutcomes.length} Eksik Kazanım Tespit Edildi
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        Kazanım Analizi Aktif
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-purple-900/65 font-medium">
+                    Öğrencinin yanlış ve boş bıraktığı soruların eşleştiği kazanımlara özel pedagojik çalışma ve telafi tavsiyeleri
+                  </p>
+                </div>
+              </div>
+
+              {/* Ders Bazlı Kazanım Kavrama Özeti */}
+              {report.subjectOutcomeSummaries && report.subjectOutcomeSummaries.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {report.subjectOutcomeSummaries.map((s, idx) => (
+                    <span
+                      key={idx}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
+                        s.masteryPercentage >= 85
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : s.masteryPercentage >= 70
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : 'bg-rose-50 text-rose-800 border-rose-200'
+                      }`}
+                    >
+                      {s.subject.split(' ')[0]}: %{s.masteryPercentage}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {missingOutcomes.length > 0 ? (
+              <>
+                {/* ⚡ NOKTA ATIŞI HIZLI KOÇ TAVSİYE ÖZETİ BANNER'I */}
+                <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 rounded-2xl p-3.5 sm:p-4 text-white shadow-md space-y-2 border border-purple-800/80">
+                  <div className="flex items-center justify-between border-b border-purple-800/70 pb-2 flex-wrap gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                      <h5 className="text-xs sm:text-sm font-black text-amber-300 tracking-tight">
+                        ⚡ Nokta Atış Hızlı Koç Özeti (Öncelikli Eylem Adımları)
+                      </h5>
+                    </div>
+                    <span className="text-[10px] font-extrabold bg-amber-400/20 text-amber-200 border border-amber-400/40 px-2 py-0.5 rounded-full">
+                      Özet Telafi Reçetesi
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-0.5">
+                    {/* 1. Kritik Telafi */}
+                    {(() => {
+                      const criticalItem = missingOutcomes.find(m => m.priority === 'critical') || missingOutcomes[0];
+                      return criticalItem ? (
+                        <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/15 space-y-1">
+                          <p className="text-[10px] font-black text-rose-300 flex items-center gap-1">
+                            <span>🎯 1. Öncelikli Telafi:</span>
+                            <span className="truncate font-mono text-[9.5px] bg-rose-950/60 text-rose-200 px-1 rounded">{criticalItem.subject} {criticalItem.code}</span>
+                          </p>
+                          <p className="text-[11px] font-bold text-slate-100 line-clamp-1 leading-snug">
+                            {criticalItem.title}
+                          </p>
+                          <p className="text-[10.5px] text-amber-300 font-extrabold pt-0.5">
+                            💡 15 dk konu tekrarı + 20 yeni nesil soru
+                          </p>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* 2. Çeldirici / Dikkatsizlik veya İkinci Kritik Eylem */}
+                    {(() => {
+                      const attItem = missingOutcomes.find(m => m.diagnosisType === 'dikkat_veya_kavram' || m.priority === 'high') || missingOutcomes[1] || missingOutcomes[0];
+                      return attItem ? (
+                        <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/15 space-y-1">
+                          <p className="text-[10px] font-black text-amber-300 flex items-center gap-1">
+                            <span>🎯 2. Çeldirici & Taktik:</span>
+                            <span className="truncate font-mono text-[9.5px] bg-amber-950/60 text-amber-200 px-1 rounded">{attItem.subject} {attItem.code}</span>
+                          </p>
+                          <p className="text-[11px] font-bold text-slate-100 line-clamp-1 leading-snug">
+                            {attItem.title}
+                          </p>
+                          <p className="text-[10.5px] text-amber-200 font-extrabold pt-0.5">
+                            💡 Soru kökünü yuvarlak içine al, ilk şıkka atlama
+                          </p>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* 3. Haftalık Genel Reçete */}
+                    <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/15 space-y-1">
+                      <p className="text-[10px] font-black text-emerald-300 flex items-center gap-1">
+                        <span>🎯 3. Çalışma Dozu:</span>
+                      </p>
+                      <p className="text-[11px] font-bold text-slate-100 line-clamp-1 leading-snug">
+                        Toplam {missingOutcomes.length} eksik kazanım tespiti
+                      </p>
+                      <p className="text-[10.5px] text-emerald-200 font-extrabold pt-0.5">
+                        💡 Günlük 25 dk odaklı test + Öğretmen analizi
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ders Filtre Sekmeleri */}
+                {outcomeSubjects.length > 1 && (
+                  <div className="flex items-center gap-1.5 flex-wrap print:hidden">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOutcomeSubject('all')}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        selectedOutcomeSubject === 'all'
+                          ? 'bg-purple-700 text-white shadow-2xs'
+                          : 'bg-white text-brand-ink/70 border border-purple-200 hover:bg-purple-50'
+                      }`}
+                    >
+                      Tümü ({missingOutcomes.length})
+                    </button>
+                    {outcomeSubjects.map(sub => {
+                      const count = missingOutcomes.filter(m => m.subject === sub).length;
+                      return (
+                        <button
+                          key={sub}
+                          type="button"
+                          onClick={() => setSelectedOutcomeSubject(sub)}
+                          className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            selectedOutcomeSubject === sub
+                              ? 'bg-purple-700 text-white shadow-2xs'
+                              : 'bg-white text-brand-ink/70 border border-purple-200 hover:bg-purple-50'
+                          }`}
+                        >
+                          {sub} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Eksik Kazanım Kartları Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {displayedMissingOutcomes.map((item, idx) => {
+                    const isCritical = item.priority === 'critical';
+                    const isAttention = item.diagnosisType === 'dikkat_veya_kavram';
+                    const isEmpty = item.emptyCount > 0 && item.wrongCount === 0;
+                    const qListStr = item.questionRefs
+                      .map(q => `Soru ${q.questionNumber} (${q.status === 'wrong' ? `${q.studentAnswer}➔${q.correctAnswer}` : 'Boş'})`)
+                      .join(' • ');
+
+                    const coachActionSteps = isCritical
+                      ? ['15 dk Konu Tekrarı', '20 Yeni Nesil Soru', 'Yanlış Soruyu Öğretmenle İncele']
+                      : isAttention
+                      ? ['Soru Kökünü Dikkatle Oku', 'Çeldirici Şıkkı Ele', '15 Pekiştirme Sorusu']
+                      : isEmpty
+                      ? ['Çözüm Videosunu İzle', 'Örnek Çözümü İncele', '15 Kavrama Sorusu']
+                      : ['20 Soruluk Pekiştirme Testi', 'Yapılamayan Soruları Etütte Analiz Et'];
+
+                    return (
+                      <div
+                        key={`${item.code}-${idx}`}
+                        className={`rounded-2xl p-3.5 border bg-white shadow-2xs flex flex-col justify-between gap-2.5 ${
+                          isCritical
+                            ? 'border-rose-300 ring-1 ring-rose-200/70'
+                            : isAttention
+                            ? 'border-amber-200/90'
+                            : 'border-purple-200/80'
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10.5px] font-extrabold px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 border border-purple-200">
+                                {item.subject}
+                              </span>
+                              <span className="text-[10.5px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200/70">
+                                {item.code}
+                              </span>
+                            </div>
+                            <span className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded-full border ${
+                              isCritical
+                                ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                : isAttention
+                                ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}>
+                              {item.diagnosisLabel}
+                            </span>
+                          </div>
+
+                          <p className="text-xs font-bold text-brand-ink leading-snug">
+                            {item.title}
+                          </p>
+
+                          <p className="text-[11px] text-brand-ink/70 leading-relaxed">
+                            {item.diagnosisNote}
+                          </p>
+
+                          {/* ÖNE ÇIKARILMIŞ NOKTA ATIŞ KOÇ TAVSİYESİ KUTUSU */}
+                          <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-2.5 space-y-1">
+                            <p className="text-[10.5px] font-black text-amber-950 flex items-center gap-1">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              <span>Nokta Atış Telafi Eylemleri:</span>
+                            </p>
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                              {coachActionSteps.map((step, sIdx) => (
+                                <span
+                                  key={sIdx}
+                                  className="bg-white border border-amber-300/80 text-amber-950 px-2 py-0.5 rounded-md shadow-2xs text-[10.5px] font-black flex items-center gap-1"
+                                >
+                                  <span>🎯</span>
+                                  <span>{step}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[10px] font-medium text-brand-ink/60">
+                          <span className="font-mono font-semibold text-rose-700 truncate" title={qListStr}>
+                            📌 {qListStr}
+                          </span>
+                          <span className="truncate shrink-0 max-w-[140px]" title={item.examNames.join(', ')}>
+                            {item.examNames[0]}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {filteredMissingOutcomes.length > 10 && (
+                  <div className="text-center pt-1 print:hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowAllOutcomes(prev => !prev)}
+                      className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-purple-50 text-purple-800 border border-purple-200 text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                    >
+                      {showAllOutcomes
+                        ? 'Daha Az Göster (İlk 10 Kazanım)'
+                        : `Tüm Eksik Kazanımları Göster (+${filteredMissingOutcomes.length - 10} Kazanım Daha)`}
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : report.topWeakOutcomes && report.topWeakOutcomes.length > 0 ? (
+              /* Kazanım listesi henüz tam taranmamış ama topWeakOutcomes mevcutsa fallback */
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  <span>Son Sınav Öncelikli Kazanım Tavsiyeleri:</span>
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {report.topWeakOutcomes.map((w, idx) => (
+                    <div key={idx} className="bg-white border border-purple-200 rounded-xl p-3 shadow-2xs space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-900">{w.subject}</span>
+                        <span className="text-[10px] font-mono font-bold text-indigo-700">{w.code}</span>
+                      </div>
+                      <p className="text-xs font-bold text-brand-ink">{w.desc}</p>
+                      <p className="text-[11px] text-amber-900 bg-amber-50 p-2 rounded-lg border border-amber-200/80 font-medium">
+                        💡 <strong>Koç Tavsiyesi:</strong> Bu kazanımdaki net kaybını telafi etmek için 15 dakika konu özeti tekrarı yapıp 20 adet beceri temelli soru çözün.
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* Hiç eksik kazanım yoksa veya mükemmel kavranmışsa */
+              <div className="bg-white border border-purple-200/80 rounded-2xl p-4 text-center space-y-1">
+                <p className="text-xs font-bold text-purple-950 flex items-center justify-center gap-1.5">
+                  <span>🏆</span>
+                  <span>Harika Başarı! Eksik Kazanım Bulunmuyor</span>
+                </p>
+                <p className="text-[11px] text-brand-ink/70 max-w-md mx-auto">
+                  Öğrencimiz seçili dönem sınavlarında ölçülen tüm temel kazanımları başarıyla kavramıştır. Mevcut net ivmesini korumak için zaman ayarlı branş denemelerine devam edilmesi önerilir.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 4. Ders Dağılım Karnesi ve Okul Ortalaması Kıyaslaması */}
+          {uniqueLessons.length > 0 && (
+            <div className="bg-[#FAF9F6] border border-brand-border/80 rounded-2xl p-3.5 sm:p-4 shadow-2xs">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-brand-border/60 flex-wrap gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">📊</span>
+                  <p className="text-xs sm:text-sm font-bold text-brand-ink">
+                    Detaylı Ders Karnesi & Okul Ortalaması Kıyaslaması
+                  </p>
+                </div>
+                <p className="text-[10px] text-brand-ink/60 font-medium">
+                  {uniqueLessons.length} Ders • Öğrenci Net: <strong>{report.totalNet.toFixed(2)}</strong>
+                  {comp && comp.schoolAvgNet > 0 ? ` • Okul Ort: ${comp.schoolAvgNet.toFixed(2)} Net` : ''}
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs min-w-[480px]">
+                  <thead>
+                    <tr className="text-[10.5px] font-bold text-brand-ink/60 border-b border-brand-border/40">
+                      <th className="py-1.5 px-2">Ders</th>
+                      <th className="py-1.5 px-2 text-center text-emerald-700">D</th>
+                      <th className="py-1.5 px-2 text-center text-rose-600">Y</th>
+                      <th className="py-1.5 px-2 text-center text-amber-700">B</th>
+                      <th className="py-1.5 px-2 text-center font-bold text-brand-ink">Öğrenci Net</th>
+                      {hasSchoolAvgInLessons && (
+                        <>
+                          <th className="py-1.5 px-2 text-center text-indigo-800">Okul Ort.</th>
+                          <th className="py-1.5 px-2 text-center">Ort. Farkı</th>
+                        </>
+                      )}
+                      <th className="py-1.5 px-2 text-center text-blue-800">Dönem Ort.</th>
+                      <th className="py-1.5 px-2 text-right">İsabet</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-border/30 font-mono">
+                    {uniqueLessons.map((l, i) => {
+                      const diff = l.diffFromSchoolAvg;
+                      return (
+                        <tr key={`${l.name}-${i}`} className="hover:bg-white/60 transition-colors">
+                          <td className="py-1.5 px-2 font-sans font-semibold text-brand-ink">{l.name}</td>
+                          <td className="py-1.5 px-2 text-center text-emerald-700 font-bold">{l.correct}</td>
+                          <td className="py-1.5 px-2 text-center text-rose-600 font-bold">{l.wrong}</td>
+                          <td className="py-1.5 px-2 text-center text-amber-700">{l.empty}</td>
+                          <td className="py-1.5 px-2 text-center font-black text-brand-ink">{l.net.toFixed(2)}</td>
+                          {hasSchoolAvgInLessons && (
+                            <>
+                              <td className="py-1.5 px-2 text-center text-indigo-900/80 font-semibold">
+                                {l.schoolAvgNet !== undefined ? l.schoolAvgNet.toFixed(2) : '-'}
+                              </td>
+                              <td className="py-1.5 px-2 text-center">
+                                {diff !== undefined ? (
+                                  <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold ${
+                                    diff >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'
+                                  }`}>
+                                    {diff >= 0 ? '+' : ''}{diff.toFixed(2)}
+                                  </span>
+                                ) : '-'}
+                              </td>
+                            </>
+                          )}
+                          <td className="py-1.5 px-2 text-center text-blue-800 font-semibold">
+                            {l.periodAvgNet !== undefined ? l.periodAvgNet.toFixed(2) : l.net.toFixed(2)}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-sans font-semibold text-brand-ink/70">%{l.accuracy}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {uniqueLessons.length > 1 && (
+                    <tfoot className="border-t-2 border-brand-border/70 font-mono text-[11px] bg-white/70 font-bold">
+                      <tr>
+                        <td className="py-1.5 px-2 font-sans text-brand-ink">Toplam</td>
+                        <td className="py-1.5 px-2 text-center text-emerald-700 font-black">{report.totalCorrect}</td>
+                        <td className="py-1.5 px-2 text-center text-rose-600 font-black">{report.totalWrong}</td>
+                        <td className="py-1.5 px-2 text-center text-amber-700 font-black">{report.totalEmpty}</td>
+                        <td className="py-1.5 px-2 text-center text-brand-ink font-black">{report.totalNet.toFixed(2)}</td>
+                        {hasSchoolAvgInLessons && (
+                          <>
+                            <td className="py-1.5 px-2 text-center text-indigo-900 font-black">
+                              {comp && comp.schoolAvgNet > 0 ? comp.schoolAvgNet.toFixed(2) : '-'}
+                            </td>
+                            <td className="py-1.5 px-2 text-center">
+                              {comp && comp.schoolAvgNet > 0 ? (
+                                <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-black ${
+                                  comp.netDiffFromSchool >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'
+                                }`}>
+                                  {comp.netDiffFromSchool >= 0 ? '+' : ''}{comp.netDiffFromSchool.toFixed(2)}
+                                </span>
+                              ) : '-'}
+                            </td>
+                          </>
+                        )}
+                        <td className="py-1.5 px-2 text-center text-blue-900 font-black">
+                          {comp ? comp.studentPeriodAvgNet.toFixed(2) : report.totalNet.toFixed(2)}
+                        </td>
+                        <td className="py-1.5 px-2 text-right font-sans text-brand-ink/80">
+                          {report.totalCorrect + report.totalWrong > 0 
+                            ? `%${Math.round((report.totalCorrect / (report.totalCorrect + report.totalWrong)) * 100)}` 
+                            : '-'}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 5. Bir Sonraki Sınav İçin 3 Maddelik Somut Taktik Reçetesi */}
           <div className="bg-gradient-to-br from-indigo-50/90 via-white to-blue-50/60 border border-indigo-200/90 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs">
             <div className="flex items-center justify-between pb-3 mb-3 border-b border-indigo-200/60">
               <div className="flex items-center gap-2.5">
@@ -592,10 +1252,10 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
                 </div>
                 <div>
                   <h4 className="text-sm sm:text-base font-bold text-indigo-950">
-                    Bir Sonraki Deneme İçin 3 Maddelik Eylem Planı
+                    Bir Sonraki Deneme İçin 3 Maddelik Nokta Atışı Eylem Planı
                   </h4>
                   <p className="text-[10px] sm:text-xs text-indigo-900/60 font-medium">
-                    Doğrudan puan ve net artışına odaklanmış pedagojik koçluk adımları
+                    Eksik kazanımlar ve okul ortalaması farklarına göre kişiselleştirilmiş çalışma adımları
                   </p>
                 </div>
               </div>
@@ -629,73 +1289,66 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
             </div>
           </div>
 
-          {/* 4. Ders Dağılım Karnesi ve Koç Notu */}
-          {uniqueLessons.length > 0 && (
-            <div className="bg-[#FAF9F6] border border-brand-border/80 rounded-2xl p-3.5 sm:p-4 shadow-2xs">
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-brand-border/60">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm">📊</span>
-                  <p className="text-xs font-bold text-brand-ink">Son Deneme Ders Karnesi</p>
+          {/* 6. Rehberlik Servisi Nokta Atışı Yönlendirme & Kapanış Değerlendirmesi */}
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-md space-y-4 print:bg-white print:text-black print:border print:border-slate-300">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 print:border-slate-300">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-400/20 border border-amber-400/40 text-amber-300 flex items-center justify-center text-base shrink-0">
+                  🧭
                 </div>
-                <p className="text-[10px] text-brand-ink/60 font-medium">
-                  {uniqueLessons.length} Ders • Toplam {report.totalNet.toFixed(2)} Net
-                </p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[320px]">
-                  <thead>
-                    <tr className="text-[10.5px] font-bold text-brand-ink/60 border-b border-brand-border/40">
-                      <th className="py-1.5 px-2">Ders</th>
-                      <th className="py-1.5 px-2 text-center text-emerald-700">D</th>
-                      <th className="py-1.5 px-2 text-center text-rose-600">Y</th>
-                      <th className="py-1.5 px-2 text-center text-amber-700">B</th>
-                      <th className="py-1.5 px-2 text-center font-bold text-brand-ink">Net</th>
-                      <th className="py-1.5 px-2 text-right">İsabet</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-brand-border/30 font-mono">
-                    {uniqueLessons.map((l, i) => (
-                      <tr key={`${l.name}-${i}`} className="hover:bg-white/60 transition-colors">
-                        <td className="py-1.5 px-2 font-sans font-semibold text-brand-ink">{l.name}</td>
-                        <td className="py-1.5 px-2 text-center text-emerald-700 font-bold">{l.correct}</td>
-                        <td className="py-1.5 px-2 text-center text-rose-600 font-bold">{l.wrong}</td>
-                        <td className="py-1.5 px-2 text-center text-amber-700">{l.empty}</td>
-                        <td className="py-1.5 px-2 text-center font-bold text-brand-ink">{l.net.toFixed(2)}</td>
-                        <td className="py-1.5 px-2 text-right font-sans font-semibold text-brand-ink/70">%{l.accuracy}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {uniqueLessons.length > 1 && (
-                    <tfoot className="border-t-2 border-brand-border/70 font-mono text-[11px] bg-white/70 font-bold">
-                      <tr>
-                        <td className="py-1.5 px-2 font-sans text-brand-ink">Toplam</td>
-                        <td className="py-1.5 px-2 text-center text-emerald-700 font-black">{report.totalCorrect}</td>
-                        <td className="py-1.5 px-2 text-center text-rose-600 font-black">{report.totalWrong}</td>
-                        <td className="py-1.5 px-2 text-center text-amber-700 font-black">{report.totalEmpty}</td>
-                        <td className="py-1.5 px-2 text-center text-brand-ink font-black">{report.totalNet.toFixed(2)}</td>
-                        <td className="py-1.5 px-2 text-right font-sans text-brand-ink/80">
-                          {report.totalCorrect + report.totalWrong > 0 
-                            ? `%${Math.round((report.totalCorrect / (report.totalCorrect + report.totalWrong)) * 100)}` 
-                            : '-'}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
+                <div>
+                  <h4 className="text-sm sm:text-base font-bold text-amber-300 print:text-slate-900">
+                    Rehberlik Servisi Nokta Atışı Yönlendirme & Çalışma Reçetesi
+                  </h4>
+                  <p className="text-[10px] sm:text-xs text-white/65 print:text-slate-600">
+                    Genel deneme sonucu, detaylı sınav ortalamaları ve eksik kazanım analizine dayalı bütünsel rehberlik raporu
+                  </p>
+                </div>
               </div>
             </div>
-          )}
 
-          {/* 5. Koç Özeti & Kapanış Değerlendirmesi */}
-          <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-3.5 sm:p-4 shadow-sm flex items-start gap-3 print:bg-white print:text-black print:border print:border-slate-300">
-            <span className="text-xl shrink-0 mt-0.5">💬</span>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-amber-300 print:text-slate-900 mb-0.5">
-                Rehberlik & Mentorluk Değerlendirmesi
-              </p>
-              <p className="text-[11px] sm:text-xs text-white/90 print:text-slate-700 leading-relaxed font-medium">
-                {report.coachSummary}
-              </p>
+            {report.guidancePrescription && report.guidancePrescription.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {report.guidancePrescription.map((gp, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white/5 border border-white/10 rounded-2xl p-3.5 space-y-2 print:bg-slate-50 print:border-slate-200"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-base">{gp.icon}</span>
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 print:text-indigo-900">
+                        {gp.category}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-white print:text-slate-900 leading-snug">
+                      {gp.title}
+                    </p>
+                    <p className="text-[11px] text-white/75 print:text-slate-700 leading-relaxed">
+                      {gp.summary}
+                    </p>
+                    <ul className="space-y-1.5 pt-1 border-t border-white/10 print:border-slate-200">
+                      {gp.bullets.map((b, bIdx) => (
+                        <li key={bIdx} className="text-[11px] text-white/90 print:text-slate-800 leading-relaxed flex items-start gap-1.5">
+                          <span className="text-amber-400 print:text-indigo-700 font-bold shrink-0">•</span>
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="bg-amber-400/10 border border-amber-400/30 rounded-2xl p-3.5 flex items-start gap-3 print:bg-amber-50 print:border-amber-200">
+              <span className="text-xl shrink-0 mt-0.5">💬</span>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-amber-300 print:text-slate-900 mb-0.5">
+                  Rehber Öğretmen & Akademik Koç Değerlendirmesi
+                </p>
+                <p className="text-[11px] sm:text-xs text-white/95 print:text-slate-800 leading-relaxed font-medium">
+                  {report.coachSummary}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -704,7 +1357,7 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
         {/* Alt Butonlar */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-[#FAF9F6] border-t border-brand-border/70 shrink-0 print:hidden">
           <div className="text-[11px] text-brand-ink/60 font-medium truncate mr-2">
-            Akademi Arena Rehberlik Sistemi • 2026 LGS Projeksiyonu
+            Akademi Arena AI Rehberlik & Kazanım Analiz Sistemi • 2026 LGS Projeksiyonu
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button

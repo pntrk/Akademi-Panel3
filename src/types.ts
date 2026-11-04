@@ -61,6 +61,37 @@ export interface BaseExam {
   layoutType?: 'standard' | 'split';
   format?: 'lgs' | 'mebi' | 'tyt' | 'ayt';
   results?: ExamResult[];
+  learningOutcomes?: ExamLearningOutcomes;
+}
+
+// Soru bazlı kazanım eşleştirme nesnesi
+export interface QuestionOutcome {
+  id: string;
+  questionNumber: number; // Global 1-tabanlı soru numarası (1, 2, 3...)
+  subjectQuestionNumber?: number; // Ders içi 1-tabanlı soru numarası (1..20)
+  subjectName?: string;   // Örn: "Türkçe", "Matematik", "Fen Bilimleri"
+  code?: string;          // Örn: "T.8.1.2", "M.8.2.1"
+  title: string;          // Kazanım metni / açıklaması
+  unit?: string;          // Konu / Ünite (opsiyonel)
+  topic?: string;         // Konu alt başlığı (opsiyonel)
+  correctAnswer?: string; // Doğru seçenek ('A', 'B', 'C', 'D' vb.)
+
+  // Backwards-compatibility aliases for legacy outcome modules
+  qIndex?: number;
+  altQIndex?: number;
+  outcomeCode?: string;
+  outcomeDesc?: string;
+  subject?: string;
+}
+
+export type QuestionOutcomeItem = QuestionOutcome;
+
+// Bir sınav için tanımlı kazanım listesi ve meta verileri
+export interface ExamLearningOutcomes {
+  updatedAt?: string;
+  sourceFile?: string;
+  sourceType?: 'excel' | 'xml' | 'manual';
+  items: QuestionOutcome[];
 }
 
 // Okul İçi (internal) Deneme Sınavı
@@ -111,6 +142,7 @@ export interface Exam {
   studentList?: (Student | OmrStudent)[];
   omrMap?: any; // Titizlikle saklanan milimetrik OMR koordinat ve şablon haritası
   results?: ExamResult[];
+  learningOutcomes?: ExamLearningOutcomes; // Kazanım tablosu ve soru eşleştirmeleri
 }
 
 export interface LessonDetail {

@@ -1,0 +1,1091 @@
+<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+  <Title>Untitled Spreadsheet</Title>
+  <Author>Unknown Creator</Author>
+  <LastAuthor>ATATÜRK ORTAOKULU</LastAuthor>
+  <Created>2026-05-19T10:40:33Z</Created>
+  <LastSaved>2026-05-19T10:40:33Z</LastSaved>
+  <Version>16.00</Version>
+ </DocumentProperties>
+ <OfficeDocumentSettings xmlns="urn:schemas-microsoft-com:office:office">
+  <AllowPNG/>
+ </OfficeDocumentSettings>
+ <ExcelWorkbook xmlns="urn:schemas-microsoft-com:office:excel">
+  <WindowHeight>12315</WindowHeight>
+  <WindowWidth>28800</WindowWidth>
+  <WindowTopX>0</WindowTopX>
+  <WindowTopY>0</WindowTopY>
+  <ProtectStructure>False</ProtectStructure>
+  <ProtectWindows>False</ProtectWindows>
+ </ExcelWorkbook>
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Bottom"/>
+   <Borders/>
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
+   <Interior/>
+   <NumberFormat/>
+   <Protection/>
+  </Style>
+  <Style ss:ID="s16">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#6060FF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="s17">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#9090FF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="s18">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Bottom"/>
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#6060FF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="s19">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Bottom"/>
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#9090FF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="s20">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Bottom"/>
+  </Style>
+  <Style ss:ID="s21">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Bottom"/>
+   <Interior ss:Color="#C0C0FF" ss:Pattern="Solid"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="Worksheet">
+  <Table ss:ExpandedColumnCount="15" ss:ExpandedRowCount="93" x:FullColumns="1"
+   x:FullRows="1" ss:DefaultRowHeight="15">
+   <Column ss:StyleID="s20" ss:AutoFitWidth="0" ss:Width="42"/>
+   <Column ss:AutoFitWidth="0" ss:Width="94.5" ss:Span="1"/>
+   <Column ss:Index="4" ss:StyleID="s20" ss:AutoFitWidth="0" ss:Width="42"
+    ss:Span="2"/>
+   <Column ss:Index="7" ss:AutoFitWidth="0" ss:Width="63"/>
+   <Column ss:AutoFitWidth="0" ss:Width="393.75" ss:Span="5"/>
+   <Column ss:Index="14" ss:AutoFitWidth="0" ss:Width="52.5" ss:Span="1"/>
+   <Row>
+    <Cell ss:StyleID="s18"><Data ss:Type="String">ANKARA</Data></Cell>
+    <Cell ss:StyleID="s16"/>
+    <Cell ss:StyleID="s16"><Data ss:Type="String">8. SINIF LGS 9.DENEME (1 KALA)</Data></Cell>
+    <Cell ss:StyleID="s18"/>
+    <Cell ss:StyleID="s18"/>
+    <Cell ss:StyleID="s18"/>
+    <Cell ss:StyleID="s16"/>
+    <Cell ss:StyleID="s16"/>
+    <Cell ss:StyleID="s16"/>
+    <Cell ss:StyleID="s16"/>
+    <Cell ss:StyleID="s16"/>
+    <Cell ss:StyleID="s16"/>
+    <Cell ss:StyleID="s16"/>
+   </Row>
+   <Row>
+    <Cell ss:StyleID="s19"><Data ss:Type="String">10520</Data></Cell>
+    <Cell ss:StyleID="s17"/>
+    <Cell ss:StyleID="s17"><Data ss:Type="String">8.Sınıf</Data></Cell>
+    <Cell ss:StyleID="s19"/>
+    <Cell ss:StyleID="s19"/>
+    <Cell ss:StyleID="s19"/>
+    <Cell ss:StyleID="s17"/>
+    <Cell ss:StyleID="s17"/>
+    <Cell ss:StyleID="s17"/>
+    <Cell ss:StyleID="s17"/>
+    <Cell ss:StyleID="s17"/>
+    <Cell ss:StyleID="s17"/>
+    <Cell ss:StyleID="s17"/>
+   </Row>
+   <Row>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Kitapçık</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Test</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Ders</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">A Soru</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">B Soru</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Cevap</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Kazanım Kodu</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Kazanım-1</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Kazanım-2</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Kazanım-3</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Kazanım-4</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Kazanım-5</Data></Cell>
+    <Cell ss:StyleID="s21"><Data ss:Type="String">Kazanım-6</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="Number">20</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.7</Data></Cell>
+    <Cell><Data ss:Type="String">Metindeki yardımcı fikirleri belirler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="Number">19</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.16</Data></Cell>
+    <Cell><Data ss:Type="String">Yazdıklarını düzenler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="Number">18</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.14</Data></Cell>
+    <Cell><Data ss:Type="String">Okudukları ile ilgili çıkarımlarda bulunur.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="Number">17</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.2.1</Data></Cell>
+    <Cell><Data ss:Type="String">Bağlamdan yararlanarak bilmediği kelime ve kelime gruplarının anlamını tahmin eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="Number">16</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.14</Data></Cell>
+    <Cell><Data ss:Type="String">Okudukları ile ilgili çıkarımlarda bulunur.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="Number">15</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.2.3</Data></Cell>
+    <Cell><Data ss:Type="String">Metindeki söz sanatlarını tespit eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="Number">14</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.2.7</Data></Cell>
+    <Cell><Data ss:Type="String">Metindeki anlatım biçimlerini belirler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="Number">13</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.2.1</Data></Cell>
+    <Cell><Data ss:Type="String">Bağlamdan yararlanarak bilmediği kelime ve kelime gruplarının anlamını tahmin eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="Number">12</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.24</Data></Cell>
+    <Cell><Data ss:Type="String">Metindeki iş ve işlem basamaklarını kavrar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="Number">11</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.15</Data></Cell>
+    <Cell><Data ss:Type="String">Metin türlerini ayırt eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">11</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.11</Data></Cell>
+    <Cell><Data ss:Type="String">Metinde ele alınan sorunlara farklı çözümler üretir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">12</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.16</Data></Cell>
+    <Cell><Data ss:Type="String">Görsellerle ilgili soruları cevaplar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">13</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.21</Data></Cell>
+    <Cell><Data ss:Type="String">Grafik, tablo ve çizelgeyle sunulan bilgileri yorumlar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">14</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.2.1</Data></Cell>
+    <Cell><Data ss:Type="String">Bağlamdan yararlanarak bilmediği kelime ve kelime gruplarının anlamını tahmin eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">15</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.9</Data></Cell>
+    <Cell><Data ss:Type="String">Okuduğu metinlerdeki hikâye unsurlarını belirler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">16</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.6</Data></Cell>
+    <Cell><Data ss:Type="String">Metnin ana fikrini/ana duygusunu belirler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">17</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.19</Data></Cell>
+    <Cell><Data ss:Type="String">Cümle türlerini tanır.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">18</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.2.5</Data></Cell>
+    <Cell><Data ss:Type="String">Fiilimsilerin cümledeki işlevlerini kavrar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">19</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.20</Data></Cell>
+    <Cell><Data ss:Type="String">Fiillerin çatı özelliklerinin anlama olan katkısını kavrar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TÜR)</Data></Cell>
+    <Cell><Data ss:Type="String">Türkçe</Data></Cell>
+    <Cell><Data ss:Type="Number">20</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.16</Data></Cell>
+    <Cell><Data ss:Type="String">Yazdıklarını düzenler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.1.1</Data></Cell>
+    <Cell><Data ss:Type="String">Avrupa'daki gelişmelerin yansımaları bağlamında Osmanlı Devleti'nin yirminci yüzyılın başlarındaki siyasi ve sosyal durumunu kavrar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.1.6</Data></Cell>
+    <Cell><Data ss:Type="String">Lozan Antlaşması'nın sağladığı kazanımları analiz eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.6</Data></Cell>
+    <Cell><Data ss:Type="String">Ekonomi alanında meydana gelen gelişmeleri kavrar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.1</Data></Cell>
+    <Cell><Data ss:Type="String">Çağdaşlaşan Türkiye'nin temeli olan Atatürk ilkelerini açıklar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.5.1.1</Data></Cell>
+    <Cell><Data ss:Type="String">Atatürk Dönemi'ndeki demokratikleşme yolunda atılan adımları açıklar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.1.2</Data></Cell>
+    <Cell><Data ss:Type="String">Birinci Dünya Savaşı'nda Osmanlı Devleti'nin durumu hakkında çıkarımlarda bulunur.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.1.2</Data></Cell>
+    <Cell><Data ss:Type="String">Millî Mücadele Dönemi'nde Batı Cephesi'nde meydana gelen gelişmeleri kavrar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.1.8</Data></Cell>
+    <Cell><Data ss:Type="String">Mustafa Kemal'in ve Türk milletinin Sevr Antlaşması'na karşı tepkilerini değerlendirir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.1.6</Data></Cell>
+    <Cell><Data ss:Type="String">Misakımilli'nin kabulünü ve Büyük Millet Meclisinin açılışını vatanın bütünlüğü esası ile &quot;&quot;ulusal egemenlik&quot;&quot; ve &quot;&quot;tam bağımsızlık&quot;&quot; ilkeleri ile ilişkilendirir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (TAR)</Data></Cell>
+    <Cell><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.6.1.3</Data></Cell>
+    <Cell><Data ss:Type="String">Atatürk'ün Hatay'ı ülkemize katmak konusunda yaptıklarına ve bu uğurda gösterdiği özveriye kanıtlar gösterir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.1.1</Data></Cell>
+    <Cell><Data ss:Type="String">Kader ve kaza inancını ayet ve hadislerle açıklar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.1.3</Data></Cell>
+    <Cell><Data ss:Type="String">Kaza ve kader ile ilgili kavramları analiz eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.1.1</Data></Cell>
+    <Cell><Data ss:Type="String">İslam'ın paylaşma ve yardımlaşmaya verdiği önemi ayet ve hadisler ışığında yorumlar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.1.3</Data></Cell>
+    <Cell><Data ss:Type="String">Zekât, infak ve sadakanın bireysel ve toplumsal önemini fark eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.2</Data></Cell>
+    <Cell><Data ss:Type="String">Hz. Muhammed'in (s.a.v.) merhametli ve affedici oluşunu davranışlarında yansıtmaya özen gösterir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.1.2</Data></Cell>
+    <Cell><Data ss:Type="String">İslam dininin can, nesil, akıl, mal ve din emniyetiyle ilgili ortaya koyduğu ilke ve hedefleri analiz eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.9</Data></Cell>
+    <Cell><Data ss:Type="String">Kureyş suresini okur, anlamını söyler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.8</Data></Cell>
+    <Cell><Data ss:Type="String">Hz. Muhammed'in (s.a.v.) hikmetli söz ve davranışlarıyla insanları iyiye ve güzele yönlendirdiğini fark eder.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.5.1.1</Data></Cell>
+    <Cell><Data ss:Type="String">İslam dininin temel kaynaklarını tanır.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (DİN)</Data></Cell>
+    <Cell><Data ss:Type="String">Din K.ve A.B.</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.5.1.4</Data></Cell>
+    <Cell><Data ss:Type="String">Hz. Nuh'un (a.s.) tevhide davetini özetler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.4.1</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to understand short and simple texts about friendship.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.4.1</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to understand the overall meaning of short texts about a process.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.3.1</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to express what they prefer, like and dislike.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.6.2.2</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to talk about comparisons, preferences and their reasons.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.9.3.2</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to present information about scientific achievements in a simple way.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.7.3.1</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to express their preferences for particular tourist attractions and give reasons.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.5.2.1</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to talk about their Internet habits.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.4.1</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to understand short and simple texts with related vocabulary.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.10.4.1</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to identify specific information in simple texts about natural forces and disasters.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sözel (İNG)</Data></Cell>
+    <Cell><Data ss:Type="String">İngilizce</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.8.4.1</Data></Cell>
+    <Cell><Data ss:Type="String">Students will be able to understand various short and simple texts about responsibilities.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="Number">20</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.2.2</Data></Cell>
+    <Cell><Data ss:Type="String">Nokta, doğru parçası ve diğer şekillerin yansıma sonucu oluşan görüntüsünü oluşturur.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="Number">19</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.3.1</Data></Cell>
+    <Cell><Data ss:Type="String">Tam kare pozitif tam sayılarla bu sayıların karekökleri arasındaki ilişkiyi belirler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="Number">18</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.2.2</Data></Cell>
+    <Cell><Data ss:Type="String">Üslü ifadelerle ilgili temel kuralları anlar, birbirine denk ifadeler oluşturur.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="Number">17</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.1.5</Data></Cell>
+    <Cell><Data ss:Type="String">Pisagor bağıntısını oluşturur, ilgili problemleri çözer.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="Number">16</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.1.4</Data></Cell>
+    <Cell><Data ss:Type="String">Cebirsel ifadeleri çarpanlara ayırır.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="Number">15</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.2.6</Data></Cell>
+    <Cell><Data ss:Type="String">Doğrunun eğimini modellerle açıklar, doğrusal denklemleri ve grafiklerini eğimle ilişkilendirir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="Number">14</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.2.5</Data></Cell>
+    <Cell><Data ss:Type="String">Doğrusal ilişki içeren gerçek hayat durumlarına ait denklem, tablo ve grafiği oluşturur ve yorumlar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="Number">13</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.3.1</Data></Cell>
+    <Cell><Data ss:Type="String">Eşlik ve benzerliği ilişkilendirir, eş ve benzer şekillerin kenar ve açı ilişkilerini belirler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="Number">12</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.1.4</Data></Cell>
+    <Cell><Data ss:Type="String">Cebirsel ifadeleri çarpanlara ayırır.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="Number">11</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.3.3</Data></Cell>
+    <Cell><Data ss:Type="String">Birinci dereceden bir bilinmeyenli eşitsizlikleri çözer.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">11</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.4.1</Data></Cell>
+    <Cell><Data ss:Type="String">Dik prizmaları tanır, temel elemanlarını belirler, inşa eder ve açınımını çizer.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">12</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.4.4</Data></Cell>
+    <Cell><Data ss:Type="String">Dik dairesel silindirin hacim bağıntısını oluşturur; ilgili problemleri çözer.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">13</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.3.7</Data></Cell>
+    <Cell><Data ss:Type="String">Ondalık ifadelerin kareköklerini belirler.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">14</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.2</Data></Cell>
+    <Cell><Data ss:Type="String">Verileri sütun, daire veya çizgi grafiği ile gösterir ve bu gösterimler arasında uygun olan dönüşümleri yapar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">15</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.2.1</Data></Cell>
+    <Cell><Data ss:Type="String">Birinci dereceden bir bilinmeyenli denklemleri çözer.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">16</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.3.3</Data></Cell>
+    <Cell><Data ss:Type="String">Kareköklü bir ifadeyi a kök b şeklinde yazar ve a kök b şeklindeki ifadede katsayıyı kök içine alır.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">17</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.5.1.5</Data></Cell>
+    <Cell><Data ss:Type="String">Basit bir olayın olma olasılığını hesaplar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">18</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.3.5</Data></Cell>
+    <Cell><Data ss:Type="String">Kareköklü ifadelerde toplama ve çıkarma işlemlerini yapar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">19</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.1.3</Data></Cell>
+    <Cell><Data ss:Type="String">Üçgenin kenar uzunlukları ile bu kenarların karşısındaki açıların ölçülerini ilişkilendirir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (MAT)</Data></Cell>
+    <Cell><Data ss:Type="String">Matematik</Data></Cell>
+    <Cell><Data ss:Type="Number">20</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.1.2</Data></Cell>
+    <Cell><Data ss:Type="String">Üçgenin iki kenar uzunluğunun toplamı veya farkı ile üçüncü kenarının uzunluğunu ilişkilendirir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="Number">20</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.1.1, 8.2.1.1.1, 8.2.1.1.2, 8.2.1.1.3, 8.2.1.1.</Data></Cell>
+    <Cell><Data ss:Type="String">Nükleotid, gen, DNA ve kromozom kavramlarını açıklayarak bu kavramlar arasında ilişki kurar.</Data></Cell>
+    <Cell><Data ss:Type="String">Kromozom kavramını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Kromozomun yapısını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">DNA kavramını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">DNA'nın yapısını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Gen kavramını açıklar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="Number">19</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.4.1, 8.2.4.1.2, 8.2.4.1.3</Data></Cell>
+    <Cell><Data ss:Type="String">Canlıların yaşadıkları çevreye uyumlarını gözlem yaparak açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Adaptasyon kavramını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Canlılarda görülen adaptasyonlara örnekler verir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="Number">18</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.2.2.2, 8.2.2.2.1, 8.2.2.2.3</Data></Cell>
+    <Cell><Data ss:Type="String">Tek karakter çaprazlamaları ile ilgili problemler çözerek sonuçlar hakkında yorum yapar.</Data></Cell>
+    <Cell><Data ss:Type="String">Tek karakter çaprazlamaları ile ilgili problemler çözer.</Data></Cell>
+    <Cell><Data ss:Type="String">Çaprazlamalarda sadece bezelye karakterleri kullanılır.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="Number">17</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.6.1.1, 8.6.1.1.3, 8.6.1.1.7, 8.6.1.1.8, 8.6.1.1.</Data></Cell>
+    <Cell><Data ss:Type="String">Besin zincirindeki üretici, tüketici, ayrıştırıcılara örnekler verir.</Data></Cell>
+    <Cell><Data ss:Type="String">Ekoloji piramidi kavramını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Ekoloji piramitlerinin basamaklarındaki biyolojik birikimin değişimini açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Parazit besin zincirlerine değinilmez.</Data></Cell>
+    <Cell><Data ss:Type="String">Besin piramitlerinde enerji aktarımı, vücut büyüklüğü, birey sayısı ve biyolojik birikim vurgulanır.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="Number">16</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.6.3.3, 8.6.3.3.4, 8.6.4.1</Data></Cell>
+    <Cell><Data ss:Type="String">Küresel iklim değişikliklerinin nedenlerini ve olası sonuçlarını tartışır.</Data></Cell>
+    <Cell><Data ss:Type="String">Öğrencilerin ekolojik ayak izini hesaplaması (uzantısı edu, org ve mil gibi güvenli sitelerden yararlanılabilinir) sağlanır.</Data></Cell>
+    <Cell><Data ss:Type="String">Kaynakların kullanımında tasarruflu davranmaya özen gösterir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="Number">15</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.6.2.2</Data></Cell>
+    <Cell><Data ss:Type="String">Fotosentez hızını etkileyen faktörler ile ilgili çıkarımlarda bulunur.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="Number">14</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.5.1.1, 8.5.1.1.1, 8.5.1.1.6, 8.5.1.1.12, 8.5.1.1</Data></Cell>
+    <Cell><Data ss:Type="String">Basit makinelerin sağladığı avantajları örnekler üzerinden açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Basit makine kavramını tanımlar.</Data></Cell>
+    <Cell><Data ss:Type="String">Sabit makarayı tanımlar.</Data></Cell>
+    <Cell><Data ss:Type="String">Çıkrığı tanımlar.</Data></Cell>
+    <Cell><Data ss:Type="String">Basit makinelerden, sabit makara, hareketli makara, palanga, kaldıraç, eğik düzlem ve çıkrık üzerinde durulur.</Data></Cell>
+    <Cell><Data ss:Type="String">Basit makinelerden yararlanarak günlük yaşamda iş kolaylığı sağlayacak bir düzenek tasarlar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="Number">13</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.4.3, 8.4.4.4</Data></Cell>
+    <Cell><Data ss:Type="String">Günlük hayatta ulaşılabilecek malzemeleri asit-baz ayracı olarak kullanır.</Data></Cell>
+    <Cell><Data ss:Type="String">Maddelerin asitlik ve bazlık durumlarına ilişkin pH değerlerini kullanarak çıkarımda bulunur.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="Number">12</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.5.1.1, 8.5.1.1.1, 8.5.1.1.6, 8.5.1.1.7, 8.5.1.1.</Data></Cell>
+    <Cell><Data ss:Type="String">Basit makinelerin sağladığı avantajları örnekler üzerinden açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Basit makine kavramını tanımlar.</Data></Cell>
+    <Cell><Data ss:Type="String">Sabit makarayı tanımlar.</Data></Cell>
+    <Cell><Data ss:Type="String">Hareketli makarayı tanımlar.</Data></Cell>
+    <Cell><Data ss:Type="String">Basit makinelerden, sabit makara, hareketli makara, palanga, kaldıraç, eğik düzlem ve çıkrık üzerinde durulur.</Data></Cell>
+    <Cell><Data ss:Type="String">Matematiksel bağıntılara girilmez.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="Number">11</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.7.1.1,8.7.1.2</Data></Cell>
+    <Cell><Data ss:Type="String">Elektriklenmeyi, bazı doğa olayları ve teknolojideki uygulama örnekleri ile açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Elektrik yüklerini sınıflandırarak aynı ve farklı cins elektrik yüklerinin birbirlerine etkisini açıklar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">11</Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.1.1, 8.3.1.1.1, 8.3.1.1.2, 8.3.1.1.4, 8.3.1.1.</Data></Cell>
+    <Cell><Data ss:Type="String">Katı basıncını etkileyen değişkenleri deneyerek keşfeder.</Data></Cell>
+    <Cell><Data ss:Type="String">Cisimlerin ağırlıkları nedeniyle bulundukları yüzeye kuvvet uyguladıklarını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Birim yüzeye dik etki eden kuvvetin basınç olduğu tanımını yapar.</Data></Cell>
+    <Cell><Data ss:Type="String">Katılarda basıncı etkileyen faktörleri listeler.</Data></Cell>
+    <Cell><Data ss:Type="String">Kuvvet ile basınç arasındaki ilişkiyi açıklar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">12</Data></Cell>
+    <Cell><Data ss:Type="Number">9</Data></Cell>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">8.7.3.2</Data></Cell>
+    <Cell><Data ss:Type="String">Elektrik enerjisinin ısı, ışık veya hareket enerjisine dönüşümü temel alan bir model tasarlar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">13</Data></Cell>
+    <Cell><Data ss:Type="Number">8</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.6.3.1, 8.6.3.1.5</Data></Cell>
+    <Cell><Data ss:Type="String">Madde döngülerini şema üzerinde göstererek açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Karbon döngüsünü şema üzerinde göstererek açıklar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">14</Data></Cell>
+    <Cell><Data ss:Type="Number">7</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.7.1.2</Data></Cell>
+    <Cell><Data ss:Type="String">Elektrik yüklerini sınıflandırarak aynı ve farklı cins elektrik yüklerinin birbirlerine etkisini açıklar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">15</Data></Cell>
+    <Cell><Data ss:Type="Number">6</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.5.1, 8.4.5.1.1</Data></Cell>
+    <Cell><Data ss:Type="String">Isınmanın maddenin cinsine, kütlesine ve/veya sıcaklık değişimine bağlı olduğunu deney yaparak keşfeder.</Data></Cell>
+    <Cell><Data ss:Type="String">Q=m.c. Δt bağıntısına girilmez.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">16</Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.2.1, 8.4.2.1.1, 8.4.2.1.2, 8.4.2.1.3, 8.4.2.1.</Data></Cell>
+    <Cell><Data ss:Type="String">Fiziksel ve kimyasal değişim arasındaki farkları, çeşitli olayları gözlemleyerek açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Fiziksel değişim kavramını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Fiziksel değişim olaylarına örnek verir.</Data></Cell>
+    <Cell><Data ss:Type="String">Kimyasal değişim kavramını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Kimyasal değişim olaylarına örnek verir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">17</Data></Cell>
+    <Cell><Data ss:Type="Number">4</Data></Cell>
+    <Cell><Data ss:Type="String">D</Data></Cell>
+    <Cell><Data ss:Type="String">8.3.1.2, 8.3.1.2.3, 8.3.1.2.4, 8.3.1.2.5, 8.3.1.2.</Data></Cell>
+    <Cell><Data ss:Type="String">Sıvı basıncını etkileyen değişkenleri tahmin eder ve tahminlerini test eder.</Data></Cell>
+    <Cell><Data ss:Type="String">Sıvılarda basıncı etkileyen faktörleri listeler.</Data></Cell>
+    <Cell><Data ss:Type="String">Sıvı basıncı ile derinlik ilişkisini açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Sıvı basıncı ile sıvının yoğunluğu arasındaki ilişkiyi açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Matematiksel bağıntılara girilmez.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">18</Data></Cell>
+    <Cell><Data ss:Type="Number">3</Data></Cell>
+    <Cell><Data ss:Type="String">B</Data></Cell>
+    <Cell><Data ss:Type="String">8.1.1.1, 8.1.1.1.1, 8.1.1.1.2, 8.1.1.1.3, 8.1.1.1.</Data></Cell>
+    <Cell><Data ss:Type="String">Mevsimlerin oluşumuna yönelik tahminlerde bulunur.</Data></Cell>
+    <Cell><Data ss:Type="String">Mevsim kavramını açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Mevsimlerin oluşumunu sağlayan olayları açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Dünya'da mevsimlerin sürelerini söyler.</Data></Cell>
+    <Cell><Data ss:Type="String">Güney yarım küre ile kuzey yarım kürenin aynı anda farklı mevsimler yaşadığını açıklar.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">19</Data></Cell>
+    <Cell><Data ss:Type="Number">2</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.1.2, 8.4.1.2.2, 8.4.1.2.5, 8.4.1.2.8</Data></Cell>
+    <Cell><Data ss:Type="String">Elementleri periyodik tablo üzerinde metal, yarımetal ve ametal olarak sınıflandırır.</Data></Cell>
+    <Cell><Data ss:Type="String">Metallerin periyodik sistemdeki yerini açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Ametallerin periyodik sistemdeki yerini açıklar.</Data></Cell>
+    <Cell><Data ss:Type="String">Yarı metallerin periyodik sistemdeki yerini belirtir.</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">A</Data></Cell>
+    <Cell><Data ss:Type="String">Sayısal (FEN)</Data></Cell>
+    <Cell><Data ss:Type="String">Fen</Data></Cell>
+    <Cell><Data ss:Type="Number">20</Data></Cell>
+    <Cell><Data ss:Type="Number">1</Data></Cell>
+    <Cell><Data ss:Type="String">C</Data></Cell>
+    <Cell><Data ss:Type="String">8.4.5.2, 8.4.5.2.1, 8.4.5.2.2</Data></Cell>
+    <Cell><Data ss:Type="String">Hâl değiştirmek için gerekli ısının maddenin cinsi ve kütlesiyle ilişkili olduğunu deney yaparak keşfeder.</Data></Cell>
+    <Cell><Data ss:Type="String">Saf maddelerin hâl değişimi sırasında sıcaklığının sabit kaldığına değinilir.</Data></Cell>
+    <Cell><Data ss:Type="String">Matematiksel hesaplamalara girilmez.</Data></Cell>
+   </Row>
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <PageSetup>
+    <Header x:Margin="0.3"/>
+    <Footer x:Margin="0.3"/>
+    <PageMargins x:Bottom="0.75" x:Left="0.7" x:Right="0.7" x:Top="0.75"/>
+   </PageSetup>
+   <Print>
+    <ValidPrinterInfo/>
+    <NoOrientation/>
+    <HorizontalResolution>600</HorizontalResolution>
+    <VerticalResolution>600</VerticalResolution>
+   </Print>
+   <Selected/>
+   <Panes>
+    <Pane>
+     <Number>3</Number>
+     <ActiveRow>2</ActiveRow>
+    </Pane>
+   </Panes>
+   <ProtectObjects>False</ProtectObjects>
+   <ProtectScenarios>False</ProtectScenarios>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>

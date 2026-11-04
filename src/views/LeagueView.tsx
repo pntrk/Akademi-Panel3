@@ -65,6 +65,7 @@ export const LeagueView = () => {
   const [activeTacticsMonth, setActiveTacticsMonth] = useState<number>(0);
   const [isTacticsMonthOpen, setIsTacticsMonthOpen] = useState(false);
   const [tacticsTeamFilter, setTacticsTeamFilter] = useState<'all' | 'kutup' | 'sicrama' | 'taktik' | 'ortak'>('all');
+  const [tacticsActiveTab, setTacticsActiveTab] = useState<'kazanim' | 'takim'>('kazanim');
 
   // Auto-fetch partitioned month data when user selects a specific month
   useEffect(() => {
@@ -256,14 +257,18 @@ export const LeagueView = () => {
         // Son yüklenen veya daha detaylı olan sınav sonucu geçerli kabul edilir
         const existing = list[existingIdx];
         const preferDate = (item.date && item.date.trim()) ? item.date : existing.date;
-        const preferDetails = item.details || existing.details;
+        const preferDetails = (item.details && Object.keys(item.details).length > 0) ? item.details : (existing.details || item.details);
         const preferScore = item.score > 0 ? item.score : existing.score;
+        const itemHasRichRes = Boolean(item.examRes?.answers?.length || item.examRes?.evaluatedScore);
+        const existingHasRichRes = Boolean(existing.examRes?.answers?.length || existing.examRes?.evaluatedScore);
+        const preferExamRes = itemHasRichRes ? item.examRes : (existingHasRichRes ? existing.examRes : (item.examRes || existing.examRes));
         list[existingIdx] = {
           ...existing,
           ...item,
           date: preferDate,
           details: preferDetails,
-          score: preferScore
+          score: preferScore,
+          examRes: preferExamRes
         };
       } else {
         list.push(item);
@@ -599,12 +604,47 @@ export const LeagueView = () => {
         ? embeddedDate
         : (matched?.date || e.date || embeddedDate || '');
 
+      let monthKey = '';
+      if (resolvedDate) {
+        const dObj = parseDate(resolvedDate);
+        if (!isNaN(dObj.getTime())) {
+          monthKey = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}`;
+        }
+      }
+
+      // Sınavın kendi results dizisinden öğrencinin ham cevaplarını ve kitapçık bilgisini doğrudan yakala
+      let directExamRes = e.examRes;
+      if (matched && Array.isArray(matched.results)) {
+        const foundInExam = matched.results.find((r: any) => {
+          const rNo = Number(r.no ?? r.studentNo ?? 0);
+          if (sNo > 0 && rNo === sNo) return true;
+          if (sId && (String(r.studentId || '') === sId || String(r.id || '') === sId)) return true;
+          const rName = normalizeTurkish(r.name || r.studentName || '').trim().toLowerCase();
+          return Boolean(sNameNorm && rName === sNameNorm);
+        });
+        if (foundInExam) {
+          directExamRes = foundInExam;
+        }
+      }
+
       const canonKey = matched ? String(matched.id) : (e.examId ? String(e.examId) : `${e.name}_${resolvedDate}`);
       const itemWithCanon = {
         ...e,
         date: resolvedDate,
+        monthKey,
         name: matched?.name || e.name,
-        examId: matched ? String(matched.id) : (e.examId || canonKey)
+        examId: matched ? String(matched.id) : (e.examId || canonKey),
+        examDef: matched,
+        learningOutcomes: matched?.learningOutcomes,
+        keys: matched?.keys,
+        examRes: directExamRes || e.examRes,
+        answers: directExamRes?.answers || e.examRes?.answers || [],
+        booklet: directExamRes?.booklet || e.examRes?.booklet || 'A',
+        details: directExamRes?.evaluatedScore?.subjectScores || directExamRes?.details?.lessons || e.details,
+        net: directExamRes?.evaluatedScore?.total?.net ?? directExamRes?.net ?? e.examRes?.net,
+        totalCorrect: directExamRes?.evaluatedScore?.total?.correct ?? directExamRes?.totalCorrect ?? e.examRes?.totalCorrect,
+        totalWrong: directExamRes?.evaluatedScore?.total?.wrong ?? directExamRes?.totalWrong ?? e.examRes?.totalWrong,
+        totalEmpty: directExamRes?.evaluatedScore?.total?.empty ?? directExamRes?.totalEmpty ?? e.examRes?.totalEmpty
       };
 
       if (!examListMap.has(canonKey)) {
@@ -614,12 +654,18 @@ export const LeagueView = () => {
         const betterDate = resolvedDate || existing.date;
         const betterDetails = itemWithCanon.details || existing.details;
         const betterScore = itemWithCanon.score > 0 ? itemWithCanon.score : existing.score;
+        const betterAnswers = (itemWithCanon.answers && itemWithCanon.answers.length > 0) ? itemWithCanon.answers : existing.answers;
+        const betterExamRes = (itemWithCanon.examRes?.answers?.length || itemWithCanon.examRes?.evaluatedScore)
+          ? itemWithCanon.examRes
+          : (existing.examRes || itemWithCanon.examRes);
         examListMap.set(canonKey, {
           ...existing,
           ...itemWithCanon,
           date: betterDate,
           details: betterDetails,
-          score: betterScore
+          score: betterScore,
+          answers: betterAnswers,
+          examRes: betterExamRes
         });
       }
     }
@@ -634,7 +680,12 @@ export const LeagueView = () => {
     const sortedExams = getStudentSortedExams(student);
     const rankIndex = baseStudents.findIndex(s => (s.id && s.id === student.id) || (s.no && s.no === student.no) || s.name === student.name);
     const studentRank = rankIndex >= 0 ? rankIndex + 1 : undefined;
-    const report = generateCoachingReport(student, sortedExams, studentRank, baseStudents.length);
+    const report = generateCoachingReport(student, sortedExams, studentRank, baseStudents.length, {
+      selectedMonth,
+      selectedMonthLabel,
+      allExams: state.exams,
+      allResults: state.results
+    });
     setCoachingReport(report);
   };
 
@@ -872,6 +923,111 @@ export const LeagueView = () => {
   const top3Students = useMemo(() => {
     return baseStudents.slice(0, 3);
   }, [baseStudents]);
+
+  // Aggregated missing outcomes across all exams for the group/school coach recommendations
+  const aggregatedPeriodMissingOutcomes = useMemo(() => {
+    const map = new Map<string, {
+      code: string;
+      title: string;
+      subject: string;
+      students: Set<string>;
+      wrongCount: number;
+      emptyCount: number;
+      examNames: Set<string>;
+    }>();
+
+    (state.exams || []).forEach(exam => {
+      const outcomes = exam.learningOutcomes?.items || (exam as any).outcomes;
+      if (!Array.isArray(outcomes) || outcomes.length === 0) return;
+      if (!Array.isArray(exam.results) || exam.results.length === 0) return;
+
+      exam.results.forEach((res: any) => {
+        const studentName = res.name || res.studentName || `Öğrenci ${res.no || ''}`;
+        const booklet = (res.booklet || 'A').toUpperCase().trim();
+        const key = exam.keys?.[booklet] || exam.keys?.['A'] || [];
+        let answers: string[] = [];
+        if (Array.isArray(res.answers)) {
+          answers = res.answers.map((a: any) => String(a || '').trim().toUpperCase());
+        } else if (typeof res.answers === 'string') {
+          const trimmed = res.answers.trim().toUpperCase();
+          answers = trimmed.includes(' ') ? trimmed.split(/\s+/) : (trimmed.includes(',') ? trimmed.split(',') : trimmed.split(''));
+        }
+
+        if (answers.length === 0) return;
+
+        outcomes.forEach((out: any, idx: number) => {
+          const qIdx = out.questionNumber ? out.questionNumber - 1 : idx;
+          const ansIdx = (booklet === 'B' && out.altQIndex) ? (out.altQIndex - 1) : qIdx;
+          const trueAns = (booklet === 'B' && key[ansIdx])
+            ? key[ansIdx].toUpperCase().trim()
+            : (out.correctAnswer || key[qIdx] || '').toUpperCase().trim();
+          const stdAns = (answers[ansIdx] || '').toUpperCase().trim();
+
+          const isEmpty = !stdAns || stdAns === '-' || stdAns === ' ';
+          const isWrong = !isEmpty && trueAns !== '' && stdAns !== trueAns;
+
+          if (isWrong || isEmpty) {
+            const code = out.code || out.outcomeCode || `S.${ansIdx + 1}`;
+            const title = out.title || out.outcomeDesc || `Soru ${ansIdx + 1} Kazanımı`;
+            const subject = out.subjectName || out.subject || 'Genel';
+            const gKey = `${subject}_${code}_${normalizeTurkish(title).toLowerCase()}`;
+
+            const existing = map.get(gKey) || {
+              code,
+              title,
+              subject,
+              students: new Set<string>(),
+              wrongCount: 0,
+              emptyCount: 0,
+              examNames: new Set<string>()
+            };
+
+            existing.students.add(studentName);
+            if (isWrong) existing.wrongCount += 1;
+            else existing.emptyCount += 1;
+            existing.examNames.add(exam.name);
+            map.set(gKey, existing);
+          }
+        });
+      });
+    });
+
+    const result: Array<{
+      code: string;
+      title: string;
+      subject: string;
+      studentCount: number;
+      wrongCount: number;
+      emptyCount: number;
+      examNames: string[];
+      coachRecommendation: string;
+    }> = [];
+
+    map.forEach(item => {
+      const totalCount = item.wrongCount + item.emptyCount;
+      let coachRecommendation = '';
+      if (item.students.size >= 10 || totalCount >= 15) {
+        coachRecommendation = `Grup Genelinde ${item.students.size} öğrencimizin takıldığı bu temel konuda 1 ders saati DYK etüdü ve 25 soru tespiti yapılmalıdır.`;
+      } else if (item.emptyCount > item.wrongCount) {
+        coachRecommendation = `Boş bırakılma oranı yüksek bu kazanımdan sınıfta örnek çözüm yapılarak çözüm yöntemleri tekrar edilmelidir.`;
+      } else {
+        coachRecommendation = `Çeldiriciye düşülen bu kazanımdan Soru Avcısı defterinde 2 adet tarama testi çözülmelidir.`;
+      }
+
+      result.push({
+        code: item.code,
+        title: item.title,
+        subject: item.subject,
+        studentCount: item.students.size,
+        wrongCount: item.wrongCount,
+        emptyCount: item.emptyCount,
+        examNames: Array.from(item.examNames),
+        coachRecommendation
+      });
+    });
+
+    return result.sort((a, b) => b.studentCount - a.studentCount);
+  }, [state.exams]);
 
   const tacticsMonths = [
     { name: 'EYLÜL (D 1-4)', kutup: 'Sözel Kusursuzluk: İnkılap, Din ve İngilizce branşlarında takımca hiç fire (yanlış) vermemek.', sicrama: 'Matematik Uyanışı: Matematik net ortalamasını takımca eksi ve sıfırlardan kurtarıp kalıcı hale getirmek.', taktik: 'Cesur Boşluklar: Hiçbir derste eksi nete düşmemek. Sadece emin olunanı işaretlemek.', ortak: 'Tüm takımların DYK\'ya minimum %90 devamlılık sağlaması.' },

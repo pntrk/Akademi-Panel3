@@ -10,8 +10,9 @@ import {
   MapPin, HelpCircle, Activity, TrendingUp, Sparkles, BookOpen, AlertCircle, Settings,
   Search, Filter, ChevronDown, ChevronRight, Package, Layers, DoorOpen, Printer, Edit3, Check, Bell,
   FileJson, RotateCcw, Type, Palette, Sliders, CheckCircle2, ZoomIn, ZoomOut, Maximize2,
-  QrCode, Key, SlidersHorizontal, ArrowRight
+  QrCode, Key, SlidersHorizontal, ArrowRight, Target
 } from 'lucide-react';
+import { ExamOutcomeModal } from '../components/exams/ExamOutcomeModal';
 
 // Setup pdfMake Turkish fonts
 if (typeof window !== 'undefined') {
@@ -142,6 +143,7 @@ export const ExamsView = () => {
   const modalFileRef = useRef<HTMLInputElement>(null);
 
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
+  const [outcomeModalExam, setOutcomeModalExam] = useState<Exam | null>(null);
 
   // Local modal form states
   const [examName, setExamName] = useState('');
@@ -2439,6 +2441,20 @@ export const ExamsView = () => {
                     </td>
                     <td className="py-4 px-5 text-center" data-label="İŞLEMLER">
                       <div className="flex items-center justify-center gap-1.5">
+                        {userRole === 'admin' && (
+                          <button 
+                            type="button"
+                            onClick={() => setOutcomeModalExam(exam)}
+                            className={`w-7 h-7 rounded-full border flex items-center justify-center cursor-pointer transition-all ${
+                              exam.hasOutcomes || (exam.outcomes && exam.outcomes.length > 0)
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                                : 'bg-white border-brand-border text-brand-ink/70 hover:border-amber-500 hover:text-amber-600 hover:bg-amber-50'
+                            }`}
+                            title={exam.hasOutcomes || (exam.outcomes && exam.outcomes.length > 0) ? `Kazanım Eşleştirmesi Tanımlı (${exam.outcomes?.length} Soru) - Düzenlemek İçin Tıklayın` : "Yayıncı XML veya PDF ile Kazanım Eşleştir"}
+                          >
+                            <Target className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <button 
                           onClick={() => setEditingExam(exam)} 
                           className="w-7 h-7 rounded-full border border-brand-border flex items-center justify-center cursor-pointer transition-all bg-white hover:border-brand-accent hover:text-brand-accent"
@@ -2562,6 +2578,21 @@ export const ExamsView = () => {
 
                   {/* Quick Action Buttons */}
                   <div className="flex items-center gap-1 shrink-0">
+                    {userRole === 'admin' && (
+                      <button 
+                        type="button"
+                        onClick={() => setOutcomeModalExam(exam)}
+                        className={`w-6.5 h-6.5 rounded-lg border flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
+                          exam.hasOutcomes || (exam.outcomes && exam.outcomes.length > 0)
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:text-amber-600 hover:bg-amber-50'
+                        }`}
+                        title="Kazanım & Cevap Anahtarı Yönetimi"
+                        aria-label="Kazanım & Cevap Anahtarı Yönetimi"
+                      >
+                        <Target className="h-3 w-3" />
+                      </button>
+                    )}
                     <button 
                       type="button"
                       onClick={() => setEditingExam(exam)}
@@ -5003,6 +5034,28 @@ export const ExamsView = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* EXAM OUTCOME MODAL (Kazanım & Cevap Anahtarı Yönetimi) */}
+      {outcomeModalExam && (
+        <ExamOutcomeModal
+          exam={outcomeModalExam}
+          isOpen={Boolean(outcomeModalExam)}
+          onClose={() => setOutcomeModalExam(null)}
+          onSaveOutcomes={async (examId, outcomes, keys) => {
+            setExams(prev => prev.map(e => {
+              if (e.id === examId) {
+                return {
+                  ...e,
+                  outcomes,
+                  hasOutcomes: outcomes.length > 0,
+                  keys: keys ? { ...e.keys, A: keys.A, ...(keys.B ? { B: keys.B } : {}) } : e.keys
+                };
+              }
+              return e;
+            }));
+          }}
+        />
       )}
 
     </div>
