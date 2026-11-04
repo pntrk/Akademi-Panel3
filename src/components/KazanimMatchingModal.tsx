@@ -52,10 +52,20 @@ interface KazanimMatchingModalProps {
 }
 
 export function KazanimMatchingModal({ exam, isOpen, onClose }: KazanimMatchingModalProps) {
-  const { state, updateExamOmr, saveOmrExamResults } = useAppContext();
+  const { state, updateExamOmr, saveOmrExamResults, userRole } = useAppContext();
+  const isAdmin = userRole === 'admin';
 
-  // Active top-level modal tab
-  const [activeTab, setActiveTab] = useState<'upload' | 'analytics' | 'classes' | 'student'>('upload');
+  // Active top-level modal tab (teachers cannot access upload/txt tab 1, default to analytics or student)
+  const [activeTab, setActiveTab] = useState<'upload' | 'analytics' | 'classes' | 'student'>(() => {
+    return isAdmin ? 'upload' : 'analytics';
+  });
+
+  // Ensure teachers never get stuck on upload tab if role is teacher
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'upload') {
+      setActiveTab('analytics');
+    }
+  }, [isAdmin, activeTab]);
 
   // Outcomes state initialized from exam.learningOutcomes
   const [outcomes, setOutcomes] = useState<QuestionOutcome[]>(() => {
@@ -649,18 +659,20 @@ export function KazanimMatchingModal({ exam, isOpen, onClose }: KazanimMatchingM
         {/* Modal Tab Switcher */}
         <div className="bg-slate-100/90 border-b border-slate-200 px-3 sm:px-6 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar shrink-0">
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab('upload')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'upload'
-                  ? 'bg-white text-indigo-700 shadow-2xs border border-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>1. Kazanım & TXT Yükle</span>
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('upload')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'upload'
+                    ? 'bg-white text-indigo-700 shadow-2xs border border-slate-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>1. Kazanım & TXT Yükle</span>
+              </button>
+            )}
 
             <button
               type="button"

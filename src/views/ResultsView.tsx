@@ -4081,7 +4081,7 @@ export function ResultsView() {
         />
       )}
 
-      {isKazanimModalOpen && userRole === 'admin' && (
+      {isKazanimModalOpen && (
         <KazanimMatchingModal
           exam={exam}
           isOpen={isKazanimModalOpen}
@@ -5209,7 +5209,11 @@ export function ResultsView() {
           ===================================================================== */}
 
       {activeMainTab === 'analysis' && (
-        <AnalysisView examId={String(exam.id)} embedded={true} />
+        <AnalysisView 
+          examId={String(exam.id)} 
+          embedded={true} 
+          onOpenKazanimModal={() => setIsKazanimModalOpen(true)}
+        />
       )}
     </div>
   );

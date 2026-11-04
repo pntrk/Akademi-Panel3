@@ -529,24 +529,24 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
     : 'bg-emerald-100 text-emerald-900 border-emerald-300';
 
   return (
-    <div id="coaching-report-printable" className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible print:z-auto">
+    <div id="coaching-report-printable" className="fixed inset-0 z-[120] flex items-center justify-center p-1.5 sm:p-4 bg-black/70 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible print:z-auto">
       <div 
-        className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-brand-border/90 flex flex-col max-h-[93vh] overflow-hidden print:max-h-none print:shadow-none print:border-none print:rounded-none animate-in fade-in zoom-in-95 duration-200"
+        className="relative w-full max-w-5xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-brand-border/90 flex flex-col max-h-[96vh] sm:max-h-[92vh] overflow-hidden print:max-h-none print:shadow-none print:border-none print:rounded-none animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Üst Başlık & Kontrol Çubuğu */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shrink-0 print:bg-white print:text-black print:border-b-2 print:border-slate-800 print:px-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between px-3.5 sm:px-6 py-2.5 sm:py-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shrink-0 print:bg-white print:text-black print:border-b-2 print:border-slate-800 print:px-0 gap-2.5">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center text-lg sm:text-xl font-black shadow-md shrink-0 print:bg-slate-200">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center text-base sm:text-xl font-black shadow-md shrink-0 print:bg-slate-200">
               🎯
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-sm sm:text-lg font-bold font-serif tracking-tight truncate">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h2 className="text-xs sm:text-lg font-bold font-serif tracking-tight truncate">
                   Akademi Arena AI Koç & Rehberlik Analizi
                 </h2>
                 {report.periodLabel && (
-                  <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full">
+                  <span className="text-[9.5px] sm:text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full">
                     {report.periodLabel}
                   </span>
                 )}
@@ -557,22 +557,22 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 print:hidden">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0 print:hidden self-end sm:self-auto">
             <button
               type="button"
               disabled={isExportingPDF}
               onClick={handleDownloadPDF}
-              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 active:scale-95 text-slate-950 text-xs font-extrabold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="px-3 py-1.5 sm:px-3.5 sm:py-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 active:scale-95 text-slate-950 text-xs font-extrabold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               title="Rehberlik Raporunu doğrudan PDF dosyası olarak indir"
             >
               {isExportingPDF ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
-                  <span className="hidden sm:inline">İndiriliyor...</span>
+                  <span>İndiriliyor...</span>
                 </>
               ) : (
                 <>
-                  <Download className="w-3.5 h-3.5 text-slate-950" />
+                  <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />
                   <span>PDF İndir</span>
                 </>
               )}
@@ -580,10 +580,10 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-bold rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-bold rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               title="Rehberlik Raporunu Yazdır"
             >
-              <Printer className="w-3.5 h-3.5" />
+              <Printer className="w-3.5 h-3.5 shrink-0" />
               <span className="hidden sm:inline">Yazdır</span>
             </button>
             <button
@@ -592,13 +592,13 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
               className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-all cursor-pointer"
               title="Kapat"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
 
         {/* Kaydırılabilir İçerik Alanı */}
-        <div ref={reportContentRef} className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 custom-scrollbar print:p-0 print:overflow-visible print:space-y-4 bg-white">
+        <div ref={reportContentRef} className="p-2.5 sm:p-5 md:p-6 overflow-y-auto space-y-3 sm:space-y-5 custom-scrollbar print:p-0 print:overflow-visible print:space-y-4 bg-white">
           
           {/* 1. Öğrenci Kimlik, Sınav Özeti ve Ortalamalar Kıyaslama Kartı */}
           <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-3xl border bg-gradient-to-br ${teamBg} print:bg-white print:border-slate-300 shadow-xs space-y-3.5`}>
@@ -804,23 +804,23 @@ export const StudentCoachingModal: React.FC<Props> = ({ report, onClose }) => {
           </div>
 
           {/* İntaktif Akordeon Kontrol Çubuğu */}
-          <div className="flex items-center justify-between p-2.5 sm:p-3 bg-indigo-50/80 border border-indigo-100/90 rounded-2xl print:hidden text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:p-3 bg-indigo-50/80 border border-indigo-100/90 rounded-2xl print:hidden text-xs gap-2">
             <div className="flex items-center gap-2 font-bold text-indigo-950">
               <SlidersHorizontal className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span>Dokunarak Detay Açılan Görünüm (Akordeon Modu)</span>
+              <span className="text-[11.5px] sm:text-xs">Dokunarak Detay Açılan Görünüm (Akordeon Modu)</span>
             </div>
-            <div className="flex items-center gap-1.5 font-bold">
+            <div className="flex items-center gap-1.5 font-bold self-end sm:self-auto">
               <button
                 type="button"
                 onClick={expandAllSections}
-                className="px-2.5 py-1 rounded-xl bg-white border border-indigo-200 text-indigo-800 hover:bg-indigo-100/70 transition-colors shadow-2xs cursor-pointer text-[11px]"
+                className="px-2.5 py-1 rounded-xl bg-white border border-indigo-200 text-indigo-800 hover:bg-indigo-100/70 active:scale-95 transition-all shadow-2xs cursor-pointer text-[11px]"
               >
                 Tümünü Genişlet
               </button>
               <button
                 type="button"
                 onClick={collapseAllSections}
-                className="px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer text-[11px]"
+                className="px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 active:scale-95 transition-all shadow-2xs cursor-pointer text-[11px]"
               >
                 Tümünü Daralt
               </button>

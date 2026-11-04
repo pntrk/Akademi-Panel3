@@ -15,7 +15,8 @@ import {
   Flame, 
   Award, 
   Filter,
-  Calendar
+  Calendar,
+  Target
 } from 'lucide-react';
 
 interface QuestionStat {
@@ -36,9 +37,10 @@ interface QuestionStat {
 export interface AnalysisViewProps {
   examId?: string;
   embedded?: boolean;
+  onOpenKazanimModal?: () => void;
 }
 
-export function AnalysisView({ examId, embedded = false }: AnalysisViewProps = {}) {
+export function AnalysisView({ examId, embedded = false, onOpenKazanimModal }: AnalysisViewProps = {}) {
   const { state } = useAppContext();
 
   // Selected exam ID
@@ -799,7 +801,17 @@ export function AnalysisView({ examId, embedded = false }: AnalysisViewProps = {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-stretch lg:self-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 self-stretch lg:self-auto">
+            {onOpenKazanimModal && (
+              <button
+                type="button"
+                onClick={onOpenKazanimModal}
+                className="flex-1 lg:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 active:scale-95 rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <Target className="w-4 h-4 text-indigo-600" />
+                <span>Kazanım Analizi & Karneler</span>
+              </button>
+            )}
             <button
               onClick={handlePrintAnalysis}
               className="flex-1 lg:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 active:scale-95 rounded-xl shadow-xs transition-all cursor-pointer"
